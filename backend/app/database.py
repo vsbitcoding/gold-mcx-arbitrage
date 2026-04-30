@@ -29,7 +29,11 @@ if is_sqlite:
 # Lightweight auto-migration: add missing columns when models grow.
 # Avoids a full Alembic dependency for this small project.
 _REQUIRED_COLUMNS = {
-    "pair_rules": [("max_weight_grams", "INTEGER")],
+    "pair_rules": [
+        ("max_weight_grams", "INTEGER"),
+        ("pending_max_weight_grams", "INTEGER"),
+        ("has_pending_cap", "INTEGER DEFAULT 0"),
+    ],
     "trade_history": [
         ("big_entry_price", "FLOAT"),
         ("small_entry_price", "FLOAT"),

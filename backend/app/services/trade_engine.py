@@ -72,6 +72,29 @@ def can_open_new_cycle(db: Session, pair: dict, rule: PairRule) -> bool:
     return (current + new_cycle) <= cap
 
 
+def reconcile_pending_caps(db: Session) -> None:
+    """Apply pending cap changes once a pair has no open positions (square-off)."""
+    rules = (
+        db.query(PairRule)
+        .filter(PairRule.has_pending_cap == 1)
+        .all()
+    )
+    for rule in rules:
+        has_open = (
+            db.query(Position)
+            .filter(Position.pair_name == rule.pair_name, Position.status == "open")
+            .first()
+            is not None
+        )
+        if not has_open:
+            rule.max_weight_grams = rule.pending_max_weight_grams
+            rule.pending_max_weight_grams = None
+            rule.has_pending_cap = 0
+            # Re-prime armed so next round can fire immediately if spread is in zone
+            _dec_armed[rule.pair_name] = True
+            _inc_armed[rule.pair_name] = True
+
+
 def evaluate(db: Session) -> None:
     """Per-side evaluation:
 
@@ -81,6 +104,7 @@ def evaluate(db: Session) -> None:
     3. Spread leaves zone → re-arm (next round).
     4. Each open position has its own exit watch on the cover-side spread.
     """
+    reconcile_pending_caps(db)
     rules = db.query(PairRule).all()
     for rule in rules:
         pair = _pair_def(rule.pair_name)

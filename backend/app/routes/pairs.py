@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import PAIRS
 from app.database import get_db
-from app.models import PairRule
+from app.models import PairRule, Position
 from app.security import get_current_user
 from app.services.snapshot import build_live_payload
 from app.services.trade_engine import prime_armed_state
@@ -54,7 +54,24 @@ def update_rule(
     rule.decrease_exit = body.decrease_exit
     rule.increase_entry = body.increase_entry
     rule.increase_exit = body.increase_exit
-    rule.max_weight_grams = body.max_weight_grams
+
+    # Cap (max_weight_grams) handling:
+    # - If any open positions exist for this pair → store as PENDING (applies after square-off)
+    # - If no open positions → apply immediately
+    has_open = (
+        db.query(Position)
+        .filter(Position.pair_name == pair_name, Position.status == "open")
+        .first()
+        is not None
+    )
+    if has_open and body.max_weight_grams != rule.max_weight_grams:
+        rule.pending_max_weight_grams = body.max_weight_grams
+        rule.has_pending_cap = 1
+    else:
+        rule.max_weight_grams = body.max_weight_grams
+        rule.pending_max_weight_grams = None
+        rule.has_pending_cap = 0
+
     db.commit()
     prime_armed_state(pair_name)
     return {"ok": True}

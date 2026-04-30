@@ -20,7 +20,9 @@ class PairRule(Base):
     decrease_status = Column(String(32), default="idle")
     increase_status = Column(String(32), default="idle")
 
-    max_weight_grams = Column(Integer, nullable=True)  # cumulative cap, NULL = unlimited
+    max_weight_grams = Column(Integer, nullable=True)  # ACTIVE cap currently in force
+    pending_max_weight_grams = Column(Integer, nullable=True)  # set if cap changed mid-round
+    has_pending_cap = Column(Integer, default=0, nullable=False)  # 1 if a pending change exists
 
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

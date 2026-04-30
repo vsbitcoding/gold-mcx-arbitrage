@@ -90,6 +90,14 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
             onChange={(e) => onChange("max_weight_grams", e.target.value)}
             title={`Default ${row.default_max_weight ?? 1000}g if blank`}
           />
+          {row.has_pending_cap && (
+            <div
+              className="pending-cap"
+              title="Cap changed mid-round. New value will apply after current trades close."
+            >
+              ⏳ Pending: {row.pending_max_weight_grams ?? "default"}g
+            </div>
+          )}
         </td>
         <td className="gc-status">
           <div className="row-actions">
@@ -176,6 +184,8 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
   prev.row.max_weight_grams === next.row.max_weight_grams &&
   prev.row.effective_max_weight === next.row.effective_max_weight &&
   prev.row.open_weight_grams === next.row.open_weight_grams &&
+  prev.row.has_pending_cap === next.row.has_pending_cap &&
+  prev.row.pending_max_weight_grams === next.row.pending_max_weight_grams &&
   prev.draft === next.draft
 ));
 

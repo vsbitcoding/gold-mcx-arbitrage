@@ -59,6 +59,8 @@ def build_live_payload(db: Session) -> list[dict]:
             "increase_entry": rule.increase_entry if rule else None,
             "increase_exit": rule.increase_exit if rule else None,
             "max_weight_grams": rule.max_weight_grams if rule else None,
+            "pending_max_weight_grams": rule.pending_max_weight_grams if rule else None,
+            "has_pending_cap": bool(rule.has_pending_cap) if rule else False,
             "effective_max_weight": effective_max_weight(rule),
             "default_max_weight": DEFAULT_MAX_WEIGHT_GRAMS,
             "cycle_grams": cycle_g,
