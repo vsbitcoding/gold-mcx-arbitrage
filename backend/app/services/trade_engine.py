@@ -76,9 +76,10 @@ def evaluate(db: Session) -> None:
     """Independently evaluate each side. Cumulative weight cap (Option B):
     multiple simultaneous positions allowed per pair until total grams hits cap.
 
-    Edge-trigger entry: only fire when spread CROSSES the threshold (came from
-    inside-band on previous tick), so we don't fire 100s of trades while spread
-    sits above the entry level.
+    Armed state machine (per pair-side) ensures we fire ONLY on a fresh
+    threshold crossing — never while spread sits in trigger zone, never on a
+    stale None tick, never on service restart unless spread is genuinely
+    re-entering the zone.
     """
     rules = db.query(PairRule).all()
     for rule in rules:
@@ -86,64 +87,62 @@ def evaluate(db: Session) -> None:
         if not pair:
             continue
         snap = compute_pair(pair)
+        dec_spread = snap["decrease_spread"]
+        inc_spread = snap["increase_spread"]
 
         # ----- Decrease side -----
-        if (
-            rule.decrease_entry is not None
-            and snap["decrease_spread"] is not None
-            and snap["decrease_spread"] >= rule.decrease_entry
-            and _last_dec_below(rule.pair_name, rule.decrease_entry)
-            and can_open_new_cycle(db, pair, rule)
-        ):
-            _open_trade(db, pair, "decrease", snap)
-        # Auto-close every open Decrease pos on this pair when cover spread hits exit
-        if rule.decrease_exit is not None and snap["increase_spread"] is not None:
+        # Trigger zone: spread >= decrease_entry
+        # Armed when last seen spread was OUTSIDE the trigger zone (< entry)
+        if rule.decrease_entry is not None and dec_spread is not None:
+            armed = _dec_armed.get(rule.pair_name, False)
+            if dec_spread < rule.decrease_entry:
+                # Outside zone → arm for next entry
+                _dec_armed[rule.pair_name] = True
+            elif armed and dec_spread >= rule.decrease_entry:
+                # Crossed into zone with armed flag → fire
+                if can_open_new_cycle(db, pair, rule):
+                    _open_trade(db, pair, "decrease", snap)
+                _dec_armed[rule.pair_name] = False  # disarm; must exit zone to re-arm
+
+        # Auto-close every open Decrease pos when cover spread hits exit
+        if rule.decrease_exit is not None and inc_spread is not None:
             for p in db.query(Position).filter(
                 Position.pair_name == rule.pair_name,
                 Position.mode == "decrease",
                 Position.status == "open",
             ).all():
-                if snap["increase_spread"] <= rule.decrease_exit:
+                if inc_spread <= rule.decrease_exit:
                     _close_trade(db, p, snap, closed_by="auto")
-        # Track last decrease spread for edge-trigger
-        _last_decrease[rule.pair_name] = snap["decrease_spread"]
 
         # ----- Increase side -----
-        if (
-            rule.increase_entry is not None
-            and snap["increase_spread"] is not None
-            and snap["increase_spread"] <= rule.increase_entry
-            and _last_inc_above(rule.pair_name, rule.increase_entry)
-            and can_open_new_cycle(db, pair, rule)
-        ):
-            _open_trade(db, pair, "increase", snap)
-        if rule.increase_exit is not None and snap["decrease_spread"] is not None:
+        # Trigger zone: spread <= increase_entry
+        # Armed when last seen spread was OUTSIDE the trigger zone (> entry)
+        if rule.increase_entry is not None and inc_spread is not None:
+            armed = _inc_armed.get(rule.pair_name, False)
+            if inc_spread > rule.increase_entry:
+                _inc_armed[rule.pair_name] = True
+            elif armed and inc_spread <= rule.increase_entry:
+                if can_open_new_cycle(db, pair, rule):
+                    _open_trade(db, pair, "increase", snap)
+                _inc_armed[rule.pair_name] = False
+
+        # Auto-close every open Increase pos when cover spread hits exit
+        if rule.increase_exit is not None and dec_spread is not None:
             for p in db.query(Position).filter(
                 Position.pair_name == rule.pair_name,
                 Position.mode == "increase",
                 Position.status == "open",
             ).all():
-                if snap["decrease_spread"] >= rule.increase_exit:
+                if dec_spread >= rule.increase_exit:
                     _close_trade(db, p, snap, closed_by="auto")
-        _last_increase[rule.pair_name] = snap["increase_spread"]
 
     db.commit()
 
 
-# Edge-trigger state (per pair) — only fire on threshold CROSSING, not while sitting above.
-_last_decrease: dict[str, float | None] = {}
-_last_increase: dict[str, float | None] = {}
-
-
-def _last_dec_below(pair_name: str, entry: float) -> bool:
-    prev = _last_decrease.get(pair_name)
-    # Allow first tick or whenever previous reading was strictly below entry
-    return prev is None or prev < entry
-
-
-def _last_inc_above(pair_name: str, entry: float) -> bool:
-    prev = _last_increase.get(pair_name)
-    return prev is None or prev > entry
+# Per pair-side armed state. Default False on startup so we never fire on first tick
+# until we observe spread leaving the trigger zone (proves it's a real new crossing).
+_dec_armed: dict[str, bool] = {}
+_inc_armed: dict[str, bool] = {}
 
 
 def _open_trade(db: Session, pair: dict, mode: str, snap: dict) -> None:
