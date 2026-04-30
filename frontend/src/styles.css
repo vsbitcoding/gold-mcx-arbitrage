@@ -1191,8 +1191,90 @@ input.cell:focus {
   font-size: 13px;
 }
 
-@media (max-width: 700px) {
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1280px) {
+  table { font-size: 12px; }
+  th { font-size: 9px; padding: 6px 4px; }
+  td { padding: 7px 4px; font-size: 11px; }
+  input.cell { max-width: 70px; padding: 5px 6px; font-size: 11px; }
+  .leg-inline { padding: 4px 6px; font-size: 10px; }
+  .leg-inline-head .leg-action { font-size: 9px; padding: 1px 5px; }
+}
+
+@media (max-width: 1024px) {
   .container { padding: 0 12px 16px; }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
-  .nav-tabs { display: none; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-card { padding: 14px; }
+  .stat-value { font-size: 22px; }
+  .stat-label { font-size: 10px; }
+  .header { padding: 0 12px; }
+  .brand { font-size: 16px; }
+  .nav-tabs { padding-left: 8px; margin-left: 4px; }
+  .nav-tab { padding: 6px 10px; font-size: 12px; }
+  .username-chip { display: none; }
+  .sessions-header h2 { font-size: 14px; }
+  .search-container input { width: 160px; }
+}
+
+@media (max-width: 768px) {
+  .container { padding: 0 8px 16px; }
+  .header {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .header-left { flex: 1; gap: 8px; }
+  .header-right { flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+  .nav-tabs { border-left: none; padding-left: 0; margin-left: 0; }
+  .nav-tab { padding: 5px 8px; font-size: 11px; }
+  .nav-badge { padding: 0 6px; font-size: 10px; }
+  .health-pill { font-size: 9px; padding: 3px 8px; }
+  .theme-toggle { width: 30px; height: 30px; font-size: 13px; }
+  .btn { padding: 6px 10px; font-size: 12px; }
+  .btn-sm { padding: 5px 8px; font-size: 10px; }
+
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .stat-card { padding: 10px 12px; border-left-width: 3px; }
+  .stat-value { font-size: 18px; }
+  .stat-label { font-size: 9px; letter-spacing: 0.3px; }
+
+  .sessions-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .header-controls { width: 100%; flex-direction: column; align-items: stretch; }
+  .search-container input { width: 100%; box-sizing: border-box; }
+  .filter-tabs { flex-wrap: wrap; }
+  .filter-tab { font-size: 11px; padding: 5px 10px; }
+
+  /* Allow tables to scroll horizontally on small screens */
+  .table-container { -webkit-overflow-scrolling: touch; }
+  table { font-size: 11px; min-width: 720px; }
+  th { font-size: 8px; padding: 5px 3px; }
+  td { padding: 6px 3px; font-size: 10px; }
+  input.cell { max-width: 56px; padding: 4px 5px; font-size: 10px; }
+
+  .drawer { width: 100%; }
+  .drawer-head { padding: 10px 14px; }
+  .drawer-head h2 { font-size: 14px; }
+  .drawer-body { padding: 10px; }
+
+  .leg-inline { padding: 4px 5px; }
+  .leg-inline-head { gap: 4px; }
+  .leg-inline-head .leg-instrument { font-size: 11px; }
+  .leg-inline-head .leg-lots { font-size: 9px; }
+  .leg-inline-prices { gap: 4px; }
+  .leg-inline-prices .leg-price { font-size: 10px; }
+  .leg-delta-mini { font-size: 9px; padding: 1px 4px; }
+}
+
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-value { font-size: 20px; }
+  .header-right .btn { padding: 5px 8px; font-size: 11px; }
+  .username-chip { display: none; }
+  .pagination-controls { flex-direction: column; gap: 8px; padding: 10px; }
 }
