@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import PAIRS
+from app.config import MAX_ALLOWED_WEIGHT_GRAMS, PAIRS
 from app.database import get_db
 from app.models import PairRule, Position
 from app.security import get_current_user
@@ -44,6 +44,14 @@ def update_rule(
     valid = {p["name"] for p in PAIRS}
     if pair_name not in valid:
         raise HTTPException(404, "Unknown pair")
+
+    if body.max_weight_grams is not None and body.max_weight_grams > MAX_ALLOWED_WEIGHT_GRAMS:
+        raise HTTPException(
+            400,
+            f"Max weight cannot exceed {MAX_ALLOWED_WEIGHT_GRAMS}g",
+        )
+    if body.max_weight_grams is not None and body.max_weight_grams < 0:
+        raise HTTPException(400, "Max weight must be 0 or higher")
 
     rule = db.query(PairRule).filter(PairRule.pair_name == pair_name).first()
     if not rule:

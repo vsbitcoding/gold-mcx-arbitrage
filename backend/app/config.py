@@ -52,6 +52,8 @@ GRAMS_PER_LOT = {"petal": 1, "guinea": 8, "ten": 10, "mini": 100}
 
 # Default max weight cap per pair if user leaves it blank
 DEFAULT_MAX_WEIGHT_GRAMS = 1000
+# Hard upper limit — client cannot set cap higher than this
+MAX_ALLOWED_WEIGHT_GRAMS = 1000
 
 
 def cycle_grams(pair: dict) -> int:

@@ -84,11 +84,20 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
             className={cls("max_weight_grams")}
             type="number"
             min="0"
+            max={row.max_allowed_weight ?? 1000}
             step="1"
             placeholder={String(row.default_max_weight ?? 1000)}
             value={draft.max_weight_grams ?? ""}
-            onChange={(e) => onChange("max_weight_grams", e.target.value)}
-            title={`Default ${row.default_max_weight ?? 1000}g if blank`}
+            onChange={(e) => {
+              const v = e.target.value;
+              const limit = row.max_allowed_weight ?? 1000;
+              if (v !== "" && Number(v) > limit) {
+                onChange("max_weight_grams", String(limit));
+              } else {
+                onChange("max_weight_grams", v);
+              }
+            }}
+            title={`Default ${row.default_max_weight ?? 1000}g if blank · Max ${row.max_allowed_weight ?? 1000}g`}
           />
           {row.has_pending_cap && (
             <div
@@ -287,6 +296,12 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         danger: true,
       });
       if (!ok) return;
+    }
+
+    const limit = row?.max_allowed_weight ?? 1000;
+    if (d.max_weight_grams !== "" && d.max_weight_grams != null && Number(d.max_weight_grams) > limit) {
+      toast.error(`Max weight cannot exceed ${limit}g`);
+      return;
     }
 
     const body = {

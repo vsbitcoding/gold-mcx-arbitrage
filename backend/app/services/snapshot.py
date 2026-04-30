@@ -1,7 +1,7 @@
 """Build the same payload that GET /api/pairs/live returns, for WS broadcast."""
 from sqlalchemy.orm import Session
 
-from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, PAIRS, cycle_grams
+from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, MAX_ALLOWED_WEIGHT_GRAMS, PAIRS, cycle_grams
 from app.models import PairRule, Position
 from app.services.spread_engine import compute_all
 from app.services.trade_engine import effective_max_weight
@@ -63,6 +63,7 @@ def build_live_payload(db: Session) -> list[dict]:
             "has_pending_cap": bool(rule.has_pending_cap) if rule else False,
             "effective_max_weight": effective_max_weight(rule),
             "default_max_weight": DEFAULT_MAX_WEIGHT_GRAMS,
+            "max_allowed_weight": MAX_ALLOWED_WEIGHT_GRAMS,
             "cycle_grams": cycle_g,
             "open_weight_grams": weight_by_pair.get(s["name"], 0),
             "decrease_open": dec_open,
