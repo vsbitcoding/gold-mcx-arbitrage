@@ -26,6 +26,7 @@ npm run build
 
 echo "==> Publish build to /var/www/arbitrage"
 sudo mkdir -p /var/www/arbitrage
+sudo rm -rf /var/www/arbitrage/assets
 sudo cp -a "$APP_DIR/frontend/dist/." /var/www/arbitrage/
 sudo chown -R www-data:www-data /var/www/arbitrage
 sudo find /var/www/arbitrage -type d -exec chmod 755 {} \;
