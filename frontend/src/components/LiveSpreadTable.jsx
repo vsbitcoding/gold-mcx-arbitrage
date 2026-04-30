@@ -381,7 +381,96 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         </div>
       </div>
 
-      <div className="table-container">
+      {/* MOBILE CARD VIEW */}
+      <div className="mobile-cards">
+        {filtered.length === 0 ? (
+          <div className="empty-state">No pairs match the filter.</div>
+        ) : filtered.map((r) => {
+          const d = drafts[r.name] || {};
+          const dirty = dirtyMaps[r.name] || { any: false };
+          const isOpen = !!expanded[r.name];
+          return (
+            <div key={r.name} className={`pair-card status-${r.status}`}>
+              <div className="pair-card-head">
+                <div className="pair-card-title">{r.name}</div>
+                <span className={`badge ${STATUS_CLASS[r.status] || "badge-idle"}`}>
+                  <span className="blip" />
+                  {STATUS_LABEL[r.status] || r.status}
+                </span>
+              </div>
+
+              <div className="pair-card-section dec-section">
+                <div className="pair-card-section-head">
+                  <span className="section-arrow">▼</span> Decrease
+                  <span className="section-spread">{fmtSpread(r.decrease_spread)}</span>
+                  {r.decrease_open && <span className="side-pill open">●</span>}
+                </div>
+                <div className="pair-card-inputs">
+                  <label>Entry
+                    <input className={`cell ${dirty.decrease_entry ? "dirty" : ""}`} type="number" step="0.01" placeholder="—"
+                      value={d.decrease_entry ?? ""}
+                      onChange={(e) => update(r.name, "decrease_entry", e.target.value)} />
+                  </label>
+                  <label>Exit
+                    <input className={`cell ${dirty.decrease_exit ? "dirty" : ""}`} type="number" step="0.01" placeholder="—"
+                      value={d.decrease_exit ?? ""}
+                      onChange={(e) => update(r.name, "decrease_exit", e.target.value)} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="pair-card-section inc-section">
+                <div className="pair-card-section-head">
+                  <span className="section-arrow">▲</span> Increase
+                  <span className="section-spread">{fmtSpread(r.increase_spread)}</span>
+                  {r.increase_open && <span className="side-pill open">●</span>}
+                </div>
+                <div className="pair-card-inputs">
+                  <label>Entry
+                    <input className={`cell ${dirty.increase_entry ? "dirty" : ""}`} type="number" step="0.01" placeholder="—"
+                      value={d.increase_entry ?? ""}
+                      onChange={(e) => update(r.name, "increase_entry", e.target.value)} />
+                  </label>
+                  <label>Exit
+                    <input className={`cell ${dirty.increase_exit ? "dirty" : ""}`} type="number" step="0.01" placeholder="—"
+                      value={d.increase_exit ?? ""}
+                      onChange={(e) => update(r.name, "increase_exit", e.target.value)} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="pair-card-footer">
+                <label className="weight-label">Max (g)
+                  <input
+                    className={`cell ${dirty.max_weight_grams ? "dirty" : ""}`}
+                    type="number" min="0" max={r.max_allowed_weight ?? 1000} step="1"
+                    placeholder={String(r.default_max_weight ?? 1000)}
+                    value={d.max_weight_grams ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const limit = r.max_allowed_weight ?? 1000;
+                      if (v !== "" && Number(v) > limit) update(r.name, "max_weight_grams", String(limit));
+                      else update(r.name, "max_weight_grams", v);
+                    }}
+                  />
+                </label>
+                <div className="pair-card-actions">
+                  <button className={`btn btn-primary btn-sm ${dirty.any ? "dirty" : ""}`} onClick={() => save(r.name)}>
+                    {dirty.any ? "Save *" : "Save"}
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => clear(r.name)}>Clear</button>
+                </div>
+              </div>
+              {r.has_pending_cap && (
+                <div className="pending-cap-mobile">⏳ Pending cap: {r.pending_max_weight_grams ?? "default"}g</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DESKTOP TABLE VIEW */}
+      <div className="table-container desktop-only">
         <table className="fixed">
           <colgroup>
             <col style={{ width: "12%" }} />
