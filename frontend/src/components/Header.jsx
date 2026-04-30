@@ -12,7 +12,10 @@ export default function Header({
   onOpenPositions,
   onOpenHistory,
   feedStatus,
+  wsState,
 }) {
+  const wsLabel = wsState === "live" ? "STREAMING" : wsState === "connecting" ? "CONNECTING" : "POLLING";
+  const wsCls = wsState === "live" ? "ws-live" : wsState === "connecting" ? "ws-connecting" : "ws-poll";
   return (
     <div className="header">
       <div className="header-left">
@@ -33,6 +36,10 @@ export default function Header({
         </nav>
       </div>
       <div className="header-right">
+        <span className={`ws-pill ${wsCls}`} title={`Browser ↔ server: ${wsState}`}>
+          <span className="ws-dot" />
+          {wsLabel}
+        </span>
         <FeedStatus status={feedStatus} />
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}

@@ -4,10 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.config import PAIRS
 from app.database import get_db
-from app.models import PairRule, Position
+from app.models import PairRule
 from app.security import get_current_user
-from app.services.spread_engine import compute_all
-from app.services.trade_engine import open_position_for_side
+from app.services.snapshot import build_live_payload
 
 router = APIRouter(prefix="/api/pairs", tags=["pairs"])
 
@@ -27,48 +26,10 @@ def _ensure_rules(db: Session) -> None:
     db.commit()
 
 
-def _row_status(rule: PairRule | None, dec_open: bool, inc_open: bool) -> str:
-    """Aggregate row status: in_position if any side open, armed if any rule set, else idle."""
-    if dec_open or inc_open:
-        return "in_position"
-    if rule and (rule.decrease_entry is not None or rule.increase_entry is not None):
-        return "armed"
-    return "idle"
-
-
 @router.get("/live")
 def live(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     _ensure_rules(db)
-    rules = {r.pair_name: r for r in db.query(PairRule).all()}
-    open_dec = {
-        p.pair_name
-        for p in db.query(Position)
-        .filter(Position.status == "open", Position.mode == "decrease")
-        .all()
-    }
-    open_inc = {
-        p.pair_name
-        for p in db.query(Position)
-        .filter(Position.status == "open", Position.mode == "increase")
-        .all()
-    }
-    snaps = compute_all()
-    out = []
-    for s in snaps:
-        rule = rules.get(s["name"])
-        dec_open = s["name"] in open_dec
-        inc_open = s["name"] in open_inc
-        out.append({
-            **s,
-            "decrease_entry": rule.decrease_entry if rule else None,
-            "decrease_exit": rule.decrease_exit if rule else None,
-            "increase_entry": rule.increase_entry if rule else None,
-            "increase_exit": rule.increase_exit if rule else None,
-            "decrease_open": dec_open,
-            "increase_open": inc_open,
-            "status": _row_status(rule, dec_open, inc_open),
-        })
-    return out
+    return build_live_payload(db)
 
 
 @router.put("/{pair_name}/rule")

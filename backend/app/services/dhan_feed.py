@@ -21,8 +21,10 @@ from typing import Optional
 from app.config import settings
 from app.database import SessionLocal
 from app.services import dhan_auth
+from app.services.broadcaster import broadcaster
 from app.services.instrument_resolver import resolve_near_month_ids
 from app.services.market_data import quote_store
+from app.services.snapshot import build_live_payload
 from app.services.trade_engine import evaluate
 
 log = logging.getLogger("dhan_feed")
@@ -60,14 +62,22 @@ def _set_state(**kwargs) -> None:
         _state.update(kwargs)
 
 
-def _eval_safely() -> None:
+def _eval_and_broadcast() -> None:
     db = SessionLocal()
     try:
         evaluate(db)
+        if broadcaster.client_count > 0:
+            payload = build_live_payload(db)
+            broadcaster.push_threadsafe({"type": "snapshot", "data": payload})
     except Exception as e:
         log.exception("evaluate() failed: %s", e)
     finally:
         db.close()
+
+
+# Backward-compat alias
+def _eval_safely() -> None:
+    _eval_and_broadcast()
 
 
 def _watchdog() -> None:
@@ -167,7 +177,7 @@ def _run_real_feed_thread() -> None:
 
                 now = time.time()
                 if now - last_eval[0] > 0.5:
-                    _eval_safely()
+                    _eval_and_broadcast()
                     last_eval[0] = now
 
             def on_error(_instance, err):
@@ -219,7 +229,7 @@ def _run_simulated_thread() -> None:
                 ltp=round(mid + jitter, 2),
                 ts=time.time(),
             )
-        _eval_safely()
+        _eval_and_broadcast()
         _set_state(last_tick_epoch=time.time())
         time.sleep(1.0)
 

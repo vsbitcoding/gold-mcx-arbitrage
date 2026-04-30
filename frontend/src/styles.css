@@ -219,6 +219,29 @@ body {
 .feed-pill.feed-down { background: var(--red-bg); color: var(--red); border-color: var(--red); }
 .feed-pill.feed-down .feed-dot { background: var(--red); animation: pulse 1s infinite; }
 
+/* Browser <-> server WS pill */
+.ws-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--border);
+  cursor: help;
+}
+.ws-pill .ws-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.ws-pill.ws-live { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.ws-pill.ws-live .ws-dot { background: var(--green); animation: pulse 2s infinite; }
+.ws-pill.ws-connecting { background: var(--yellow-bg); color: var(--yellow); border-color: var(--yellow); }
+.ws-pill.ws-connecting .ws-dot { background: var(--yellow); animation: pulse 1s infinite; }
+.ws-pill.ws-poll { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.ws-pill.ws-poll .ws-dot { background: var(--accent); }
+
 .btn {
   padding: 8px 16px;
   border: none;
