@@ -1,7 +1,11 @@
-from sqlalchemy import create_engine, event
+import logging
+
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
+
+log = logging.getLogger("database")
 
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
@@ -20,6 +24,26 @@ if is_sqlite:
         cur.execute("PRAGMA cache_size=-20000")  # 20 MB page cache
         cur.execute("PRAGMA temp_store=MEMORY")
         cur.close()
+
+
+# Lightweight auto-migration: add missing columns when models grow.
+# Avoids a full Alembic dependency for this small project.
+_REQUIRED_COLUMNS = {
+    "pair_rules": [("max_weight_grams", "INTEGER")],
+}
+
+
+def run_simple_migrations() -> None:
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, cols in _REQUIRED_COLUMNS.items():
+            if not insp.has_table(table):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, sql_type in cols:
+                if name not in existing:
+                    log.warning("Auto-migrate: ALTER TABLE %s ADD COLUMN %s %s", table, name, sql_type)
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
 
 
 def get_db():

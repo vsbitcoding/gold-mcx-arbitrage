@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, run_simple_migrations
 from app.routes import auth, control, feed, history, pairs, positions, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
@@ -38,6 +38,7 @@ app.include_router(ws_route.router)
 @app.on_event("startup")
 async def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    run_simple_migrations()
     loop = asyncio.get_event_loop()
     broadcaster.bind_loop(loop)
     start_feed_in_background(loop)
