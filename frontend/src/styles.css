@@ -862,6 +862,84 @@ tr.position-detail-row td {
   .position-detail { grid-template-columns: 1fr; }
 }
 
+/* Inline leg cell for Active Positions / History (no expand needed) */
+.leg-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 11px;
+  text-align: left;
+}
+.leg-inline.buy { border-left-color: var(--green); }
+.leg-inline.sell { border-left-color: var(--red); }
+.leg-inline-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.leg-inline-head .leg-action {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  letter-spacing: 0.4px;
+}
+.leg-inline.buy .leg-action { background: var(--green-bg); color: var(--green); }
+.leg-inline.sell .leg-action { background: var(--red-bg); color: var(--red); }
+.leg-inline-head .leg-instrument {
+  text-transform: capitalize;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.leg-inline-head .leg-lots {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.leg-inline-prices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Roboto Mono', ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.leg-inline-prices .leg-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.leg-inline-prices .leg-price {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.leg-delta-mini {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.leg-delta-mini.pos { background: var(--green-bg); color: var(--green); }
+.leg-delta-mini.neg { background: var(--red-bg); color: var(--red); }
+
+.stack-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Roboto Mono', ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.stack-cell .stack-arrow { color: var(--text-muted); font-size: 11px; }
+
+table.positions-table td { padding: 8px 8px; }
+
 input.cell {
   width: 100%;
   max-width: 88px;

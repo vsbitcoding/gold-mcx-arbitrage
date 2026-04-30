@@ -16,30 +16,25 @@ function fmtDur(secs) {
 }
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ""; }
 
-function LegBlock({ action, instrument, lots, entryPx, exitPx }) {
-  const cls = action === "BUY" ? "leg-buy" : "leg-sell";
-  const d = (entryPx !== null && exitPx !== null) ? Number(exitPx) - Number(entryPx) : null;
+function LegInline({ action, instrument, lots, entryPx, exitPx }) {
+  const cls = action === "BUY" ? "leg-inline buy" : "leg-inline sell";
+  const d = (entryPx !== null && exitPx !== null && entryPx !== undefined && exitPx !== undefined)
+    ? Number(exitPx) - Number(entryPx) : null;
   return (
-    <div className={`leg-block ${cls}`}>
-      <div className="leg-head">
+    <div className={cls}>
+      <div className="leg-inline-head">
         <span className="leg-action">{action}</span>
         <span className="leg-instrument">{cap(instrument)}</span>
-        <span className="leg-lots">{lots} lots</span>
+        <span className="leg-lots">{lots} lot{lots > 1 ? "s" : ""}</span>
       </div>
-      <div className="leg-prices">
-        <div>
-          <span className="leg-label">Entry @</span>
-          <span className="leg-price">{fmtPx(entryPx)}</span>
-        </div>
-        <div className="leg-arrow">→</div>
-        <div>
-          <span className="leg-label">Exit @</span>
-          <span className="leg-price">{fmtPx(exitPx)}</span>
-        </div>
+      <div className="leg-inline-prices">
+        <span className="leg-price">{fmtPx(entryPx)}</span>
+        <span className="leg-arrow">→</span>
+        <span className="leg-price">{fmtPx(exitPx)}</span>
         {d !== null && (
-          <div className={`leg-delta ${d >= 0 ? "pos" : "neg"}`}>
+          <span className={`leg-delta-mini ${d >= 0 ? "pos" : "neg"}`}>
             {d >= 0 ? "+" : ""}{d.toFixed(2)}
-          </div>
+          </span>
         )}
       </div>
     </div>
@@ -50,7 +45,6 @@ export default function TradeHistory({ rows }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [expanded, setExpanded] = useState({});
   const PER = 10;
 
   const totals = useMemo(() => {
@@ -69,10 +63,6 @@ export default function TradeHistory({ rows }) {
   const start = (page - 1) * PER;
   const slice = filtered.slice(start, start + PER);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER));
-
-  function toggle(id) {
-    setExpanded((e) => ({ ...e, [id]: !e[id] }));
-  }
 
   return (
     <div className="sessions-container">
@@ -105,110 +95,71 @@ export default function TradeHistory({ rows }) {
         {filtered.length === 0 ? (
           <div className="empty-state">No trades match the filter.</div>
         ) : (
-          <table>
+          <table className="positions-table">
             <thead>
               <tr>
-                <th></th>
                 <th>Pair</th>
                 <th>Mode</th>
-                <th>Entry</th>
-                <th>Exit</th>
+                <th>Big Leg</th>
+                <th>Small Leg</th>
+                <th>Entry / Exit</th>
                 <th>Move</th>
-                <th>Lots</th>
                 <th>Weight</th>
                 <th>Duration</th>
-                <th>Closed By</th>
+                <th>Closed</th>
+                <th>By</th>
                 <th>PnL</th>
               </tr>
             </thead>
             <tbody>
               {slice.map((r) => {
-                const isOpen = !!expanded[r.id];
                 const move = (r.entry_spread != null && r.exit_spread != null)
                   ? Number(r.exit_spread) - Number(r.entry_spread) : null;
                 const moveCls = move === null ? "" : (move >= 0 ? "pnl-positive" : "pnl-negative");
                 return (
-                  <React.Fragment key={r.id}>
-                    <tr className={isOpen ? "expanded" : ""}>
-                      <td style={{ width: 30 }}>
-                        <button className="row-toggle" onClick={() => toggle(r.id)} title="Show details">
-                          <span className="caret">{isOpen ? "▾" : "▸"}</span>
-                        </button>
-                      </td>
-                      <td className="pair-name">{r.pair_name}</td>
-                      <td>
-                        <span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
-                          {cap(r.mode)}
-                        </span>
-                      </td>
-                      <td className="spread-num">{Number(r.entry_spread).toFixed(2)}</td>
-                      <td className="spread-num">{Number(r.exit_spread).toFixed(2)}</td>
-                      <td className={`spread-num ${moveCls}`}>
-                        {move === null ? "—" : (move >= 0 ? "+" : "") + move.toFixed(2)}
-                      </td>
-                      <td>{r.big_lots}/{r.small_lots}</td>
-                      <td>{r.weight_grams ? `${r.weight_grams}g` : "—"}</td>
-                      <td>{fmtDur(r.duration_seconds)}</td>
-                      <td style={{ textTransform: "capitalize", color: "var(--text-muted)" }}>{r.closed_by}</td>
-                      <td className={r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
-                        {r.pnl >= 0 ? "+" : ""}{r.pnl}
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr className="position-detail-row">
-                        <td colSpan={11}>
-                          <div className="position-detail">
-                            <LegBlock
-                              action={r.big_action}
-                              instrument={r.big_instrument}
-                              lots={r.big_lots}
-                              entryPx={r.big_entry_price}
-                              exitPx={r.big_exit_price}
-                            />
-                            <LegBlock
-                              action={r.small_action}
-                              instrument={r.small_instrument}
-                              lots={r.small_lots}
-                              entryPx={r.small_entry_price}
-                              exitPx={r.small_exit_price}
-                            />
-                            <div className="leg-block info">
-                              <div className="leg-head">
-                                <span className="leg-instrument">PnL Calculation</span>
-                              </div>
-                              <div className="leg-prices small">
-                                <div>
-                                  <span className="leg-label">{r.mode === "decrease" ? "Entry − Exit" : "Exit − Entry"}</span>
-                                </div>
-                                <div className="leg-arrow"></div>
-                                <div>
-                                  <span className="leg-price">
-                                    {r.mode === "decrease"
-                                      ? `${Number(r.entry_spread).toFixed(2)} − ${Number(r.exit_spread).toFixed(2)}`
-                                      : `${Number(r.exit_spread).toFixed(2)} − ${Number(r.entry_spread).toFixed(2)}`}
-                                  </span>
-                                </div>
-                                <div className="leg-arrow">×</div>
-                                <div>
-                                  <span className="leg-price">{r.big_lots} lots</span>
-                                </div>
-                                <div className="leg-arrow">=</div>
-                                <div>
-                                  <span className={`leg-price ${r.pnl >= 0 ? "pos" : "neg"}`}>
-                                    {r.pnl >= 0 ? "+" : ""}{r.pnl}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="leg-prices small" style={{ marginTop: 8, color: "var(--text-muted)" }}>
-                                <div><span className="leg-label">Opened:</span> {fmt(r.entry_time)}</div>
-                                <div><span className="leg-label">Closed:</span> {fmt(r.exit_time)}</div>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                  <tr key={r.id}>
+                    <td className="pair-name">{r.pair_name}</td>
+                    <td>
+                      <span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
+                        {cap(r.mode)}
+                      </span>
+                    </td>
+                    <td>
+                      <LegInline
+                        action={r.big_action}
+                        instrument={r.big_instrument}
+                        lots={r.big_lots}
+                        entryPx={r.big_entry_price}
+                        exitPx={r.big_exit_price}
+                      />
+                    </td>
+                    <td>
+                      <LegInline
+                        action={r.small_action}
+                        instrument={r.small_instrument}
+                        lots={r.small_lots}
+                        entryPx={r.small_entry_price}
+                        exitPx={r.small_exit_price}
+                      />
+                    </td>
+                    <td className="spread-num">
+                      <div className="stack-cell">
+                        <span>{Number(r.entry_spread).toFixed(2)}</span>
+                        <span className="stack-arrow">→</span>
+                        <span>{Number(r.exit_spread).toFixed(2)}</span>
+                      </div>
+                    </td>
+                    <td className={`spread-num ${moveCls}`}>
+                      {move === null ? "—" : (move >= 0 ? "+" : "") + move.toFixed(2)}
+                    </td>
+                    <td>{r.weight_grams ? `${r.weight_grams}g` : "—"}</td>
+                    <td>{fmtDur(r.duration_seconds)}</td>
+                    <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmt(r.exit_time)}</td>
+                    <td style={{ textTransform: "capitalize", color: "var(--text-muted)", fontSize: 11 }}>{r.closed_by}</td>
+                    <td className={r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                      {r.pnl >= 0 ? "+" : ""}{r.pnl}
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>
