@@ -1,9 +1,10 @@
 """Build the same payload that GET /api/pairs/live returns, for WS broadcast."""
 from sqlalchemy.orm import Session
 
-from app.config import GRAMS_PER_LOT, PAIRS, cycle_grams
+from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, PAIRS, cycle_grams
 from app.models import PairRule, Position
 from app.services.spread_engine import compute_all
+from app.services.trade_engine import effective_max_weight
 
 
 def _row_status(rule: PairRule | None, dec_open: bool, inc_open: bool) -> str:
@@ -58,6 +59,8 @@ def build_live_payload(db: Session) -> list[dict]:
             "increase_entry": rule.increase_entry if rule else None,
             "increase_exit": rule.increase_exit if rule else None,
             "max_weight_grams": rule.max_weight_grams if rule else None,
+            "effective_max_weight": effective_max_weight(rule),
+            "default_max_weight": DEFAULT_MAX_WEIGHT_GRAMS,
             "cycle_grams": cycle_g,
             "open_weight_grams": weight_by_pair.get(s["name"], 0),
             "decrease_open": dec_open,

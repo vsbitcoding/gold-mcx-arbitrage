@@ -3,6 +3,24 @@ import { api } from "../api/client.js";
 import { useToast } from "./Toast.jsx";
 import { useConfirm } from "./ConfirmDialog.jsx";
 
+function WeightBar({ open, max, isDefault }) {
+  const pct = max > 0 ? Math.min(100, (open / max) * 100) : 0;
+  const cls = pct >= 100 ? "full" : pct >= 80 ? "high" : pct >= 50 ? "mid" : "low";
+  return (
+    <div className="wbar-wrap" title={`${open}g used of ${max}g cap${isDefault ? " (default)" : ""}`}>
+      <div className="wbar">
+        <div className={`wbar-fill ${cls}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="wbar-text">
+        <span className={open > 0 ? "wbar-used" : "wbar-zero"}>{open}</span>
+        <span className="wbar-sep">/</span>
+        <span className={isDefault ? "wbar-default" : "wbar-max"}>{max}g</span>
+        {isDefault && <span className="wbar-tag">default</span>}
+      </div>
+    </div>
+  );
+}
+
 const STATUS_LABEL = { idle: "Idle", armed: "Armed", in_position: "In Position" };
 const STATUS_CLASS = { idle: "badge-idle", armed: "badge-armed", in_position: "badge-position" };
 const MULTIPLIERS = { petal: 10, guinea: 1.25, ten: 1, mini: 1 };
@@ -84,14 +102,16 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
             type="number"
             min="0"
             step="1"
-            placeholder="∞"
+            placeholder={String(row.default_max_weight ?? 1000)}
             value={draft.max_weight_grams ?? ""}
             onChange={(e) => onChange("max_weight_grams", e.target.value)}
-            title={`Cycle = ${row.cycle_grams}g · Open = ${row.open_weight_grams}g`}
+            title={`Cycle = ${row.cycle_grams}g · Open = ${row.open_weight_grams}g · Default ${row.default_max_weight ?? 1000}g if blank`}
           />
-          <div className="weight-meta">
-            {row.open_weight_grams ?? 0}/{row.max_weight_grams ?? "∞"}g
-          </div>
+          <WeightBar
+            open={row.open_weight_grams ?? 0}
+            max={row.effective_max_weight ?? row.default_max_weight ?? 1000}
+            isDefault={row.max_weight_grams == null}
+          />
         </td>
         <td className="gc-status">
           <div className="row-actions">
@@ -175,6 +195,9 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
   prev.row.decrease_exit === next.row.decrease_exit &&
   prev.row.increase_entry === next.row.increase_entry &&
   prev.row.increase_exit === next.row.increase_exit &&
+  prev.row.max_weight_grams === next.row.max_weight_grams &&
+  prev.row.effective_max_weight === next.row.effective_max_weight &&
+  prev.row.open_weight_grams === next.row.open_weight_grams &&
   prev.draft === next.draft
 ));
 

@@ -499,6 +499,54 @@ td.gc-weight .weight-meta {
   font-variant-numeric: tabular-nums;
 }
 
+/* Weight progress bar */
+.wbar-wrap {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+.wbar {
+  width: 88px;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.wbar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.3s;
+}
+.wbar-fill.low { background: var(--accent); }
+.wbar-fill.mid { background: var(--yellow); }
+.wbar-fill.high { background: #fb923c; }
+.wbar-fill.full { background: var(--red); }
+.wbar-text {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wbar-used { color: var(--text-primary); }
+.wbar-zero { color: var(--text-muted); }
+.wbar-sep  { color: var(--text-muted); }
+.wbar-max  { color: var(--text-secondary); }
+.wbar-default { color: var(--text-muted); font-style: italic; }
+.wbar-tag {
+  margin-left: 4px;
+  font-size: 9px;
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  padding: 0 5px;
+  border-radius: 100px;
+  font-weight: 600;
+  font-style: normal;
+}
+
 th.col-end-group, td.col-end-group { border-right: 2px solid var(--border); }
 
 td {

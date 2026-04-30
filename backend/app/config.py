@@ -50,6 +50,9 @@ MULTIPLIERS = {"petal": 10.0, "guinea": 1.25, "ten": 1.0, "mini": 1.0}
 # Gold weight (grams) per single lot of each MCX contract
 GRAMS_PER_LOT = {"petal": 1, "guinea": 8, "ten": 10, "mini": 100}
 
+# Default max weight cap per pair if user leaves it blank
+DEFAULT_MAX_WEIGHT_GRAMS = 1000
+
 
 def cycle_grams(pair: dict) -> int:
     """Gold weight (grams) of one full hedge cycle for this pair (big-side)."""

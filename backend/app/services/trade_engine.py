@@ -18,7 +18,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.config import GRAMS_PER_LOT, PAIRS, cycle_grams
+from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, PAIRS, cycle_grams
 from app.models import PairRule, Position, TradeHistory
 from app.services.spread_engine import compute_pair
 
@@ -58,11 +58,15 @@ def open_weight_grams(db: Session, pair_name: str, big_instrument: str) -> int:
     return sum(r.big_lots * g for r in rows)
 
 
+def effective_max_weight(rule: PairRule | None) -> int:
+    """Return user-set cap, or default 1000g if not set."""
+    cap = rule.max_weight_grams if rule else None
+    return cap if cap and cap > 0 else DEFAULT_MAX_WEIGHT_GRAMS
+
+
 def can_open_new_cycle(db: Session, pair: dict, rule: PairRule) -> bool:
-    """Cumulative weight cap (Option B). NULL/0 cap = unlimited."""
-    cap = rule.max_weight_grams
-    if not cap:
-        return True
+    """Cumulative weight cap (Option B). Defaults to 1000g if unset."""
+    cap = effective_max_weight(rule)
     current = open_weight_grams(db, pair["name"], pair["big"])
     new_cycle = cycle_grams(pair)
     return (current + new_cycle) <= cap
