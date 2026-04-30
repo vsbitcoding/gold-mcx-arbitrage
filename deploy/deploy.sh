@@ -1,58 +1,54 @@
 #!/usr/bin/env bash
-# Deploy on VPS. Run from /home/vs.bitcoding/gold-mcx-arbitrage after `git fetch && git reset --hard origin/main`.
-# Touches only the arbitrage app files, nginx site config for arbitrage.bitcoding.ai, and arbi-backend systemd unit.
+# Smart deploy: only restarts backend when backend files actually changed.
+# Run from /home/vs.bitcoding/gold-mcx-arbitrage AFTER `git fetch && git reset --hard origin/main`.
 set -euo pipefail
 
 APP_DIR="/home/vs.bitcoding/gold-mcx-arbitrage"
+PREV_REF_FILE="/tmp/arbi-last-deploy-sha"
 
-echo "==> Backend venv + Python deps"
-cd "$APP_DIR/backend"
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
+cd "$APP_DIR"
+CURRENT=$(git rev-parse HEAD)
+PREV=$(cat "$PREV_REF_FILE" 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || echo "")
+
+if [ -n "$PREV" ] && [ "$PREV" != "$CURRENT" ]; then
+    BACKEND_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- backend/ | wc -l)
+    FRONTEND_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- frontend/ | wc -l)
+    DEPS_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- backend/requirements.txt | wc -l)
+else
+    BACKEND_CHANGED=1
+    FRONTEND_CHANGED=1
+    DEPS_CHANGED=1
 fi
-./venv/bin/pip install --upgrade pip --quiet
-./venv/bin/pip install -r requirements.txt --quiet
 
-if [ ! -f ".env" ]; then
-    cp .env.example .env
-    echo "!! Created .env from template. Fill credentials in $APP_DIR/backend/.env then rerun."
-    exit 1
+echo "==> Changes: backend=$BACKEND_CHANGED frontend=$FRONTEND_CHANGED deps=$DEPS_CHANGED"
+
+if [ "$DEPS_CHANGED" -gt 0 ]; then
+    echo "==> Reinstalling backend deps"
+    cd "$APP_DIR/backend"
+    ./venv/bin/pip install -r requirements.txt --quiet
 fi
 
-echo "==> Frontend build"
-cd "$APP_DIR/frontend"
-npm install --no-audit --no-fund --silent
-npm run build
+if [ "$FRONTEND_CHANGED" -gt 0 ]; then
+    echo "==> Rebuilding frontend"
+    cd "$APP_DIR/frontend"
+    npm install --no-audit --no-fund --silent
+    npm run build
+    sudo rm -rf /var/www/arbitrage/assets
+    sudo cp -a "$APP_DIR/frontend/dist/." /var/www/arbitrage/
+    sudo chown -R www-data:www-data /var/www/arbitrage
+    sudo find /var/www/arbitrage -type d -exec chmod 755 {} \;
+    sudo find /var/www/arbitrage -type f -exec chmod 644 {} \;
+    echo "==> Frontend live (no backend restart needed)"
+fi
 
-echo "==> Publish build to /var/www/arbitrage"
-sudo mkdir -p /var/www/arbitrage
-sudo rm -rf /var/www/arbitrage/assets
-sudo cp -a "$APP_DIR/frontend/dist/." /var/www/arbitrage/
-sudo chown -R www-data:www-data /var/www/arbitrage
-sudo find /var/www/arbitrage -type d -exec chmod 755 {} \;
-sudo find /var/www/arbitrage -type f -exec chmod 644 {} \;
+if [ "$BACKEND_CHANGED" -gt 0 ]; then
+    echo "==> Backend changed → restarting service (brief feed downtime)"
+    sudo systemctl restart arbi-backend.service
+    sleep 4
+    sudo systemctl is-active arbi-backend.service
+else
+    echo "==> Backend unchanged → keeping live feed connected"
+fi
 
-echo "==> Install systemd unit (arbi-backend)"
-sudo cp "$APP_DIR/deploy/systemd/arbi-backend.service" /etc/systemd/system/arbi-backend.service
-sudo systemctl daemon-reload
-sudo systemctl enable arbi-backend.service
-
-echo "==> Install nginx config (arbitrage.bitcoding.ai only)"
-sudo cp "$APP_DIR/deploy/nginx-arbitrage.conf" /etc/nginx/sites-available/arbitrage.bitcoding.ai.conf
-sudo nginx -t
-
-echo "==> Stop any old uvicorn on port 8000 (non-systemd)"
-pkill -f "uvicorn main:app" 2>/dev/null || true
-pkill -f "uvicorn app.main:app" 2>/dev/null || true
-sleep 1
-
-echo "==> Restart services"
-sudo systemctl restart arbi-backend.service
-sudo systemctl reload nginx
-
-sleep 2
-echo "==> Health check"
-curl -s http://127.0.0.1:8000/api/health || echo "backend not responding yet"
-
-echo ""
-echo "==> Done. Visit https://arbitrage.bitcoding.ai/"
+echo "$CURRENT" > "$PREV_REF_FILE"
+echo "==> Deploy complete: $CURRENT"
