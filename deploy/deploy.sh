@@ -1,59 +1,50 @@
 #!/usr/bin/env bash
-# Pull latest code, install deps, build frontend, restart services.
-# Run after setup.sh and after .env has been filled.
+# Deploy on VPS. Run from /home/vs.bitcoding/gold-mcx-arbitrage after `git fetch && git reset --hard origin/main`.
+# Touches only the arbitrage app files, nginx site config for arbitrage.bitcoding.ai, and arbi-backend systemd unit.
 set -euo pipefail
 
-DOMAIN="arbitrage.bitcoding.ai"
-APP_DIR="/opt/arbi"
-REPO="git@github.com:vsbitcoding/gold-mcx-arbitrage.git"
+APP_DIR="/home/vs.bitcoding/gold-mcx-arbitrage"
 
-cd "$APP_DIR"
-if [ ! -d ".git" ]; then
-    echo "==> Cloning repo"
-    git clone "$REPO" .
-else
-    echo "==> Pulling latest"
-    git fetch origin
-    git reset --hard origin/main
-fi
-
-echo "==> Backend venv + deps"
+echo "==> Backend venv + Python deps"
 cd "$APP_DIR/backend"
 if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
+./venv/bin/pip install --upgrade pip --quiet
+./venv/bin/pip install -r requirements.txt --quiet
 
 if [ ! -f ".env" ]; then
-    echo "!! .env missing in $APP_DIR/backend — copy .env.example and fill credentials before continuing."
     cp .env.example .env
-    echo "Edit /opt/arbi/backend/.env then re-run this script."
+    echo "!! Created .env from template. Fill credentials in $APP_DIR/backend/.env then rerun."
     exit 1
 fi
 
 echo "==> Frontend build"
 cd "$APP_DIR/frontend"
-npm install --no-audit --no-fund
+npm install --no-audit --no-fund --silent
 npm run build
 
-echo "==> Installing systemd unit"
-sudo cp "$APP_DIR/deploy/systemd/arbi-backend.service" /etc/systemd/system/
+echo "==> Install systemd unit (arbi-backend)"
+sudo cp "$APP_DIR/deploy/systemd/arbi-backend.service" /etc/systemd/system/arbi-backend.service
 sudo systemctl daemon-reload
 sudo systemctl enable arbi-backend.service
 
-echo "==> Installing nginx config"
-sudo cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/arbi.conf
-sudo ln -sf /etc/nginx/sites-available/arbi.conf /etc/nginx/sites-enabled/arbi.conf
-sudo rm -f /etc/nginx/sites-enabled/default
-
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    echo "==> Obtaining SSL cert (Certbot)"
-    sudo certbot --nginx --non-interactive --agree-tos -m admin@bitcoding.ai -d "$DOMAIN" --redirect || true
-fi
-
+echo "==> Install nginx config (arbitrage.bitcoding.ai only)"
+sudo cp "$APP_DIR/deploy/nginx-arbitrage.conf" /etc/nginx/sites-available/arbitrage.bitcoding.ai.conf
 sudo nginx -t
-sudo systemctl restart nginx
-sudo systemctl restart arbi-backend.service
 
-echo "==> Deploy complete. Visit https://$DOMAIN"
+echo "==> Stop any old uvicorn on port 8000 (non-systemd)"
+pkill -f "uvicorn main:app" 2>/dev/null || true
+pkill -f "uvicorn app.main:app" 2>/dev/null || true
+sleep 1
+
+echo "==> Restart services"
+sudo systemctl restart arbi-backend.service
+sudo systemctl reload nginx
+
+sleep 2
+echo "==> Health check"
+curl -s http://127.0.0.1:8000/api/health || echo "backend not responding yet"
+
+echo ""
+echo "==> Done. Visit https://arbitrage.bitcoding.ai/"

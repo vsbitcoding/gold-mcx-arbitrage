@@ -1,17 +1,15 @@
 [Unit]
 Description=Gold MCX Arbitrage Backend (FastAPI + Dhan feed)
-After=network.target postgresql.service redis-server.service
+After=network.target
 
 [Service]
 Type=simple
 User=vs.bitcoding
-WorkingDirectory=/opt/arbi/backend
-EnvironmentFile=/opt/arbi/backend/.env
-ExecStart=/opt/arbi/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/home/vs.bitcoding/gold-mcx-arbitrage/backend
+EnvironmentFile=/home/vs.bitcoding/gold-mcx-arbitrage/backend/.env
+ExecStart=/home/vs.bitcoding/gold-mcx-arbitrage/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/arbi/backend.log
-StandardError=append:/var/log/arbi/backend.err.log
 
 [Install]
 WantedBy=multi-user.target

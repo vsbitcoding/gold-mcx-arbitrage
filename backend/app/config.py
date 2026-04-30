@@ -15,8 +15,7 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
 
-    DATABASE_URL: str = "postgresql://arbi:arbi_pass@localhost:5432/arbi"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    DATABASE_URL: str = "sqlite:///./arbi.db"
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
