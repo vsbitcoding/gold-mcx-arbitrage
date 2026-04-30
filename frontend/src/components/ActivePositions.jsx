@@ -1,18 +1,30 @@
 import React from "react";
 import { api } from "../api/client.js";
+import { useToast } from "./Toast.jsx";
+import { useConfirm } from "./ConfirmDialog.jsx";
 
 function fmtTime(t) {
   return new Date(t).toLocaleTimeString("en-IN", { hour12: false });
 }
 
 export default function ActivePositions({ rows, onChange }) {
-  async function close(id) {
-    if (!confirm("Square off this position?")) return;
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function close(p) {
+    const ok = await confirm({
+      title: "Square off position?",
+      message: `Close the ${p.mode} trade on ${p.pair_name} (entry @ ${p.entry_spread})? PnL is currently ${p.live_pnl >= 0 ? "+" : ""}${p.live_pnl}.`,
+      confirmText: "Square Off",
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      await api.closePosition(id);
+      const r = await api.closePosition(p.id);
+      toast.success(`${p.pair_name} ${p.mode} closed. PnL ${r.pnl >= 0 ? "+" : ""}${r.pnl}`);
       onChange();
     } catch (e) {
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 
@@ -57,7 +69,7 @@ export default function ActivePositions({ rows, onChange }) {
                     {p.live_pnl >= 0 ? "+" : ""}{p.live_pnl}
                   </td>
                   <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => close(p.id)}>Square Off</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => close(p)}>Square Off</button>
                   </td>
                 </tr>
               ))}

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState, memo } from "react";
 import { api } from "../api/client.js";
+import { useToast } from "./Toast.jsx";
+import { useConfirm } from "./ConfirmDialog.jsx";
 
 const STATUS_LABEL = { idle: "Idle", armed: "Armed", in_position: "In Position" };
 const STATUS_CLASS = { idle: "badge-idle", armed: "badge-armed", in_position: "badge-position" };
-
 const MULTIPLIERS = { petal: 10, guinea: 1.25, ten: 1, mini: 1 };
 
 function fmtSpread(v) {
@@ -12,17 +13,24 @@ function fmtSpread(v) {
 function fmtPx(v) {
   return v === null || v === undefined || v === 0 ? "—" : Number(v).toFixed(2);
 }
-function cap(s) {
-  return s ? s[0].toUpperCase() + s.slice(1) : s;
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function eqOrEmpty(a, b) {
+  // normalize: empty string == null
+  const na = a === "" || a === undefined || a === null ? null : Number(a);
+  const nb = a === "" || b === undefined || b === null ? null : Number(b);
+  if (na === null && nb === null) return true;
+  return na === nb;
 }
 
-const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange, onSave, onClear }) {
+const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, onChange, onSave, onClear }) {
   const bigMult = MULTIPLIERS[row.big] ?? 1;
   const smallMult = MULTIPLIERS[row.small] ?? 1;
   const decBig = row.big_bid ? row.big_bid * bigMult : null;
   const decSmall = row.small_ask ? row.small_ask * smallMult : null;
   const incBig = row.big_ask ? row.big_ask * bigMult : null;
   const incSmall = row.small_bid ? row.small_bid * smallMult : null;
+
+  const cls = (key) => `cell ${dirty[key] ? "dirty" : ""}`;
 
   return (
     <>
@@ -36,30 +44,30 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
 
         <td className="gc-decrease spread-num dec">
           {fmtSpread(row.decrease_spread)}
-          {row.decrease_open && <span className="side-pill open">●</span>}
+          {row.decrease_open && <span className="side-pill open" title="Decrease trade open">●</span>}
         </td>
         <td className="gc-decrease">
-          <input className="cell" type="number" step="0.01" placeholder="—"
+          <input className={cls("decrease_entry")} type="number" step="0.01" placeholder="—"
             value={draft.decrease_entry ?? ""}
             onChange={(e) => onChange("decrease_entry", e.target.value)} />
         </td>
         <td className="gc-decrease col-end-group">
-          <input className="cell" type="number" step="0.01" placeholder="—"
+          <input className={cls("decrease_exit")} type="number" step="0.01" placeholder="—"
             value={draft.decrease_exit ?? ""}
             onChange={(e) => onChange("decrease_exit", e.target.value)} />
         </td>
 
         <td className="gc-increase spread-num inc">
           {fmtSpread(row.increase_spread)}
-          {row.increase_open && <span className="side-pill open">●</span>}
+          {row.increase_open && <span className="side-pill open" title="Increase trade open">●</span>}
         </td>
         <td className="gc-increase">
-          <input className="cell" type="number" step="0.01" placeholder="—"
+          <input className={cls("increase_entry")} type="number" step="0.01" placeholder="—"
             value={draft.increase_entry ?? ""}
             onChange={(e) => onChange("increase_entry", e.target.value)} />
         </td>
         <td className="gc-increase col-end-group">
-          <input className="cell" type="number" step="0.01" placeholder="—"
+          <input className={cls("increase_exit")} type="number" step="0.01" placeholder="—"
             value={draft.increase_exit ?? ""}
             onChange={(e) => onChange("increase_exit", e.target.value)} />
         </td>
@@ -72,7 +80,13 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
         </td>
         <td className="gc-status">
           <div className="row-actions">
-            <button className="btn btn-primary btn-sm" onClick={onSave}>Save</button>
+            <button
+              className={`btn btn-primary btn-sm ${dirty.any ? "dirty" : ""}`}
+              onClick={onSave}
+              title={dirty.any ? "Unsaved changes — click to save" : "Save (no changes)"}
+            >
+              {dirty.any ? "Save *" : "Save"}
+            </button>
             <button className="btn btn-secondary btn-sm" onClick={onClear}>Clear</button>
           </div>
         </td>
@@ -132,6 +146,7 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
   );
 }, (prev, next) => (
   prev.expanded === next.expanded &&
+  prev.dirty === next.dirty &&
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.big_bid === next.row.big_bid &&
@@ -148,12 +163,36 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
   prev.draft === next.draft
 ));
 
+function normalizeServerVal(v) {
+  return v === null || v === undefined ? "" : String(v);
+}
+
+function buildDirtyMap(row, draft) {
+  if (!row || !draft) return { any: false };
+  const fields = ["decrease_entry", "decrease_exit", "increase_entry", "increase_exit"];
+  const out = { any: false };
+  for (const f of fields) {
+    const server = normalizeServerVal(row[f]);
+    const local = draft[f] ?? "";
+    if (String(server) !== String(local)) {
+      out[f] = true;
+      out.any = true;
+    }
+  }
+  return out;
+}
+
 export default function LiveSpreadTable({ rows, onSaved }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [drafts, setDrafts] = useState({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState({});
 
+  // Initialize drafts from server (only for pairs not yet in drafts).
+  // Keep user's in-progress edits if dirty.
   useEffect(() => {
     setDrafts((prev) => {
       const next = { ...prev };
@@ -170,6 +209,12 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       return next;
     });
   }, [rows.length]);
+
+  const dirtyMaps = useMemo(() => {
+    const m = {};
+    rows.forEach((r) => { m[r.name] = buildDirtyMap(r, drafts[r.name]); });
+    return m;
+  }, [rows, drafts]);
 
   const counts = useMemo(() => ({
     all: rows.length,
@@ -189,7 +234,34 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   }
 
   async function save(pair) {
+    const row = rows.find((r) => r.name === pair);
     const d = drafts[pair] || {};
+    const dirty = dirtyMaps[pair] || { any: false };
+    if (!dirty.any) {
+      toast.info("No changes to save.");
+      return;
+    }
+
+    // Warn when changing exit while that side has an open trade
+    if (row?.decrease_open && dirty.decrease_exit) {
+      const ok = await confirm({
+        title: "Update Decrease Exit?",
+        message: `Decrease trade is currently OPEN for ${pair}. Updating Exit will affect the live trade — auto square-off will use the new value on the next tick. Continue?`,
+        confirmText: "Update Exit",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    if (row?.increase_open && dirty.increase_exit) {
+      const ok = await confirm({
+        title: "Update Increase Exit?",
+        message: `Increase trade is currently OPEN for ${pair}. Updating Exit will affect the live trade — auto square-off will use the new value on the next tick. Continue?`,
+        confirmText: "Update Exit",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+
     const body = {
       decrease_entry: d.decrease_entry === "" ? null : Number(d.decrease_entry),
       decrease_exit: d.decrease_exit === "" ? null : Number(d.decrease_exit),
@@ -198,17 +270,42 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     };
     try {
       await api.saveRule(pair, body);
+      toast.success(`${pair} saved — bot updated.`);
       onSaved();
     } catch (e) {
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 
-  function clear(pair) {
+  async function clear(pair) {
+    const row = rows.find((r) => r.name === pair);
+    if (row?.decrease_open || row?.increase_open) {
+      const sides = [];
+      if (row.decrease_open) sides.push("Decrease");
+      if (row.increase_open) sides.push("Increase");
+      const ok = await confirm({
+        title: "Trade is still open",
+        message: `${sides.join(" and ")} trade${sides.length > 1 ? "s are" : " is"} currently open for ${pair}. Clearing values will NOT close the trade — it only stops re-arming after this trade closes. To close the trade now, use "Square Off" in Active Positions.`,
+        confirmText: "Clear values anyway",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setDrafts((d) => ({
       ...d,
       [pair]: { decrease_entry: "", decrease_exit: "", increase_entry: "", increase_exit: "" },
     }));
+    // Auto-save the cleared values
+    try {
+      await api.saveRule(pair, {
+        decrease_entry: null, decrease_exit: null,
+        increase_entry: null, increase_exit: null,
+      });
+      toast.success(`${pair} cleared.`);
+      onSaved();
+    } catch (e) {
+      toast.error(e.message);
+    }
   }
 
   function toggle(pair) {
@@ -280,6 +377,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
                 key={r.name}
                 row={r}
                 draft={drafts[r.name] || {}}
+                dirty={dirtyMaps[r.name] || { any: false }}
                 expanded={!!expanded[r.name]}
                 onToggle={() => toggle(r.name)}
                 onChange={(field, value) => update(r.name, field, value)}

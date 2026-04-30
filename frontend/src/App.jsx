@@ -7,14 +7,18 @@ import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import ActivePositions from "./components/ActivePositions.jsx";
 import TradeHistory from "./components/TradeHistory.jsx";
 import Drawer from "./components/Drawer.jsx";
+import { ToastProvider, useToast } from "./components/Toast.jsx";
+import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
 }
 
-export default function App() {
-  const [authed, setAuthed] = useState(!!getToken());
+function Dashboard() {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
@@ -49,32 +53,39 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!authed) return;
     refreshAll();
     const t = setInterval(refreshAll, 1500);
     return () => clearInterval(t);
-  }, [authed, refreshAll]);
+  }, [refreshAll]);
 
   async function pauseAll() {
-    if (!confirm("Clear all entry/exit values across all pairs?")) return;
+    const anyOpen = positions.length > 0;
+    const ok = await confirm({
+      title: "Pause All Pairs?",
+      message: anyOpen
+        ? `${positions.length} trade${positions.length > 1 ? "s are" : " is"} still open. Pausing only clears entry/exit values — open trades will NOT be closed. Use "Square Off" individually to close them.`
+        : "Clear entry/exit values across all 6 pairs. Bot will stop firing new trades until you set new values.",
+      confirmText: "Pause All",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.pauseAll();
+      toast.success("All pairs paused.");
       refreshAll();
     } catch (e) {
-      alert(e.message);
+      toast.error(e.message);
     }
   }
 
   function logout() {
     clearToken();
-    setAuthed(false);
+    window.location.reload();
   }
 
   function toggleTheme() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
-
-  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
 
   return (
     <div className="app">
@@ -111,5 +122,17 @@ export default function App() {
         <TradeHistory rows={history} />
       </Drawer>
     </div>
+  );
+}
+
+export default function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
+  return (
+    <ToastProvider>
+      <ConfirmProvider>
+        <Dashboard />
+      </ConfirmProvider>
+    </ToastProvider>
   );
 }

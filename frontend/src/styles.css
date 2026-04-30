@@ -438,6 +438,99 @@ td.spread-num.inc { color: var(--green); }
   font-weight: 700;
 }
 
+/* Unsaved input highlight */
+input.cell.dirty {
+  border-color: var(--yellow);
+  background: var(--yellow-bg);
+}
+.btn.btn-primary.dirty {
+  animation: dirty-pulse 1.5s infinite;
+}
+@keyframes dirty-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249,171,0,0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(249,171,0,0); }
+}
+
+/* ===== TOASTS ===== */
+.toast-stack {
+  position: fixed;
+  top: 70px;
+  right: 18px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  animation: toast-in 0.25s ease;
+  min-width: 240px;
+  max-width: 380px;
+  pointer-events: auto;
+  color: var(--text-primary);
+}
+@keyframes toast-in {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.toast-success { border-left-color: var(--green); }
+.toast-error   { border-left-color: var(--red); color: var(--red); }
+.toast-info    { border-left-color: var(--accent); }
+
+/* ===== CONFIRM DIALOG ===== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  backdrop-filter: blur(2px);
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.18s ease;
+}
+.confirm-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: 12px;
+  padding: 22px 24px;
+  width: min(440px, 92vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  animation: slide-up 0.22s ease;
+}
+.confirm-card.danger { border-top-color: var(--yellow); }
+.confirm-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.confirm-card p {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.btn-danger-solid {
+  background: var(--red);
+  color: #fff;
+  border: 1px solid var(--red);
+}
+.btn-danger-solid:hover { opacity: 0.9; }
+
 /* ===== Calculation expand row ===== */
 .row-toggle {
   background: transparent;

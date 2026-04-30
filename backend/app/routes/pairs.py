@@ -87,15 +87,6 @@ def update_rule(
         rule = PairRule(pair_name=pair_name)
         db.add(rule)
 
-    # Block edits ONLY for the side that has an open position.
-    dec_open = open_position_for_side(db, pair_name, "decrease") is not None
-    inc_open = open_position_for_side(db, pair_name, "increase") is not None
-
-    if dec_open and (body.decrease_entry != rule.decrease_entry or body.decrease_exit != rule.decrease_exit):
-        raise HTTPException(400, "Decrease trade is open. Square off before changing Decrease entry/exit.")
-    if inc_open and (body.increase_entry != rule.increase_entry or body.increase_exit != rule.increase_exit):
-        raise HTTPException(400, "Increase trade is open. Square off before changing Increase entry/exit.")
-
     rule.decrease_entry = body.decrease_entry
     rule.decrease_exit = body.decrease_exit
     rule.increase_entry = body.increase_entry
