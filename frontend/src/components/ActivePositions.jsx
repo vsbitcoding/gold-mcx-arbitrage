@@ -17,26 +17,26 @@ export default function ActivePositions({ rows, onChange }) {
   }
 
   return (
-    <div className="card">
-      <div className="card-head">
+    <div className="sessions-container">
+      <div className="sessions-header">
         <h2>Active Positions <span style={{ color: "var(--text-muted)", fontWeight: 500, marginLeft: 6 }}>({rows.length})</span></h2>
       </div>
-      <div className="table-wrap">
+      <div className="table-container">
         {rows.length === 0 ? (
-          <div className="empty">No active positions.</div>
+          <div className="empty-state">No active positions.</div>
         ) : (
           <table>
-            <thead className="grouped">
-              <tr className="cols">
+            <thead>
+              <tr>
                 <th>Pair</th>
                 <th>Mode</th>
                 <th>Entry Spread</th>
-                <th>Lots (Big / Small)</th>
+                <th>Lots (B / S)</th>
                 <th>Big Px</th>
                 <th>Small Px</th>
                 <th>Time</th>
                 <th>Live PnL</th>
-                <th style={{ textAlign: "right" }}>Action</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -44,23 +44,20 @@ export default function ActivePositions({ rows, onChange }) {
                 <tr key={p.id}>
                   <td className="pair-name">{p.pair_name}</td>
                   <td>
-                    <span className={`status ${p.mode === "decrease" ? "in_position" : "armed"}`}>
-                      <span className="blip" />
+                    <span className={`badge ${p.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
                       {p.mode === "decrease" ? "Decrease" : "Increase"}
                     </span>
                   </td>
-                  <td className="spread">{p.entry_spread}</td>
+                  <td className="spread-num">{p.entry_spread}</td>
                   <td>{p.big_lots} / {p.small_lots}</td>
-                  <td className="spread">{p.big_price}</td>
-                  <td className="spread">{p.small_price}</td>
+                  <td className="spread-num">{p.big_price}</td>
+                  <td className="spread-num">{p.small_price}</td>
                   <td style={{ color: "var(--text-muted)" }}>{fmtTime(p.entry_time)}</td>
-                  <td className={p.live_pnl >= 0 ? "pnl-pos" : "pnl-neg"}>
+                  <td className={p.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
                     {p.live_pnl >= 0 ? "+" : ""}{p.live_pnl}
                   </td>
                   <td>
-                    <div className="row-actions">
-                      <button className="btn-sm danger" onClick={() => close(p.id)}>Square Off</button>
-                    </div>
+                    <button className="btn btn-danger btn-sm" onClick={() => close(p.id)}>Square Off</button>
                   </td>
                 </tr>
               ))}

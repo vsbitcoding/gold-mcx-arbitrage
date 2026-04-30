@@ -20,10 +20,10 @@ export default function App() {
   const [mode, setMode] = useState("paper");
   const [theme, setTheme] = useState(getStoredTheme());
   const [user] = useState("Vivek_Bitcoding");
-  const [openDrawer, setOpenDrawer] = useState(null); // "positions" | "history" | null
+  const [openDrawer, setOpenDrawer] = useState(null);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    document.body.classList.toggle("dark", theme === "dark");
     localStorage.setItem("arbi_theme", theme);
   }, [theme]);
 
@@ -76,7 +76,6 @@ export default function App() {
     <div className="app">
       <Header
         user={user}
-        mode={mode}
         onPause={pauseAll}
         onLogout={logout}
         theme={theme}

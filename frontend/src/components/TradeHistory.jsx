@@ -28,34 +28,39 @@ export default function TradeHistory({ rows }) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER));
 
   return (
-    <div className="card">
-      <div className="card-head">
+    <div className="sessions-container">
+      <div className="sessions-header">
         <h2>
           Trade History <span style={{ color: "var(--text-muted)", fontWeight: 500, marginLeft: 6 }}>({rows.length})</span>
-          <span style={{ marginLeft: 14, fontSize: 13, fontWeight: 500 }} className={totals.net >= 0 ? "pnl-pos" : "pnl-neg"}>
+          <span style={{ marginLeft: 14, fontSize: 13, fontWeight: 600 }} className={totals.net >= 0 ? "pnl-positive" : "pnl-negative"}>
             Net: {totals.net >= 0 ? "+" : ""}{totals.net.toFixed(2)}
           </span>
         </h2>
-        <div className="toolbar">
-          <input className="search" placeholder="Search pair..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          <button className={`pill ${filter === "all" ? "active" : ""}`} onClick={() => { setFilter("all"); setPage(1); }}>
-            All <span className="count">{rows.length}</span>
-          </button>
-          <button className={`pill ${filter === "win" ? "active" : ""}`} onClick={() => { setFilter("win"); setPage(1); }}>
-            Wins <span className="count">{totals.wins}</span>
-          </button>
-          <button className={`pill ${filter === "loss" ? "active" : ""}`} onClick={() => { setFilter("loss"); setPage(1); }}>
-            Losses <span className="count">{totals.losses}</span>
-          </button>
+        <div className="header-controls">
+          <div className="search-container">
+            <input placeholder="Search pair..." value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          </div>
+          <div className="filter-tabs">
+            <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => { setFilter("all"); setPage(1); }}>
+              All <span className="count">{rows.length}</span>
+            </button>
+            <button className={`filter-tab ${filter === "win" ? "active" : ""}`} onClick={() => { setFilter("win"); setPage(1); }}>
+              Wins <span className="count">{totals.wins}</span>
+            </button>
+            <button className={`filter-tab ${filter === "loss" ? "active" : ""}`} onClick={() => { setFilter("loss"); setPage(1); }}>
+              Losses <span className="count">{totals.losses}</span>
+            </button>
+          </div>
         </div>
       </div>
-      <div className="table-wrap">
+      <div className="table-container">
         {filtered.length === 0 ? (
-          <div className="empty">No trades match the filter.</div>
+          <div className="empty-state">No trades match the filter.</div>
         ) : (
           <table>
-            <thead className="grouped">
-              <tr className="cols">
+            <thead>
+              <tr>
                 <th>Entry Time</th>
                 <th>Exit Time</th>
                 <th>Pair</th>
@@ -70,15 +75,19 @@ export default function TradeHistory({ rows }) {
             <tbody>
               {slice.map((r) => (
                 <tr key={r.id}>
-                  <td style={{ color: "var(--text-muted)" }}>{fmt(r.entry_time)}</td>
-                  <td style={{ color: "var(--text-muted)" }}>{fmt(r.exit_time)}</td>
+                  <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmt(r.entry_time)}</td>
+                  <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{fmt(r.exit_time)}</td>
                   <td className="pair-name">{r.pair_name}</td>
-                  <td style={{ textTransform: "capitalize" }}>{r.mode}</td>
-                  <td className="spread">{r.entry_spread}</td>
-                  <td className="spread">{r.exit_spread}</td>
+                  <td>
+                    <span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
+                      {r.mode}
+                    </span>
+                  </td>
+                  <td className="spread-num">{r.entry_spread}</td>
+                  <td className="spread-num">{r.exit_spread}</td>
                   <td>{r.big_lots}/{r.small_lots}</td>
                   <td style={{ textTransform: "capitalize", color: "var(--text-muted)" }}>{r.closed_by}</td>
-                  <td className={r.pnl >= 0 ? "pnl-pos" : "pnl-neg"}>
+                  <td className={r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
                     {r.pnl >= 0 ? "+" : ""}{r.pnl}
                   </td>
                 </tr>
@@ -88,9 +97,9 @@ export default function TradeHistory({ rows }) {
         )}
       </div>
       {filtered.length > 0 && (
-        <div className="foot">
+        <div className="pagination-controls">
           <div>Showing {start + 1}-{Math.min(start + PER, filtered.length)} of {filtered.length}</div>
-          <div className="right">
+          <div className="pager">
             <button onClick={() => setPage(1)} disabled={page === 1}>«</button>
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</button>
             <button className="active">{page}</button>

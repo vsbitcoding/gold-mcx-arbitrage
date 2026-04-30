@@ -2,7 +2,6 @@ import React from "react";
 
 export default function Header({
   user,
-  mode,
   onPause,
   onLogout,
   theme,
@@ -35,9 +34,9 @@ export default function Header({
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
-        <button className="btn-outline" onClick={onPause}>Pause All</button>
-        <span className="user-chip">{user || "User"}</span>
-        <button className="btn-outline" onClick={onLogout}>Logout</button>
+        <button className="btn btn-secondary" onClick={onPause}>Pause All</button>
+        <span className="username-chip">{user || "User"}</span>
+        <button className="btn btn-secondary" onClick={onLogout}>Logout</button>
       </div>
     </div>
   );
