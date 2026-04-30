@@ -393,6 +393,88 @@ td.spread-num {
 td.spread-num.dec { color: var(--red); }
 td.spread-num.inc { color: var(--green); }
 
+/* ===== Calculation expand row ===== */
+.row-toggle {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.row-toggle:hover { background: var(--bg-hover); }
+.row-toggle .caret {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 12px;
+  text-align: center;
+}
+
+tr.calc-row td {
+  background: var(--bg-surface) !important;
+  border-bottom: 2px solid var(--border);
+  padding: 14px 18px;
+  text-align: left;
+  white-space: normal;
+}
+.calc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+.calc-block {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+}
+.calc-block.dec { border-left: 3px solid var(--red); }
+.calc-block.inc { border-left: 3px solid var(--green); }
+.calc-block.info { border-left: 3px solid var(--accent); }
+.calc-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+.calc-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  border-bottom: 1px dashed var(--border-light);
+}
+.calc-line:last-child { border-bottom: none; }
+.calc-line.total {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.calc-num {
+  font-family: 'Roboto Mono', ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.calc-num b { font-weight: 700; }
+.calc-num.dec-tone { color: var(--red); }
+.calc-num.inc-tone { color: var(--green); }
+
+@media (max-width: 1100px) {
+  .calc-grid { grid-template-columns: 1fr; }
+}
+
 input.cell {
   width: 100%;
   max-width: 88px;
