@@ -60,6 +60,13 @@ class TradeHistory(Base):
     closed_by = Column(String(16), default="auto")  # auto | manual
     notes = Column(Text, nullable=True)
 
+    # Per-leg snapshot prices for audit / detail views
+    big_entry_price = Column(Float, nullable=True)
+    small_entry_price = Column(Float, nullable=True)
+    big_exit_price = Column(Float, nullable=True)
+    small_exit_price = Column(Float, nullable=True)
+    weight_grams = Column(Integer, nullable=True)
+
 
 from sqlalchemy import Index  # noqa: E402
 

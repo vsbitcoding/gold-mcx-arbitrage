@@ -30,6 +30,13 @@ if is_sqlite:
 # Avoids a full Alembic dependency for this small project.
 _REQUIRED_COLUMNS = {
     "pair_rules": [("max_weight_grams", "INTEGER")],
+    "trade_history": [
+        ("big_entry_price", "FLOAT"),
+        ("small_entry_price", "FLOAT"),
+        ("big_exit_price", "FLOAT"),
+        ("small_exit_price", "FLOAT"),
+        ("weight_grams", "INTEGER"),
+    ],
 }
 
 

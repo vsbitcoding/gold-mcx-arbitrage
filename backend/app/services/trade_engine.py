@@ -173,10 +173,17 @@ def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None
     """Close uses the COVER-SIDE spread (opposite of entry)."""
     if pos.mode == "decrease":
         exit_spread = snap["increase_spread"]   # cover by buying big back
+        big_exit = snap["big_ask"]
+        small_exit = snap["small_bid"]
         pnl = (pos.entry_spread - exit_spread) * pos.big_lots
     else:
         exit_spread = snap["decrease_spread"]   # cover by selling big back
+        big_exit = snap["big_bid"]
+        small_exit = snap["small_ask"]
         pnl = (exit_spread - pos.entry_spread) * pos.big_lots
+
+    pair_def = _pair_def(pos.pair_name)
+    weight = pos.big_lots * GRAMS_PER_LOT.get(pair_def["big"], 0) if pair_def else 0
 
     history = TradeHistory(
         pair_name=pos.pair_name,
@@ -190,6 +197,11 @@ def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None
         pnl=round(pnl, 2),
         is_paper=pos.is_paper,
         closed_by=closed_by,
+        big_entry_price=pos.big_price,
+        small_entry_price=pos.small_price,
+        big_exit_price=big_exit,
+        small_exit_price=small_exit,
+        weight_grams=weight,
     )
     db.add(history)
     pos.status = "closed"
