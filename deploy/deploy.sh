@@ -24,6 +24,13 @@ cd "$APP_DIR/frontend"
 npm install --no-audit --no-fund --silent
 npm run build
 
+echo "==> Publish build to /var/www/arbitrage"
+sudo mkdir -p /var/www/arbitrage
+sudo cp -a "$APP_DIR/frontend/dist/." /var/www/arbitrage/
+sudo chown -R www-data:www-data /var/www/arbitrage
+sudo find /var/www/arbitrage -type d -exec chmod 755 {} \;
+sudo find /var/www/arbitrage -type f -exec chmod 644 {} \;
+
 echo "==> Install systemd unit (arbi-backend)"
 sudo cp "$APP_DIR/deploy/systemd/arbi-backend.service" /etc/systemd/system/arbi-backend.service
 sudo systemctl daemon-reload
