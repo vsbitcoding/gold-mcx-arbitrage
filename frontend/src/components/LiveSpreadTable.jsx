@@ -1,7 +1,89 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, memo } from "react";
 import { api } from "../api/client.js";
+import SpreadCell from "./SpreadCell.jsx";
 
 const STATUS_LABEL = { idle: "Idle", armed: "Armed", in_position: "In Position" };
+
+const PairRow = memo(function PairRow({ row, draft, onChange, onSave, onClear }) {
+  return (
+    <tr>
+      <td className="pair-name">{row.name}</td>
+
+      <td className="cell-mid sec-dec">
+        <SpreadCell value={row.decrease_spread} tone="dec" />
+      </td>
+      <td className="cell-mid sec-dec">
+        <input
+          className="cell"
+          type="number"
+          step="0.01"
+          placeholder="—"
+          value={draft.decrease_entry ?? ""}
+          onChange={(e) => onChange("decrease_entry", e.target.value)}
+        />
+      </td>
+      <td className="cell-mid sec-dec sec-dec-end">
+        <input
+          className="cell"
+          type="number"
+          step="0.01"
+          placeholder="—"
+          value={draft.decrease_exit ?? ""}
+          onChange={(e) => onChange("decrease_exit", e.target.value)}
+        />
+      </td>
+
+      <td className="cell-mid sec-inc">
+        <SpreadCell value={row.increase_spread} tone="inc" />
+      </td>
+      <td className="cell-mid sec-inc">
+        <input
+          className="cell"
+          type="number"
+          step="0.01"
+          placeholder="—"
+          value={draft.increase_entry ?? ""}
+          onChange={(e) => onChange("increase_entry", e.target.value)}
+        />
+      </td>
+      <td className="cell-mid sec-inc sec-inc-end">
+        <input
+          className="cell"
+          type="number"
+          step="0.01"
+          placeholder="—"
+          value={draft.increase_exit ?? ""}
+          onChange={(e) => onChange("increase_exit", e.target.value)}
+        />
+      </td>
+
+      <td>
+        <span className={`status ${row.status}`}>
+          <span className="blip" />
+          {STATUS_LABEL[row.status] || row.status}
+        </span>
+      </td>
+      <td>
+        <div className="row-actions">
+          <button className="btn-sm primary" onClick={onSave}>Save</button>
+          <button className="btn-sm" onClick={onClear}>Clear</button>
+        </div>
+      </td>
+    </tr>
+  );
+}, (prev, next) => {
+  // Only re-render if the relevant values changed
+  return (
+    prev.row.decrease_spread === next.row.decrease_spread &&
+    prev.row.increase_spread === next.row.increase_spread &&
+    prev.row.status === next.row.status &&
+    prev.row.decrease_entry === next.row.decrease_entry &&
+    prev.row.decrease_exit === next.row.decrease_exit &&
+    prev.row.increase_entry === next.row.increase_entry &&
+    prev.row.increase_exit === next.row.increase_exit &&
+    prev.draft === next.draft
+  );
+});
 
 export default function LiveSpreadTable({ rows, onSaved }) {
   const [drafts, setDrafts] = useState({});
@@ -92,22 +174,26 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       </div>
 
       <div className="table-wrap">
-        <table>
+        <table className="spread-table">
           <thead className="grouped">
             <tr className="groups">
-              <th className="g-identity" colSpan={1}>Identity</th>
-              <th className="g-dec" colSpan={3}>Decrease Premium</th>
-              <th className="g-inc" colSpan={3}>Increase Premium</th>
+              <th className="g-identity">Identity</th>
+              <th className="g-dec" colSpan={3}>
+                <span className="g-icon">▼</span> Decrease Premium
+              </th>
+              <th className="g-inc" colSpan={3}>
+                <span className="g-icon">▲</span> Increase Premium
+              </th>
               <th className="g-status" colSpan={2}>Status</th>
             </tr>
             <tr className="cols">
               <th>Pair</th>
-              <th>Spread</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>Spread</th>
-              <th>Entry</th>
-              <th>Exit</th>
+              <th className="sec-dec">Spread</th>
+              <th className="sec-dec">Entry</th>
+              <th className="sec-dec sec-dec-end">Exit</th>
+              <th className="sec-inc">Spread</th>
+              <th className="sec-inc">Entry</th>
+              <th className="sec-inc sec-inc-end">Exit</th>
               <th>State</th>
               <th style={{ textAlign: "right" }}>Actions</th>
             </tr>
@@ -115,68 +201,16 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={9} className="empty">No pairs match the filter.</td></tr>
-            ) : filtered.map((r) => {
-              const d = drafts[r.name] || {};
-              return (
-                <tr key={r.name}>
-                  <td className="pair-name">{r.name}</td>
-                  <td className="spread dec-tone">{r.decrease_spread ?? "—"}</td>
-                  <td className="dec-cell">
-                    <input
-                      className="cell"
-                      type="number"
-                      step="0.01"
-                      placeholder="—"
-                      value={d.decrease_entry ?? ""}
-                      onChange={(e) => update(r.name, "decrease_entry", e.target.value)}
-                    />
-                  </td>
-                  <td className="dec-cell">
-                    <input
-                      className="cell"
-                      type="number"
-                      step="0.01"
-                      placeholder="—"
-                      value={d.decrease_exit ?? ""}
-                      onChange={(e) => update(r.name, "decrease_exit", e.target.value)}
-                    />
-                  </td>
-                  <td className="spread inc-tone">{r.increase_spread ?? "—"}</td>
-                  <td className="inc-cell">
-                    <input
-                      className="cell"
-                      type="number"
-                      step="0.01"
-                      placeholder="—"
-                      value={d.increase_entry ?? ""}
-                      onChange={(e) => update(r.name, "increase_entry", e.target.value)}
-                    />
-                  </td>
-                  <td className="inc-cell">
-                    <input
-                      className="cell"
-                      type="number"
-                      step="0.01"
-                      placeholder="—"
-                      value={d.increase_exit ?? ""}
-                      onChange={(e) => update(r.name, "increase_exit", e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <span className={`status ${r.status}`}>
-                      <span className="blip" />
-                      {STATUS_LABEL[r.status] || r.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="btn-sm primary" onClick={() => save(r.name)}>Save</button>
-                      <button className="btn-sm" onClick={() => clear(r.name)}>Clear</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+            ) : filtered.map((r) => (
+              <PairRow
+                key={r.name}
+                row={r}
+                draft={drafts[r.name] || {}}
+                onChange={(field, value) => update(r.name, field, value)}
+                onSave={() => save(r.name)}
+                onClear={() => clear(r.name)}
+              />
+            ))}
           </tbody>
         </table>
       </div>
