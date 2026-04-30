@@ -1,11 +1,15 @@
-"""Trigger detection + paper trade execution. Runs every spread tick."""
+"""Trigger detection + paper trade execution.
+
+Decrease and Increase sides run INDEPENDENTLY per pair — both can have a
+simultaneous open position (one for each side). Each side cycles on its own:
+arm -> trigger -> open -> exit -> auto re-arm.
+"""
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from app.config import PAIRS
 from app.models import PairRule, Position, TradeHistory
-from app.services.market_data import quote_store
 from app.services.spread_engine import compute_pair
 
 
@@ -13,41 +17,68 @@ def _pair_def(name: str) -> dict | None:
     return next((p for p in PAIRS if p["name"] == name), None)
 
 
-def _open_position(db: Session, pair_name: str) -> Position | None:
+def open_position_for_side(db: Session, pair_name: str, mode: str) -> Position | None:
     return (
         db.query(Position)
-        .filter(Position.pair_name == pair_name, Position.status == "open")
+        .filter(
+            Position.pair_name == pair_name,
+            Position.mode == mode,
+            Position.status == "open",
+        )
         .first()
     )
 
 
+def open_positions_for_pair(db: Session, pair_name: str) -> list[Position]:
+    return (
+        db.query(Position)
+        .filter(Position.pair_name == pair_name, Position.status == "open")
+        .all()
+    )
+
+
 def evaluate(db: Session) -> None:
-    """Check every armed rule. Open trades on entry trigger. Auto-close on exit if exit set."""
+    """Independently evaluate each side (decrease, increase) for every pair."""
     rules = db.query(PairRule).all()
     for rule in rules:
         pair = _pair_def(rule.pair_name)
         if not pair:
             continue
-
         snap = compute_pair(pair)
-        existing = _open_position(db, rule.pair_name)
 
-        if existing is None:
-            if rule.decrease_entry is not None and snap["decrease_spread"] is not None:
-                if snap["decrease_spread"] >= rule.decrease_entry:
-                    _open_trade(db, pair, "decrease", snap)
-                    continue
-            if rule.increase_entry is not None and snap["increase_spread"] is not None:
-                if snap["increase_spread"] <= rule.increase_entry:
-                    _open_trade(db, pair, "increase", snap)
-                    continue
+        # ----- Decrease side -----
+        dec_pos = open_position_for_side(db, rule.pair_name, "decrease")
+        if dec_pos is None:
+            if (
+                rule.decrease_entry is not None
+                and snap["decrease_spread"] is not None
+                and snap["decrease_spread"] >= rule.decrease_entry
+            ):
+                _open_trade(db, pair, "decrease", snap)
         else:
-            if existing.mode == "decrease" and rule.decrease_exit is not None:
-                if snap["decrease_spread"] is not None and snap["decrease_spread"] <= rule.decrease_exit:
-                    _close_trade(db, existing, snap, closed_by="auto")
-            elif existing.mode == "increase" and rule.increase_exit is not None:
-                if snap["increase_spread"] is not None and snap["increase_spread"] >= rule.increase_exit:
-                    _close_trade(db, existing, snap, closed_by="auto")
+            if (
+                rule.decrease_exit is not None
+                and snap["decrease_spread"] is not None
+                and snap["decrease_spread"] <= rule.decrease_exit
+            ):
+                _close_trade(db, dec_pos, snap, closed_by="auto")
+
+        # ----- Increase side -----
+        inc_pos = open_position_for_side(db, rule.pair_name, "increase")
+        if inc_pos is None:
+            if (
+                rule.increase_entry is not None
+                and snap["increase_spread"] is not None
+                and snap["increase_spread"] <= rule.increase_entry
+            ):
+                _open_trade(db, pair, "increase", snap)
+        else:
+            if (
+                rule.increase_exit is not None
+                and snap["increase_spread"] is not None
+                and snap["increase_spread"] >= rule.increase_exit
+            ):
+                _close_trade(db, inc_pos, snap, closed_by="auto")
 
     db.commit()
 

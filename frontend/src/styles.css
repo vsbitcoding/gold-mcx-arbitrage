@@ -429,6 +429,15 @@ td.spread-num {
 td.spread-num.dec { color: var(--red); }
 td.spread-num.inc { color: var(--green); }
 
+.side-pill.open {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--accent);
+  animation: pulse 1.5s infinite;
+  font-weight: 700;
+}
+
 /* ===== Calculation expand row ===== */
 .row-toggle {
   background: transparent;

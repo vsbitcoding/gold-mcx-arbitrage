@@ -34,7 +34,10 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
           </button>
         </td>
 
-        <td className="gc-decrease spread-num dec">{fmtSpread(row.decrease_spread)}</td>
+        <td className="gc-decrease spread-num dec">
+          {fmtSpread(row.decrease_spread)}
+          {row.decrease_open && <span className="side-pill open">●</span>}
+        </td>
         <td className="gc-decrease">
           <input className="cell" type="number" step="0.01" placeholder="—"
             value={draft.decrease_entry ?? ""}
@@ -46,7 +49,10 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
             onChange={(e) => onChange("decrease_exit", e.target.value)} />
         </td>
 
-        <td className="gc-increase spread-num inc">{fmtSpread(row.increase_spread)}</td>
+        <td className="gc-increase spread-num inc">
+          {fmtSpread(row.increase_spread)}
+          {row.increase_open && <span className="side-pill open">●</span>}
+        </td>
         <td className="gc-increase">
           <input className="cell" type="number" step="0.01" placeholder="—"
             value={draft.increase_entry ?? ""}
@@ -133,6 +139,8 @@ const PairRow = memo(function PairRow({ row, draft, expanded, onToggle, onChange
   prev.row.small_bid === next.row.small_bid &&
   prev.row.small_ask === next.row.small_ask &&
   prev.row.status === next.row.status &&
+  prev.row.decrease_open === next.row.decrease_open &&
+  prev.row.increase_open === next.row.increase_open &&
   prev.row.decrease_entry === next.row.decrease_entry &&
   prev.row.decrease_exit === next.row.decrease_exit &&
   prev.row.increase_entry === next.row.increase_entry &&
