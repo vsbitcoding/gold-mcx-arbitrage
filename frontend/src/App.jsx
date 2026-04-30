@@ -54,8 +54,20 @@ function Dashboard() {
 
   useEffect(() => {
     refreshAll();
-    const t = setInterval(refreshAll, 1500);
-    return () => clearInterval(t);
+    // Throttle by visibility: 2s when tab visible, pause when hidden
+    let timer = setInterval(refreshAll, 2000);
+    function onVis() {
+      clearInterval(timer);
+      if (!document.hidden) {
+        refreshAll();
+        timer = setInterval(refreshAll, 2000);
+      }
+    }
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refreshAll]);
 
   async function pauseAll() {

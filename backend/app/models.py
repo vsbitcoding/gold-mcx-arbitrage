@@ -29,7 +29,7 @@ class Position(Base):
 
     id = Column(Integer, primary_key=True)
     pair_name = Column(String(64), nullable=False, index=True)
-    mode = Column(String(16), nullable=False)  # decrease | increase
+    mode = Column(String(16), nullable=False, index=True)  # decrease | increase
     entry_spread = Column(Float, nullable=False)
     entry_time = Column(DateTime, default=datetime.utcnow)
     big_lots = Column(Integer, nullable=False)
@@ -37,7 +37,7 @@ class Position(Base):
     big_price = Column(Float, nullable=False)
     small_price = Column(Float, nullable=False)
     is_paper = Column(Boolean, default=True)
-    status = Column(String(16), default="open")  # open | closed
+    status = Column(String(16), default="open", index=True)  # open | closed
 
 
 class TradeHistory(Base):
@@ -57,6 +57,14 @@ class TradeHistory(Base):
     is_paper = Column(Boolean, default=True)
     closed_by = Column(String(16), default="auto")  # auto | manual
     notes = Column(Text, nullable=True)
+
+
+from sqlalchemy import Index  # noqa: E402
+
+# Composite index for frequent open-position-by-(pair, mode) lookups
+Index("ix_positions_pair_mode_status", Position.pair_name, Position.mode, Position.status)
+# Composite index for history queries by date+pair
+Index("ix_history_exit_pair", TradeHistory.exit_time, TradeHistory.pair_name)
 
 
 class User(Base):
