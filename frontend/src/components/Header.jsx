@@ -1,5 +1,4 @@
 import React from "react";
-import FeedStatus from "./FeedStatus.jsx";
 
 export default function Header({
   user,
@@ -14,15 +13,52 @@ export default function Header({
   feedStatus,
   wsState,
 }) {
-  const wsLabel = wsState === "live" ? "STREAMING" : wsState === "connecting" ? "CONNECTING" : "POLLING";
-  const wsCls = wsState === "live" ? "ws-live" : wsState === "connecting" ? "ws-connecting" : "ws-poll";
+  // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
+  const dhanMode = feedStatus?.mode;
+  const tickAge = feedStatus?.last_tick_age_seconds;
+  const tokenSecs = feedStatus?.token_expires_in_seconds;
+
+  let label = "LIVE";
+  let cls = "health-live";
+  let extra = "";
+
+  if (wsState !== "live") {
+    label = wsState === "connecting" ? "CONNECTING" : "POLLING";
+    cls = wsState === "connecting" ? "health-warn" : "health-poll";
+  } else if (!feedStatus) {
+    label = "LOADING";
+    cls = "health-warn";
+  } else if (dhanMode === "simulated") {
+    label = "DEMO";
+    cls = "health-poll";
+  } else if (dhanMode !== "live") {
+    label = "FEED DOWN";
+    cls = "health-down";
+  } else if (tickAge !== null && tickAge > 30) {
+    label = "STALE";
+    cls = "health-warn";
+    extra = `${tickAge}s`;
+  } else {
+    const h = Math.floor((tokenSecs || 0) / 3600);
+    const m = Math.floor(((tokenSecs || 0) % 3600) / 60);
+    extra = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  const tooltip = feedStatus
+    ? [
+        `Browser ↔ Server: ${wsState}`,
+        `Server ↔ Dhan: ${dhanMode || "—"}`,
+        `Client: ${feedStatus.client_name || "—"}`,
+        `Token expires in: ${extra || "—"}`,
+        `Last tick: ${tickAge === null ? "never" : tickAge + "s ago"}`,
+      ].join("\n")
+    : "Connecting...";
   return (
     <div className="header">
       <div className="header-left">
         <div className="brand">
           <span className="accent">Arbi</span>
           <span>Dash</span>
-          <span className="dot" title="Live" />
         </div>
         <nav className="nav-tabs">
           <button className="nav-tab" onClick={onOpenPositions}>
@@ -36,11 +72,11 @@ export default function Header({
         </nav>
       </div>
       <div className="header-right">
-        <span className={`ws-pill ${wsCls}`} title={`Browser ↔ server: ${wsState}`}>
-          <span className="ws-dot" />
-          {wsLabel}
+        <span className={`health-pill ${cls}`} title={tooltip}>
+          <span className="health-dot" />
+          <span className="health-label">{label}</span>
+          {extra && <span className="health-meta">{extra}</span>}
         </span>
-        <FeedStatus status={feedStatus} />
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
