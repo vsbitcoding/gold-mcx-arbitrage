@@ -73,13 +73,13 @@ def can_open_new_cycle(db: Session, pair: dict, rule: PairRule) -> bool:
 
 
 def evaluate(db: Session) -> None:
-    """Independently evaluate each side. Cumulative weight cap (Option B):
-    multiple simultaneous positions allowed per pair until total grams hits cap.
+    """Per-side evaluation:
 
-    Armed state machine (per pair-side) ensures we fire ONLY on a fresh
-    threshold crossing — never while spread sits in trigger zone, never on a
-    stale None tick, never on service restart unless spread is genuinely
-    re-entering the zone.
+    1. While armed AND spread in trigger zone AND cap has room → fire.
+       Keeps firing every tick until cap is full (continuous fill).
+    2. Once cap full → disarm. Cap change alone does NOT re-fire.
+    3. Spread leaves zone → re-arm (next round).
+    4. Each open position has its own exit watch on the cover-side spread.
     """
     rules = db.query(PairRule).all()
     for rule in rules:
@@ -91,18 +91,21 @@ def evaluate(db: Session) -> None:
         inc_spread = snap["increase_spread"]
 
         # ----- Decrease side -----
-        # Trigger zone: spread >= decrease_entry
-        # Armed when last seen spread was OUTSIDE the trigger zone (< entry)
         if rule.decrease_entry is not None and dec_spread is not None:
-            armed = _dec_armed.get(rule.pair_name, False)
             if dec_spread < rule.decrease_entry:
-                # Outside zone → arm for next entry
+                # Spread outside trigger zone → arm for the next round
                 _dec_armed[rule.pair_name] = True
-            elif armed and dec_spread >= rule.decrease_entry:
-                # Crossed into zone with armed flag → fire
+            elif _dec_armed.get(rule.pair_name, False):
+                # Spread in zone AND armed → try to fire (cap permitting)
                 if can_open_new_cycle(db, pair, rule):
                     _open_trade(db, pair, "decrease", snap)
-                _dec_armed[rule.pair_name] = False  # disarm; must exit zone to re-arm
+                    db.flush()
+                    if not can_open_new_cycle(db, pair, rule):
+                        # Cap is now full → disarm; must exit zone to re-fill
+                        _dec_armed[rule.pair_name] = False
+                else:
+                    # Cap was already full → disarm
+                    _dec_armed[rule.pair_name] = False
 
         # Auto-close every open Decrease pos when cover spread hits exit
         if rule.decrease_exit is not None and inc_spread is not None:
@@ -115,16 +118,17 @@ def evaluate(db: Session) -> None:
                     _close_trade(db, p, snap, closed_by="auto")
 
         # ----- Increase side -----
-        # Trigger zone: spread <= increase_entry
-        # Armed when last seen spread was OUTSIDE the trigger zone (> entry)
         if rule.increase_entry is not None and inc_spread is not None:
-            armed = _inc_armed.get(rule.pair_name, False)
             if inc_spread > rule.increase_entry:
                 _inc_armed[rule.pair_name] = True
-            elif armed and inc_spread <= rule.increase_entry:
+            elif _inc_armed.get(rule.pair_name, False):
                 if can_open_new_cycle(db, pair, rule):
                     _open_trade(db, pair, "increase", snap)
-                _inc_armed[rule.pair_name] = False
+                    db.flush()
+                    if not can_open_new_cycle(db, pair, rule):
+                        _inc_armed[rule.pair_name] = False
+                else:
+                    _inc_armed[rule.pair_name] = False
 
         # Auto-close every open Increase pos when cover spread hits exit
         if rule.increase_exit is not None and dec_spread is not None:
