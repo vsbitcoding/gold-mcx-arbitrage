@@ -139,10 +139,17 @@ def evaluate(db: Session) -> None:
     db.commit()
 
 
-# Per pair-side armed state. Default False on startup so we never fire on first tick
-# until we observe spread leaving the trigger zone (proves it's a real new crossing).
+# Per pair-side armed state. After firing we disarm; next fire requires spread
+# to leave the trigger zone first (prevents runaway loops).
 _dec_armed: dict[str, bool] = {}
 _inc_armed: dict[str, bool] = {}
+
+
+def prime_armed_state(pair_name: str) -> None:
+    """Call when client saves a new rule — primes both sides so the next valid
+    tick fires immediately if spread is already inside the trigger zone."""
+    _dec_armed[pair_name] = True
+    _inc_armed[pair_name] = True
 
 
 def _open_trade(db: Session, pair: dict, mode: str, snap: dict) -> None:

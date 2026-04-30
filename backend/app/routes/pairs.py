@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models import PairRule
 from app.security import get_current_user
 from app.services.snapshot import build_live_payload
+from app.services.trade_engine import prime_armed_state
 
 router = APIRouter(prefix="/api/pairs", tags=["pairs"])
 
@@ -55,4 +56,5 @@ def update_rule(
     rule.increase_exit = body.increase_exit
     rule.max_weight_grams = body.max_weight_grams
     db.commit()
+    prime_armed_state(pair_name)
     return {"ok": True}
