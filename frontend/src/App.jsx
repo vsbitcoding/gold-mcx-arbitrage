@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
+import ExpiryBar from "./components/ExpiryBar.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import ActivePositions from "./components/ActivePositions.jsx";
@@ -156,6 +157,7 @@ function Dashboard() {
         wsState={wsState}
       />
       <div className="container">
+        <ExpiryBar instruments={feedStatus?.instruments} />
         <StatCards pairs={pairs} positions={positions} history={history} />
         <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
       </div>

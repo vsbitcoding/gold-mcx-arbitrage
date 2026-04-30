@@ -128,7 +128,13 @@ def _run_real_feed_thread() -> None:
                 token.expires_in() / 3600,
             )
 
-            resolved = resolve_near_month_ids(min_days_ahead=0)
+            # Logic 1 (Mini Next-Month): Petal/Guinea/Ten = nearest end-of-month
+            # (with 3-day buffer to skip illiquid expiry days), Mini = next-month
+            # contract after that expiry. Auto-rolls every month.
+            resolved = resolve_near_month_ids(min_days_ahead=3, mini_rule="next_month")
+            if not resolved:
+                # Last-resort fallback if buffer too aggressive
+                resolved = resolve_near_month_ids(min_days_ahead=0, mini_rule="next_month")
             if not resolved:
                 raise RuntimeError("No active MCX gold instruments resolved.")
 
