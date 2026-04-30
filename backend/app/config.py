@@ -46,3 +46,11 @@ PAIRS = [
 ]
 
 MULTIPLIERS = {"petal": 10.0, "guinea": 1.25, "ten": 1.0, "mini": 1.0}
+
+# Gold weight (grams) per single lot of each MCX contract
+GRAMS_PER_LOT = {"petal": 1, "guinea": 8, "ten": 10, "mini": 100}
+
+
+def cycle_grams(pair: dict) -> int:
+    """Gold weight (grams) of one full hedge cycle for this pair (big-side)."""
+    return pair["big_lots"] * GRAMS_PER_LOT[pair["big"]]

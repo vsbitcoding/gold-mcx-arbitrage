@@ -20,6 +20,8 @@ class PairRule(Base):
     decrease_status = Column(String(32), default="idle")
     increase_status = Column(String(32), default="idle")
 
+    max_weight_grams = Column(Integer, nullable=True)  # cumulative cap, NULL = unlimited
+
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

@@ -489,6 +489,15 @@ th.gc-identity, td.gc-identity { background: var(--cg-identity-tint); }
 th.gc-decrease, td.gc-decrease { background: var(--cg-decrease-tint); }
 th.gc-increase, td.gc-increase { background: var(--cg-increase-tint); }
 th.gc-status,   td.gc-status   { background: var(--cg-status-tint); }
+th.gc-weight,   td.gc-weight   { background: var(--cg-status-tint); }
+
+td.gc-weight .weight-meta {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 
 th.col-end-group, td.col-end-group { border-right: 2px solid var(--border); }
 

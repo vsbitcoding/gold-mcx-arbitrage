@@ -78,6 +78,21 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
             {STATUS_LABEL[row.status] || row.status}
           </span>
         </td>
+        <td className="gc-weight">
+          <input
+            className={cls("max_weight_grams")}
+            type="number"
+            min="0"
+            step="1"
+            placeholder="∞"
+            value={draft.max_weight_grams ?? ""}
+            onChange={(e) => onChange("max_weight_grams", e.target.value)}
+            title={`Cycle = ${row.cycle_grams}g · Open = ${row.open_weight_grams}g`}
+          />
+          <div className="weight-meta">
+            {row.open_weight_grams ?? 0}/{row.max_weight_grams ?? "∞"}g
+          </div>
+        </td>
         <td className="gc-status">
           <div className="row-actions">
             <button
@@ -94,7 +109,7 @@ const PairRow = memo(function PairRow({ row, draft, dirty, expanded, onToggle, o
 
       {expanded && (
         <tr className="calc-row">
-          <td colSpan={9}>
+          <td colSpan={10}>
             <div className="calc-grid">
               <div className="calc-block dec">
                 <div className="calc-title">▼ Decrease Spread = (Big.Bid × {bigMult}) − (Small.Ask × {smallMult})</div>
@@ -169,7 +184,7 @@ function normalizeServerVal(v) {
 
 function buildDirtyMap(row, draft) {
   if (!row || !draft) return { any: false };
-  const fields = ["decrease_entry", "decrease_exit", "increase_entry", "increase_exit"];
+  const fields = ["decrease_entry", "decrease_exit", "increase_entry", "increase_exit", "max_weight_grams"];
   const out = { any: false };
   for (const f of fields) {
     const server = normalizeServerVal(row[f]);
@@ -203,6 +218,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             decrease_exit: r.decrease_exit ?? "",
             increase_entry: r.increase_entry ?? "",
             increase_exit: r.increase_exit ?? "",
+            max_weight_grams: r.max_weight_grams ?? "",
           };
         }
       });
@@ -267,6 +283,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       decrease_exit: d.decrease_exit === "" ? null : Number(d.decrease_exit),
       increase_entry: d.increase_entry === "" ? null : Number(d.increase_entry),
       increase_exit: d.increase_exit === "" ? null : Number(d.increase_exit),
+      max_weight_grams: d.max_weight_grams === "" ? null : Number(d.max_weight_grams),
     };
     try {
       await api.saveRule(pair, body);
@@ -293,13 +310,14 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     }
     setDrafts((d) => ({
       ...d,
-      [pair]: { decrease_entry: "", decrease_exit: "", increase_entry: "", increase_exit: "" },
+      [pair]: { decrease_entry: "", decrease_exit: "", increase_entry: "", increase_exit: "", max_weight_grams: "" },
     }));
     // Auto-save the cleared values
     try {
       await api.saveRule(pair, {
         decrease_entry: null, decrease_exit: null,
         increase_entry: null, increase_exit: null,
+        max_weight_grams: null,
       });
       toast.success(`${pair} cleared.`);
       onSaved();
@@ -340,14 +358,15 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       <div className="table-container">
         <table className="fixed">
           <colgroup>
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "9%" }} />
             <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
             <col style={{ width: "18%" }} />
           </colgroup>
           <thead>
@@ -355,7 +374,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
               <th className="col-group cg-identity" colSpan={1}>Identity</th>
               <th className="col-group cg-decrease" colSpan={3}>▼ Decrease Premium</th>
               <th className="col-group cg-increase" colSpan={3}>▲ Increase Premium</th>
-              <th className="col-group cg-status" colSpan={2}>Status</th>
+              <th className="col-group cg-status" colSpan={3}>Status &amp; Cap</th>
             </tr>
             <tr>
               <th className="gc-identity col-end-group">Pair</th>
@@ -366,12 +385,13 @@ export default function LiveSpreadTable({ rows, onSaved }) {
               <th className="gc-increase">Entry</th>
               <th className="gc-increase col-end-group">Exit</th>
               <th className="gc-status">State</th>
+              <th className="gc-weight">Max (g)</th>
               <th className="gc-status">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="empty-state">No pairs match the filter.</td></tr>
+              <tr><td colSpan={10} className="empty-state">No pairs match the filter.</td></tr>
             ) : filtered.map((r) => (
               <PairRow
                 key={r.name}

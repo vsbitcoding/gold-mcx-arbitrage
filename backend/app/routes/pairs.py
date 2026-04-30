@@ -16,6 +16,7 @@ class RuleUpdate(BaseModel):
     decrease_exit: float | None = None
     increase_entry: float | None = None
     increase_exit: float | None = None
+    max_weight_grams: int | None = None
 
 
 def _ensure_rules(db: Session) -> None:
@@ -52,5 +53,6 @@ def update_rule(
     rule.decrease_exit = body.decrease_exit
     rule.increase_entry = body.increase_entry
     rule.increase_exit = body.increase_exit
+    rule.max_weight_grams = body.max_weight_grams
     db.commit()
     return {"ok": True}
