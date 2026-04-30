@@ -174,7 +174,18 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       </div>
 
       <div className="table-wrap">
-        <table className="spread-table">
+        <table className="spread-table fixed">
+          <colgroup>
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "18%" }} />
+          </colgroup>
           <thead className="grouped">
             <tr className="groups">
               <th className="g-identity">Identity</th>
