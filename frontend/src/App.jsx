@@ -5,6 +5,7 @@ import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import ActivePositions from "./components/ActivePositions.jsx";
 import TradeHistory from "./components/TradeHistory.jsx";
+import Drawer from "./components/Drawer.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 
 function getStoredTheme() {
@@ -19,6 +20,7 @@ export default function App() {
   const [mode, setMode] = useState("paper");
   const [theme, setTheme] = useState(getStoredTheme());
   const [user] = useState("Vivek_Bitcoding");
+  const [openDrawer, setOpenDrawer] = useState(null); // "positions" | "history" | null
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -79,6 +81,10 @@ export default function App() {
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        positionsCount={positions.length}
+        historyCount={history.length}
+        onOpenPositions={() => setOpenDrawer("positions")}
+        onOpenHistory={() => setOpenDrawer("history")}
       />
       {mode === "paper" && (
         <div className="banner">PAPER TRADING MODE — orders are simulated, no real trades placed</div>
@@ -86,9 +92,23 @@ export default function App() {
       <div className="container">
         <StatCards pairs={pairs} positions={positions} history={history} />
         <LiveSpreadTable rows={pairs} onSaved={refreshAll} />
-        <ActivePositions rows={positions} onChange={refreshAll} />
-        <TradeHistory rows={history} />
       </div>
+
+      <Drawer
+        open={openDrawer === "positions"}
+        title={`Active Positions (${positions.length})`}
+        onClose={() => setOpenDrawer(null)}
+      >
+        <ActivePositions rows={positions} onChange={refreshAll} />
+      </Drawer>
+
+      <Drawer
+        open={openDrawer === "history"}
+        title={`Trade History (${history.length})`}
+        onClose={() => setOpenDrawer(null)}
+      >
+        <TradeHistory rows={history} />
+      </Drawer>
     </div>
   );
 }
