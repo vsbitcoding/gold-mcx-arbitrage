@@ -70,9 +70,28 @@ def _parse_expiry(expiry_str: str) -> float:
     return dt.timestamp()
 
 
+_last_auth_attempt: float = 0.0
+_last_totp_used: str = ""
+
+
 def fetch_token(client_id: str, pin: str, totp_secret: str) -> DhanToken:
-    """Generate fresh access token. Raises on failure."""
+    """Generate fresh access token. Raises on failure.
+
+    Dhan rejects reuse of the same TOTP code within its 30s window. If we just
+    used a code, wait until the next window before retrying.
+    """
+    global _last_auth_attempt, _last_totp_used
     code = generate_totp(totp_secret)
+    if code == _last_totp_used:
+        # Wait until next 30s window starts (max 31s)
+        seconds_into_window = int(time.time()) % 30
+        wait_s = (30 - seconds_into_window) + 1
+        log.info("TOTP %s already used in this window — waiting %ds for fresh code.", code, wait_s)
+        time.sleep(wait_s)
+        code = generate_totp(totp_secret)
+    _last_totp_used = code
+    _last_auth_attempt = time.time()
+
     qs = urllib.parse.urlencode({"dhanClientId": client_id, "pin": pin, "totp": code})
     url = f"{DHAN_AUTH_URL}?{qs}"
     req = urllib.request.Request(url, method="POST", headers={"Accept": "application/json"})
