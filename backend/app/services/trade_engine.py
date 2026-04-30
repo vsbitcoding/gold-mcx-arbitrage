@@ -1,8 +1,18 @@
 """Trigger detection + paper trade execution.
 
-Decrease and Increase sides run INDEPENDENTLY per pair — both can have a
-simultaneous open position (one for each side). Each side cycles on its own:
-arm -> trigger -> open -> exit -> auto re-arm.
+PnL & exit logic uses the COVER-SIDE spread (the side at which you'd actually
+close the trade), per client's specification:
+
+  Decrease trade  → opens at Decrease spread (sell big bid + buy small ask)
+                  → closes at Increase spread (buy big ask + sell small bid)
+                  → PnL = entry_decrease − current_increase
+
+  Increase trade  → opens at Increase spread (buy big ask + sell small bid)
+                  → closes at Decrease spread (sell big bid + buy small ask)
+                  → PnL = current_decrease − entry_increase
+
+Decrease and Increase sides run independently per pair — both can have a
+simultaneous open position.
 """
 from datetime import datetime
 
@@ -47,6 +57,8 @@ def evaluate(db: Session) -> None:
         snap = compute_pair(pair)
 
         # ----- Decrease side -----
+        # ENTRY uses Decrease spread (the price you sell big at).
+        # EXIT  uses Increase spread (the price you cover/buy back big at).
         dec_pos = open_position_for_side(db, rule.pair_name, "decrease")
         if dec_pos is None:
             if (
@@ -58,12 +70,14 @@ def evaluate(db: Session) -> None:
         else:
             if (
                 rule.decrease_exit is not None
-                and snap["decrease_spread"] is not None
-                and snap["decrease_spread"] <= rule.decrease_exit
+                and snap["increase_spread"] is not None
+                and snap["increase_spread"] <= rule.decrease_exit
             ):
                 _close_trade(db, dec_pos, snap, closed_by="auto")
 
         # ----- Increase side -----
+        # ENTRY uses Increase spread (the price you buy big at).
+        # EXIT  uses Decrease spread (the price you sell big back at).
         inc_pos = open_position_for_side(db, rule.pair_name, "increase")
         if inc_pos is None:
             if (
@@ -75,8 +89,8 @@ def evaluate(db: Session) -> None:
         else:
             if (
                 rule.increase_exit is not None
-                and snap["increase_spread"] is not None
-                and snap["increase_spread"] >= rule.increase_exit
+                and snap["decrease_spread"] is not None
+                and snap["decrease_spread"] >= rule.increase_exit
             ):
                 _close_trade(db, inc_pos, snap, closed_by="auto")
 
@@ -108,11 +122,12 @@ def _open_trade(db: Session, pair: dict, mode: str, snap: dict) -> None:
 
 
 def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None:
+    """Close uses the COVER-SIDE spread (opposite of entry)."""
     if pos.mode == "decrease":
-        exit_spread = snap["decrease_spread"]
+        exit_spread = snap["increase_spread"]   # cover by buying big back
         pnl = (pos.entry_spread - exit_spread) * pos.big_lots
     else:
-        exit_spread = snap["increase_spread"]
+        exit_spread = snap["decrease_spread"]   # cover by selling big back
         pnl = (exit_spread - pos.entry_spread) * pos.big_lots
 
     history = TradeHistory(
@@ -153,12 +168,18 @@ def manual_close(db: Session, position_id: int) -> TradeHistory | None:
 
 
 def live_pnl(pos: Position) -> float:
+    """Live PnL using cover-side spread (the spread you'd actually close at)."""
     pair = _pair_def(pos.pair_name)
     if not pair:
         return 0.0
     snap = compute_pair(pair)
-    if pos.mode == "decrease" and snap["decrease_spread"] is not None:
-        return round((pos.entry_spread - snap["decrease_spread"]) * pos.big_lots, 2)
-    if pos.mode == "increase" and snap["increase_spread"] is not None:
-        return round((snap["increase_spread"] - pos.entry_spread) * pos.big_lots, 2)
-    return 0.0
+    if pos.mode == "decrease":
+        cover = snap["increase_spread"]
+        if cover is None:
+            return 0.0
+        return round((pos.entry_spread - cover) * pos.big_lots, 2)
+    # increase
+    cover = snap["decrease_spread"]
+    if cover is None:
+        return 0.0
+    return round((cover - pos.entry_spread) * pos.big_lots, 2)
