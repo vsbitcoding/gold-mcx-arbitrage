@@ -85,9 +85,6 @@ export default function App() {
         onOpenPositions={() => setOpenDrawer("positions")}
         onOpenHistory={() => setOpenDrawer("history")}
       />
-      {mode === "paper" && (
-        <div className="banner">PAPER TRADING MODE — orders are simulated, no real trades placed</div>
-      )}
       <div className="container">
         <StatCards pairs={pairs} positions={positions} history={history} />
         <LiveSpreadTable rows={pairs} onSaved={refreshAll} />
