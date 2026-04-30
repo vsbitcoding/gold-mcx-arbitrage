@@ -1,4 +1,5 @@
 import React from "react";
+import FeedStatus from "./FeedStatus.jsx";
 
 export default function Header({
   user,
@@ -10,6 +11,7 @@ export default function Header({
   historyCount,
   onOpenPositions,
   onOpenHistory,
+  feedStatus,
 }) {
   return (
     <div className="header">
@@ -31,6 +33,7 @@ export default function Header({
         </nav>
       </div>
       <div className="header-right">
+        <FeedStatus status={feedStatus} />
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>

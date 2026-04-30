@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.routes import auth, control, history, pairs, positions
+from app.routes import auth, control, feed, history, pairs, positions
 from app.services.dhan_feed import start_feed_in_background
 
 logging.basicConfig(
@@ -29,6 +29,7 @@ app.include_router(pairs.router)
 app.include_router(positions.router)
 app.include_router(history.router)
 app.include_router(control.router)
+app.include_router(feed.router)
 
 
 @app.on_event("startup")

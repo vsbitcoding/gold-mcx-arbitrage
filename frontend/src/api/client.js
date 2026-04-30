@@ -54,4 +54,5 @@ export const api = {
   history: (days = 30) => request(`/api/history?days=${days}`),
   pauseAll: () => request("/api/control/pause-all", { method: "POST" }),
   health: () => request("/api/health"),
+  feedStatus: () => request("/api/feed/status"),
 };

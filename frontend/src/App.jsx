@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
+import FeedStatus from "./components/FeedStatus.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import ActivePositions from "./components/ActivePositions.jsx";
@@ -17,6 +18,7 @@ export default function App() {
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
+  const [feedStatus, setFeedStatus] = useState(null);
   const [mode, setMode] = useState("paper");
   const [theme, setTheme] = useState(getStoredTheme());
   const [user] = useState("Vivek_Bitcoding");
@@ -29,16 +31,18 @@ export default function App() {
 
   const refreshAll = useCallback(async () => {
     try {
-      const [p, op, h, hh] = await Promise.all([
+      const [p, op, h, hh, fs] = await Promise.all([
         api.livePairs(),
         api.positions(),
         api.history(30),
         api.health(),
+        api.feedStatus().catch(() => null),
       ]);
       setPairs(p);
       setPositions(op);
       setHistory(h);
       setMode(hh.mode);
+      setFeedStatus(fs);
     } catch (e) {
       console.error(e);
     }
@@ -84,6 +88,7 @@ export default function App() {
         historyCount={history.length}
         onOpenPositions={() => setOpenDrawer("positions")}
         onOpenHistory={() => setOpenDrawer("history")}
+        feedStatus={feedStatus}
       />
       <div className="container">
         <StatCards pairs={pairs} positions={positions} history={history} />

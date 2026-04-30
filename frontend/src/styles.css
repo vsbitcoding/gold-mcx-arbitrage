@@ -183,6 +183,42 @@ body {
 }
 .theme-toggle:hover { background: var(--bg-primary); }
 
+/* Feed status pill */
+.feed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  border: 1px solid var(--border);
+  cursor: help;
+  white-space: pre;
+}
+.feed-pill .feed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.feed-pill .feed-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  border-left: 1px solid var(--border);
+  padding-left: 6px;
+  margin-left: 2px;
+}
+.feed-pill.feed-live { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.feed-pill.feed-live .feed-dot { background: var(--green); animation: pulse 2s infinite; }
+.feed-pill.feed-stale { background: var(--yellow-bg); color: var(--yellow); border-color: var(--yellow); }
+.feed-pill.feed-stale .feed-dot { background: var(--yellow); }
+.feed-pill.feed-sim { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.feed-pill.feed-sim .feed-dot { background: var(--accent); }
+.feed-pill.feed-down { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.feed-pill.feed-down .feed-dot { background: var(--red); animation: pulse 1s infinite; }
+
 .btn {
   padding: 8px 16px;
   border: none;
