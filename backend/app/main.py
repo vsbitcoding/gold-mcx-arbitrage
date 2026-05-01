@@ -10,6 +10,7 @@ from app.routes import auth, control, feed, history, pairs, positions, ws as ws_
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.maintenance import start_in_background as start_maintenance
+from app.services.market_data import quote_store
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +40,9 @@ app.include_router(ws_route.router)
 async def startup() -> None:
     Base.metadata.create_all(bind=engine)
     run_simple_migrations()
+    restored = quote_store.restore_from_db()
+    if restored:
+        logging.getLogger("startup").info("Restored %d cached quotes from DB", restored)
     loop = asyncio.get_event_loop()
     broadcaster.bind_loop(loop)
     start_feed_in_background(loop)

@@ -84,3 +84,14 @@ class User(Base):
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LastQuote(Base):
+    """Persists last known good bid/ask/ltp per instrument so the dashboard
+    survives service restarts and market holidays without going blank."""
+    __tablename__ = "last_quotes"
+    instrument = Column(String(32), primary_key=True)
+    bid = Column(Float, default=0.0)
+    ask = Column(Float, default=0.0)
+    ltp = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
