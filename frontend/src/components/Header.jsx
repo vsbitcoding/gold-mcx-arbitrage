@@ -17,6 +17,7 @@ export default function Header({
   const dhanMode = feedStatus?.mode;
   const tickAge = feedStatus?.last_tick_age_seconds;
   const tokenSecs = feedStatus?.token_expires_in_seconds;
+  const marketOpen = feedStatus?.market_open;
 
   let label = "LIVE";
   let cls = "health-live";
@@ -34,6 +35,10 @@ export default function Header({
   } else if (dhanMode !== "live") {
     label = "FEED DOWN";
     cls = "health-down";
+  } else if (!marketOpen) {
+    label = "MARKET CLOSED";
+    cls = "health-poll";
+    extra = "";
   } else if (tickAge !== null && tickAge > 30) {
     label = "STALE";
     cls = "health-warn";
@@ -48,8 +53,9 @@ export default function Header({
     ? [
         `Browser ↔ Server: ${wsState}`,
         `Server ↔ Dhan: ${dhanMode || "—"}`,
+        `Market: ${marketOpen ? "OPEN" : "CLOSED"}`,
         `Client: ${feedStatus.client_name || "—"}`,
-        `Token expires in: ${extra || "—"}`,
+        `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,
         `Last tick: ${tickAge === null ? "never" : tickAge + "s ago"}`,
       ].join("\n")
     : "Connecting...";

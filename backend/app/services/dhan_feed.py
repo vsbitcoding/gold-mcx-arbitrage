@@ -15,8 +15,26 @@ import asyncio
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _ist_now() -> datetime:
+    return datetime.now(IST)
+
+
+def is_market_open() -> bool:
+    """MCX commodity hours: Mon-Fri 9:00 AM to 11:30 PM IST. Saturday morning
+    session and holidays not supported (treats as closed — safe default)."""
+    n = _ist_now()
+    # weekday(): Mon=0 ... Sun=6. Closed on Sat (5) and Sun (6).
+    if n.weekday() >= 5:
+        return False
+    open_t = n.replace(hour=9, minute=0, second=0, microsecond=0)
+    close_t = n.replace(hour=23, minute=30, second=0, microsecond=0)
+    return open_t <= n <= close_t
 
 from app.config import settings
 from app.database import SessionLocal
@@ -54,6 +72,7 @@ def get_status() -> dict:
         int(time.time() - s["last_tick_epoch"]) if s["last_tick_epoch"] else None
     )
     s["server_time"] = datetime.now(timezone.utc).isoformat()
+    s["market_open"] = is_market_open()
     return s
 
 
@@ -81,18 +100,51 @@ def _eval_safely() -> None:
 
 
 def _watchdog() -> None:
-    """Force-close WS when token is close to expiry to trigger fresh login."""
+    """Watchdog forces a reconnect on three signals:
+       1. Token expires in <30 min (force fresh login)
+       2. During market hours, no tick in 3+ min (silent WS — common overnight)
+       3. Just before market open (8:55 IST) — refresh any stale overnight WS"""
     global _active_feed
+    last_premarket_check = None
     while True:
-        time.sleep(300)  # 5 minutes
+        time.sleep(60)  # check every minute
         with _state_lock:
             expiry = _state["token_expiry_epoch"]
             mode = _state["mode"]
-        if mode != "live" or not expiry:
-            continue
-        remaining = expiry - time.time()
-        if remaining < 30 * 60:
-            log.warning("Token expires in %.0f min — forcing reconnect.", remaining / 60)
+            last_tick = _state["last_tick_epoch"]
+
+        force_reconnect = False
+        reason = ""
+
+        # 1. Token expiring soon
+        if expiry and (expiry - time.time()) < 30 * 60:
+            force_reconnect = True
+            reason = "token expiring"
+
+        # 2. No tick for 3+ min during market hours
+        if not force_reconnect and mode == "live" and is_market_open():
+            if last_tick:
+                age = time.time() - last_tick
+                if age > 180:  # 3 minutes silent during market hours
+                    force_reconnect = True
+                    reason = f"no tick for {int(age)}s during market hours"
+
+        # 3. Pre-market refresh: at 8:55-8:59 IST, force one reconnect to clear stale overnight WS
+        ist = _ist_now()
+        today = ist.date()
+        if (
+            ist.weekday() < 5
+            and ist.hour == 8
+            and ist.minute >= 55
+            and last_premarket_check != today
+        ):
+            force_reconnect = True
+            reason = "pre-market refresh"
+            last_premarket_check = today
+
+        if force_reconnect:
+            log.warning("Watchdog forcing reconnect: %s", reason)
+            dhan_auth.invalidate()
             try:
                 if _active_feed:
                     _active_feed.close_connection()
