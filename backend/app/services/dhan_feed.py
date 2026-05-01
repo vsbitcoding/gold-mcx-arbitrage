@@ -217,6 +217,7 @@ def _run_real_feed_thread() -> None:
 
             ctx = DhanContext(settings.DHAN_CLIENT_ID, token.access_token)
             last_eval = [0.0]
+            tick_counts: dict[str, int] = {}
 
             def on_message(_instance, data):
                 if not isinstance(data, dict):
@@ -226,15 +227,39 @@ def _run_real_feed_thread() -> None:
                 name = sec_to_name.get(sec_id)
                 if not name:
                     return
-                ltp = float(data.get("LTP") or 0)
+
+                key = f"{name}:{t}"
+                tick_counts[key] = tick_counts.get(key, 0) + 1
+                if tick_counts[key] == 1:
+                    log.info("FIRST tick %s: ltp=%s depth=%s keys=%s",
+                             key, data.get("LTP"),
+                             bool(data.get("depth")),
+                             list(data.keys())[:8])
+
+                try:
+                    ltp = float(data.get("LTP") or 0)
+                except (TypeError, ValueError):
+                    ltp = 0.0
                 bid = ask = ltp
                 if t in ("Full Data", "Market Depth"):
                     depth = data.get("depth") or []
                     if depth:
                         d0 = depth[0]
-                        bid = float(d0.get("bid_price") or ltp)
-                        ask = float(d0.get("ask_price") or ltp)
-                quote_store.update(name, bid=bid, ask=ask, ltp=ltp, ts=time.time())
+                        try:
+                            b = float(d0.get("bid_price") or 0)
+                            a = float(d0.get("ask_price") or 0)
+                            bid = b if b > 0 else ltp
+                            ask = a if a > 0 else ltp
+                        except (TypeError, ValueError):
+                            pass
+
+                # Preserve previous good prices if this tick has zeros (e.g. OI-only packets)
+                existing = quote_store.get(name)
+                bid = bid or existing.bid
+                ask = ask or existing.ask
+                ltp = ltp or existing.ltp
+                if bid or ask or ltp:
+                    quote_store.update(name, bid=bid, ask=ask, ltp=ltp, ts=time.time())
                 _set_state(last_tick_epoch=time.time(), ws_connected=True, mode="live")
 
                 now = time.time()
