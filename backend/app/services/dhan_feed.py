@@ -99,57 +99,61 @@ def _eval_safely() -> None:
     _eval_and_broadcast()
 
 
+_last_reconnect_epoch: float = 0.0
+RECONNECT_GRACE_SECONDS = 300  # don't force another reconnect within 5 min
+
+
+def _trigger_reconnect(reason: str) -> None:
+    """Force a WS reconnect, with grace-period guard so we never bounce."""
+    global _active_feed, _last_reconnect_epoch
+    if time.time() - _last_reconnect_epoch < RECONNECT_GRACE_SECONDS:
+        return  # in grace window, skip
+    _last_reconnect_epoch = time.time()
+    log.warning("Watchdog forcing reconnect: %s", reason)
+    dhan_auth.invalidate()
+    try:
+        if _active_feed:
+            _active_feed.close_connection()
+    except Exception as e:
+        log.warning("close_connection() failed: %s", e)
+
+
 def _watchdog() -> None:
-    """Watchdog forces a reconnect on three signals:
-       1. Token expires in <30 min (force fresh login)
-       2. During market hours, no tick in 3+ min (silent WS — common overnight)
-       3. Just before market open (8:55 IST) — refresh any stale overnight WS"""
-    global _active_feed
-    last_premarket_check = None
+    """Watchdog signals (with 5-min grace between forced reconnects):
+       1. Token expires in <30 min → force fresh login
+       2. Market hours + no tick in 3+ min → silent WS, reconnect
+       3. Just AFTER market open (9:01-9:05 IST) → daily fresh subscription"""
+    last_postmarket_open = None
     while True:
-        time.sleep(60)  # check every minute
+        time.sleep(60)
         with _state_lock:
             expiry = _state["token_expiry_epoch"]
             mode = _state["mode"]
             last_tick = _state["last_tick_epoch"]
 
-        force_reconnect = False
-        reason = ""
-
         # 1. Token expiring soon
         if expiry and (expiry - time.time()) < 30 * 60:
-            force_reconnect = True
-            reason = "token expiring"
+            _trigger_reconnect("token expiring")
+            continue
 
-        # 2. No tick for 3+ min during market hours
-        if not force_reconnect and mode == "live" and is_market_open():
-            if last_tick:
-                age = time.time() - last_tick
-                if age > 180:  # 3 minutes silent during market hours
-                    force_reconnect = True
-                    reason = f"no tick for {int(age)}s during market hours"
+        # 2. Silent feed during market hours
+        if mode == "live" and is_market_open() and last_tick:
+            age = time.time() - last_tick
+            if age > 180:
+                _trigger_reconnect(f"no tick for {int(age)}s during market hours")
+                continue
 
-        # 3. Pre-market refresh: at 8:55-8:59 IST, force one reconnect to clear stale overnight WS
+        # 3. Daily fresh-subscription right AFTER market opens (9:01-9:05 IST)
         ist = _ist_now()
         today = ist.date()
         if (
             ist.weekday() < 5
-            and ist.hour == 8
-            and ist.minute >= 55
-            and last_premarket_check != today
+            and ist.hour == 9
+            and 1 <= ist.minute <= 5
+            and last_postmarket_open != today
         ):
-            force_reconnect = True
-            reason = "pre-market refresh"
-            last_premarket_check = today
-
-        if force_reconnect:
-            log.warning("Watchdog forcing reconnect: %s", reason)
-            dhan_auth.invalidate()
-            try:
-                if _active_feed:
-                    _active_feed.close_connection()
-            except Exception as e:
-                log.warning("close_connection() failed in watchdog: %s", e)
+            _trigger_reconnect("post-open fresh subscription")
+            last_postmarket_open = today
 
 
 def _run_real_feed_thread() -> None:
@@ -255,6 +259,9 @@ def _run_real_feed_thread() -> None:
                 on_close=on_close,
             )
             _active_feed = feed
+            # Reset stale-tick timer so watchdog gives this connection a 3-min
+            # grace window before considering it silent.
+            _set_state(last_tick_epoch=time.time())
             log.info("Starting MarketFeed.run() — real ticks incoming.")
             feed.run()  # blocking until disconnect
             log.info("MarketFeed.run() exited normally.")
