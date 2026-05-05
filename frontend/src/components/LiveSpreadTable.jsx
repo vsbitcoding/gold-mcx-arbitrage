@@ -355,12 +355,19 @@ function LadderModal({ row, onClose, onChange }) {
 }
 
 // ===== Group summary row (one per unique label) =====
+// Shows the NEAREST expiry's spread (most actively traded) so the row isn't blank.
 const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
   const totalDec = group.rows.reduce((s, r) => s + r.decrease_ladders.length, 0);
   const totalInc = group.rows.reduce((s, r) => s + r.increase_ladders.length, 0);
   const inPos = group.rows.filter((r) => r.status === "in_position").length;
   const armed = group.rows.filter((r) => r.status === "armed").length;
   const aggStatus = inPos > 0 ? "in_position" : armed > 0 ? "armed" : "idle";
+
+  // Pick nearest-expiry row as the "front month" representative
+  const front = [...group.rows].sort((a, b) => {
+    const ea = a.big_expiry || ""; const eb = b.big_expiry || "";
+    return ea < eb ? -1 : ea > eb ? 1 : 0;
+  })[0] || group.rows[0];
 
   return (
     <tr className={`pair-row group-summary status-${aggStatus}`} onClick={onToggle}>
@@ -371,10 +378,13 @@ const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
         </button>
       </td>
       <td className="gc-identity col-end-group">
-        <div className="pair-expiry">{group.rows.length} expiries</div>
+        <div className="pair-expiry">
+          <strong style={{ color: "var(--text-primary)" }}>{front?.expiry_label || "—"}</strong>
+          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>+{group.rows.length - 1} more</div>
+        </div>
       </td>
-      <td className="spread-num dec-tone gc-decrease">—</td>
-      <td className="spread-num inc-tone gc-increase col-end-group">—</td>
+      <td className="spread-num dec-tone gc-decrease">{fmtSpread(front?.decrease_spread)}</td>
+      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(front?.increase_spread)}</td>
       <td className="gc-status">
         <span className={`badge ${STATUS_CLASS[aggStatus] || "badge-idle"}`}>
           <span className="blip" />
@@ -385,7 +395,7 @@ const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {totalInc}</span></td>
       <td className="gc-status">
         <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
-          {expanded ? "Hide" : "Show"} {group.rows.length}
+          {expanded ? "Hide" : "Show all"}
         </button>
       </td>
     </tr>
