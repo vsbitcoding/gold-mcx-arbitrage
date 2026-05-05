@@ -1,21 +1,28 @@
-import React, { useEffect, useMemo, useState, memo } from "react";
+import React, { useEffect, useMemo, useState, memo, useRef } from "react";
 import { api } from "../api/client.js";
 import { useToast } from "./Toast.jsx";
 import { useConfirm } from "./ConfirmDialog.jsx";
 
 const STATUS_LABEL = { idle: "Idle", armed: "Armed", in_position: "In Position" };
 const STATUS_CLASS = { idle: "badge-idle", armed: "badge-armed", in_position: "badge-position" };
-const MULTIPLIERS = { petal: 10, guinea: 1.25, ten: 1, mini: 1 };
 
 function fmtSpread(v) {
-  return v === null || v === undefined ? "—" : Number(v).toFixed(4);
-}
-function fmtPx(v) {
-  return v === null || v === undefined || v === 0 ? "—" : Number(v).toFixed(2);
+  return v === null || v === undefined ? "—" : Number(v).toFixed(2);
 }
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 
-function LadderRow({ ladder, defaultMaxWeight, maxAllowed, side, onSaved, onDeleted }) {
+function ladderStatus(ladder) {
+  if (!ladder.enabled) return { label: "Paused", cls: "ldr-paused" };
+  if (ladder.open_count > 0) {
+    const eff = ladder.effective_max_weight || 1;
+    if (ladder.open_weight_grams >= eff) return { label: "Full", cls: "ldr-full" };
+    return { label: `${ladder.open_count} open`, cls: "ldr-running" };
+  }
+  if (ladder.entry === null || ladder.entry === undefined) return { label: "Not set", cls: "ldr-idle" };
+  return { label: "Armed", cls: "ldr-armed" };
+}
+
+function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [draft, setDraft] = useState({
@@ -25,21 +32,26 @@ function LadderRow({ ladder, defaultMaxWeight, maxAllowed, side, onSaved, onDele
   });
   const [saving, setSaving] = useState(false);
 
-  // Sync draft when ladder changes server-side AND user isn't editing
+  const lastServerRef = useRef({
+    entry: ladder.entry ?? "",
+    exit: ladder.exit ?? "",
+    max_weight_grams: ladder.max_weight_grams ?? "",
+  });
+
+  // Sync if server values change AND user isn't editing (no dirty fields)
   useEffect(() => {
+    const serverEntry = ladder.entry ?? "";
+    const serverExit = ladder.exit ?? "";
+    const serverMax = ladder.max_weight_grams ?? "";
+
     setDraft((d) => {
-      const serverEntry = ladder.entry ?? "";
-      const serverExit = ladder.exit ?? "";
-      const serverMax = ladder.max_weight_grams ?? "";
-      // Only update if local matches some prior server state (avoid trampling user edits)
-      const dirty =
-        String(d.entry) !== String(serverEntry) ||
-        String(d.exit) !== String(serverExit) ||
-        String(d.max_weight_grams) !== String(serverMax);
-      if (!dirty) {
-        return { entry: serverEntry, exit: serverExit, max_weight_grams: serverMax };
-      }
-      return d;
+      const wasDirty =
+        String(d.entry) !== String(lastServerRef.current.entry) ||
+        String(d.exit) !== String(lastServerRef.current.exit) ||
+        String(d.max_weight_grams) !== String(lastServerRef.current.max_weight_grams);
+      lastServerRef.current = { entry: serverEntry, exit: serverExit, max_weight_grams: serverMax };
+      if (wasDirty) return d;
+      return { entry: serverEntry, exit: serverExit, max_weight_grams: serverMax };
     });
   }, [ladder.entry, ladder.exit, ladder.max_weight_grams]);
 
@@ -47,6 +59,10 @@ function LadderRow({ ladder, defaultMaxWeight, maxAllowed, side, onSaved, onDele
     String(draft.entry) !== String(ladder.entry ?? "") ||
     String(draft.exit) !== String(ladder.exit ?? "") ||
     String(draft.max_weight_grams) !== String(ladder.max_weight_grams ?? "");
+
+  const status = ladderStatus(ladder);
+  const eff = ladder.effective_max_weight || defaultMaxWeight;
+  const usedPct = eff > 0 ? Math.min(100, ((ladder.open_weight_grams || 0) / eff) * 100) : 0;
 
   function update(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -61,21 +77,35 @@ function LadderRow({ ladder, defaultMaxWeight, maxAllowed, side, onSaved, onDele
   }
 
   async function save() {
-    if (!dirty) return;
+    if (!dirty || saving) return;
     setSaving(true);
     try {
-      const body = {
+      await api.updateLadder(ladder.id, {
         entry: draft.entry === "" ? null : Number(draft.entry),
         exit: draft.exit === "" ? null : Number(draft.exit),
         max_weight_grams: draft.max_weight_grams === "" ? null : Number(draft.max_weight_grams),
-      };
-      await api.updateLadder(ladder.id, body);
-      toast.success(`Ladder updated`);
-      onSaved?.();
+      });
+      toast.success("Saved");
+      onChange?.();
     } catch (e) {
       toast.error(e.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function togglePause() {
+    try {
+      await api.updateLadder(ladder.id, {
+        entry: ladder.entry,
+        exit: ladder.exit,
+        max_weight_grams: ladder.max_weight_grams,
+        enabled: !ladder.enabled,
+      });
+      toast.success(ladder.enabled ? "Paused" : "Resumed");
+      onChange?.();
+    } catch (e) {
+      toast.error(e.message);
     }
   }
 
@@ -93,50 +123,95 @@ function LadderRow({ ladder, defaultMaxWeight, maxAllowed, side, onSaved, onDele
     if (!ok) return;
     try {
       await api.deleteLadder(ladder.id);
-      toast.success("Ladder deleted");
-      onDeleted?.();
+      toast.success("Deleted");
+      onChange?.();
     } catch (e) {
       toast.error(e.message);
     }
   }
 
-  const cellCls = (k) => `cell ${String(draft[k]) !== String(ladder[k] ?? "") ? "dirty" : ""}`;
-
   return (
-    <div className={`ladder-row ${ladder.open_count > 0 ? "active" : ""}`}>
-      <input className={cellCls("entry")} type="number" step="0.01" placeholder="Entry"
-        value={draft.entry ?? ""} onChange={(e) => update("entry", e.target.value)} />
-      <input className={cellCls("exit")} type="number" step="0.01" placeholder="Exit"
-        value={draft.exit ?? ""} onChange={(e) => update("exit", e.target.value)} />
-      <input className={cellCls("max_weight_grams")} type="number" min="0" max={maxAllowed} step="1"
-        placeholder={String(defaultMaxWeight)}
-        value={draft.max_weight_grams ?? ""}
-        onChange={(e) => onWeightChange(e.target.value)} />
-      <div className="ladder-meta">
-        <div className="ladder-weight">
-          {ladder.open_weight_grams || 0}/{ladder.max_weight_grams ?? defaultMaxWeight}g
-          {ladder.open_count > 0 && <span className="ladder-count" title="Open positions">{ladder.open_count}</span>}
+    <div className={`ladder-card ${side}-card ${!ladder.enabled ? "paused" : ""}`}>
+      <div className="ladder-card-top">
+        <span className={`ladder-status ${status.cls}`}>
+          <span className="dot" />{status.label}
+        </span>
+        <button
+          className="ladder-icon-btn"
+          onClick={togglePause}
+          title={ladder.enabled ? "Pause this ladder" : "Resume"}
+        >
+          {ladder.enabled ? "⏸" : "▶"}
+        </button>
+        <button className="ladder-icon-btn danger" onClick={remove} title="Delete ladder">×</button>
+      </div>
+
+      <div className="ladder-fields">
+        <label>
+          <span>Entry</span>
+          <input
+            type="number" step="0.01" inputMode="decimal" placeholder="e.g. 200"
+            value={draft.entry ?? ""}
+            onChange={(e) => update("entry", e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
+        </label>
+        <label>
+          <span>Exit</span>
+          <input
+            type="number" step="0.01" inputMode="decimal" placeholder="e.g. 100"
+            value={draft.exit ?? ""}
+            onChange={(e) => update("exit", e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
+        </label>
+        <label>
+          <span>Max (g)</span>
+          <input
+            type="number" min="0" max={maxAllowed} step="1"
+            placeholder={String(defaultMaxWeight)}
+            value={draft.max_weight_grams ?? ""}
+            onChange={(e) => onWeightChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
+        </label>
+      </div>
+
+      <div className="ladder-cap-row">
+        <div className="ladder-cap-bar">
+          <div className={`fill ${usedPct >= 100 ? "full" : usedPct >= 80 ? "high" : usedPct >= 50 ? "mid" : "low"}`}
+               style={{ width: `${usedPct}%` }} />
+        </div>
+        <div className="ladder-cap-text">
+          <strong>{ladder.open_weight_grams || 0}</strong>
+          <span> / </span>
+          <span>{eff}g</span>
         </div>
         {ladder.has_pending_cap && (
-          <div className="ladder-pending">⏳ {ladder.pending_max_weight_grams ?? "default"}g</div>
+          <span className="ladder-pending-pill" title="Cap change applies after square-off">
+            ⏳ {ladder.pending_max_weight_grams ?? "default"}g
+          </span>
         )}
       </div>
-      <div className="ladder-actions">
-        <button className={`btn btn-primary btn-sm ${dirty ? "dirty" : ""}`} onClick={save} disabled={saving || !dirty}>
-          {dirty ? "Save *" : "Saved"}
+
+      {dirty && (
+        <button
+          className={`ladder-save-btn ${saving ? "saving" : ""}`}
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? "Saving…" : "Save changes"}
         </button>
-        <button className="btn btn-secondary btn-sm" onClick={remove}>×</button>
-      </div>
+      )}
     </div>
   );
 }
 
-function NewLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated }) {
+function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated }) {
   const toast = useToast();
   const [entry, setEntry] = useState("");
   const [exit, setExit] = useState("");
   const [weight, setWeight] = useState("");
-  const [open, setOpen] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
@@ -153,59 +228,62 @@ function NewLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
         max_weight_grams: weight === "" ? null : Number(weight),
       });
       setEntry(""); setExit(""); setWeight("");
-      setOpen(false);
-      toast.success("Ladder added");
+      toast.success(`${cap(side)} ladder added`);
       onCreated?.();
     } catch (e) {
       toast.error(e.message);
     }
   }
 
-  if (!open) {
-    return (
-      <button className="btn btn-secondary btn-sm add-ladder-btn" onClick={() => setOpen(true)}>
-        + Add {cap(side)} Ladder
-      </button>
-    );
-  }
-
   return (
-    <form className="ladder-row new" onSubmit={submit}>
-      <input className="cell" type="number" step="0.01" placeholder="Entry" value={entry} onChange={(e) => setEntry(e.target.value)} autoFocus />
-      <input className="cell" type="number" step="0.01" placeholder="Exit" value={exit} onChange={(e) => setExit(e.target.value)} />
-      <input className="cell" type="number" min="0" max={maxAllowed} step="1"
-        placeholder={String(defaultMaxWeight)}
-        value={weight}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v !== "" && Number(v) > maxAllowed) setWeight(String(maxAllowed));
-          else setWeight(v);
-        }} />
-      <div></div>
-      <div className="ladder-actions">
-        <button className="btn btn-primary btn-sm" type="submit">Add</button>
-        <button className="btn btn-secondary btn-sm" type="button" onClick={() => setOpen(false)}>×</button>
+    <form className={`add-ladder ${side}-card`} onSubmit={submit}>
+      <div className="add-ladder-head">+ New {cap(side)} Ladder</div>
+      <div className="ladder-fields">
+        <label>
+          <span>Entry</span>
+          <input type="number" step="0.01" inputMode="decimal" placeholder="Required"
+            value={entry} onChange={(e) => setEntry(e.target.value)} />
+        </label>
+        <label>
+          <span>Exit</span>
+          <input type="number" step="0.01" inputMode="decimal" placeholder="Optional"
+            value={exit} onChange={(e) => setExit(e.target.value)} />
+        </label>
+        <label>
+          <span>Max (g)</span>
+          <input type="number" min="0" max={maxAllowed} step="1"
+            placeholder={String(defaultMaxWeight)}
+            value={weight}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v !== "" && Number(v) > maxAllowed) setWeight(String(maxAllowed));
+              else setWeight(v);
+            }} />
+        </label>
       </div>
+      <button type="submit" className="ladder-add-btn">Add Ladder</button>
     </form>
   );
 }
 
 const PairCard = memo(function PairCard({ row, expanded, onToggle, onChange }) {
-  const bigMult = MULTIPLIERS[row.big] ?? 1;
-  const smallMult = MULTIPLIERS[row.small] ?? 1;
+  const decCount = row.decrease_ladders.length;
+  const incCount = row.increase_ladders.length;
+  const totalActive = (row.decrease_open ? 1 : 0) + (row.increase_open ? 1 : 0);
 
   return (
     <div className={`spread-pair-card status-${row.status}`}>
-      <div className="pair-card-head">
-        <button className="pair-card-toggle" onClick={onToggle}>
-          <span className="caret">{expanded ? "▾" : "▸"}</span>
-          <span className="pair-card-title">{row.name}</span>
-        </button>
+      <button className="pair-card-head" onClick={onToggle}>
+        <span className="caret">{expanded ? "▾" : "▸"}</span>
+        <span className="pair-card-title">{row.name}</span>
         <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
           <span className="blip" />
           {STATUS_LABEL[row.status] || row.status}
         </span>
-      </div>
+        <span className="pair-card-meta">
+          {decCount + incCount > 0 && <span>{decCount + incCount} ladder{decCount + incCount > 1 ? "s" : ""}</span>}
+        </span>
+      </button>
 
       <div className="pair-card-spreads">
         <div className="spread-block dec">
@@ -221,25 +299,18 @@ const PairCard = memo(function PairCard({ row, expanded, onToggle, onChange }) {
       {expanded && (
         <div className="pair-card-ladders">
           <div className="ladder-side dec-side">
-            <div className="ladder-side-head">▼ Decrease Ladders</div>
-            <div className="ladder-list">
-              <div className="ladder-headers">
-                <span>Entry</span>
-                <span>Exit</span>
-                <span>Max (g)</span>
-                <span>Status</span>
-                <span></span>
-              </div>
-              {row.decrease_ladders.length === 0 && (
-                <div className="ladder-empty">No decrease ladders. Click + to add.</div>
-              )}
+            <div className="ladder-side-head">
+              <span className="side-arrow">▼</span> Decrease Ladders
+              <span className="side-count">{decCount}</span>
+            </div>
+            <div className="ladder-grid">
               {row.decrease_ladders.map((l) => (
-                <LadderRow key={l.id} ladder={l} side="decrease"
+                <LadderCard key={l.id} ladder={l} side="decrease"
                   defaultMaxWeight={row.default_max_weight}
                   maxAllowed={row.max_allowed_weight}
-                  onSaved={onChange} onDeleted={onChange} />
+                  onChange={onChange} />
               ))}
-              <NewLadderForm pairName={row.name} side="decrease"
+              <AddLadderForm pairName={row.name} side="decrease"
                 defaultMaxWeight={row.default_max_weight}
                 maxAllowed={row.max_allowed_weight}
                 onCreated={onChange} />
@@ -247,25 +318,18 @@ const PairCard = memo(function PairCard({ row, expanded, onToggle, onChange }) {
           </div>
 
           <div className="ladder-side inc-side">
-            <div className="ladder-side-head">▲ Increase Ladders</div>
-            <div className="ladder-list">
-              <div className="ladder-headers">
-                <span>Entry</span>
-                <span>Exit</span>
-                <span>Max (g)</span>
-                <span>Status</span>
-                <span></span>
-              </div>
-              {row.increase_ladders.length === 0 && (
-                <div className="ladder-empty">No increase ladders. Click + to add.</div>
-              )}
+            <div className="ladder-side-head">
+              <span className="side-arrow">▲</span> Increase Ladders
+              <span className="side-count">{incCount}</span>
+            </div>
+            <div className="ladder-grid">
               {row.increase_ladders.map((l) => (
-                <LadderRow key={l.id} ladder={l} side="increase"
+                <LadderCard key={l.id} ladder={l} side="increase"
                   defaultMaxWeight={row.default_max_weight}
                   maxAllowed={row.max_allowed_weight}
-                  onSaved={onChange} onDeleted={onChange} />
+                  onChange={onChange} />
               ))}
-              <NewLadderForm pairName={row.name} side="increase"
+              <AddLadderForm pairName={row.name} side="increase"
                 defaultMaxWeight={row.default_max_weight}
                 maxAllowed={row.max_allowed_weight}
                 onCreated={onChange} />
@@ -299,6 +363,15 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     setExpanded((e) => ({ ...e, [name]: !e[name] }));
   }
 
+  function expandAll() {
+    const all = {};
+    rows.forEach((r) => { all[r.name] = true; });
+    setExpanded(all);
+  }
+  function collapseAll() {
+    setExpanded({});
+  }
+
   return (
     <div className="sessions-container">
       <div className="sessions-header">
@@ -307,6 +380,8 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <div className="search-container">
             <input placeholder="Search pair..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          <button className="btn btn-secondary btn-sm" onClick={expandAll}>Expand All</button>
+          <button className="btn btn-secondary btn-sm" onClick={collapseAll}>Collapse</button>
           <div className="filter-tabs">
             <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
               All <span className="count">{counts.all}</span>
