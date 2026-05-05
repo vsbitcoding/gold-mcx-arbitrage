@@ -360,13 +360,22 @@ function LadderModal({ row, onClose, onChange }) {
 const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onToggle, onManage }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
+
+  function handleRowClick(e) {
+    // Don't toggle if click came from a button
+    if (e.target.closest("button")) return;
+    onToggle();
+  }
+
   return (
-    <tr className={`pair-row status-${row.status} ${expanded ? "open" : ""}`}>
+    <tr
+      className={`pair-row status-${row.status} ${expanded ? "open" : ""}`}
+      onClick={handleRowClick}
+      style={{ cursor: "pointer" }}
+    >
       <td className="pair-name gc-identity">
         <div className="front-row-name">
-          <button className="row-toggle compact" onClick={onToggle} title={expanded ? "Hide other months" : "Show other months"}>
-            <span className="caret">{expanded ? "▾" : "▸"}</span>
-          </button>
+          <span className="caret">{expanded ? "▾" : "▸"}</span>
           <span className="group-label">{label}</span>
         </div>
       </td>
@@ -385,9 +394,17 @@ const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onTo
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
       <td className="gc-status">
         <div className="front-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>Manage</button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={(e) => { e.stopPropagation(); onManage(row.name); }}
+          >
+            Manage
+          </button>
           {otherCount > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={onToggle}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            >
               {expanded ? "Hide" : `+${otherCount}`}
             </button>
           )}
