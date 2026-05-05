@@ -1248,17 +1248,51 @@ table.pair-table th {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  padding: 10px 12px;
+  padding: 9px 10px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Group header row */
+table.pair-table thead tr.group-row th {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 6px 8px;
   border-bottom: 2px solid var(--border);
 }
+table.pair-table thead tr.group-row th.cg-identity { background: var(--cg-identity-bg); color: var(--cg-identity-text); }
+table.pair-table thead tr.group-row th.cg-decrease { background: var(--cg-decrease-bg); color: var(--cg-decrease-text); }
+table.pair-table thead tr.group-row th.cg-increase { background: var(--cg-increase-bg); color: var(--cg-increase-text); }
+table.pair-table thead tr.group-row th.cg-status   { background: var(--cg-status-bg);   color: var(--cg-status-text); }
+
+/* Sub-cell tinting */
+table.pair-table th.gc-identity, table.pair-table td.gc-identity { background: var(--cg-identity-tint); }
+table.pair-table th.gc-decrease, table.pair-table td.gc-decrease { background: var(--cg-decrease-tint); }
+table.pair-table th.gc-increase, table.pair-table td.gc-increase { background: var(--cg-increase-tint); }
+table.pair-table th.gc-status,   table.pair-table td.gc-status   { background: var(--cg-status-tint); }
+
+table.pair-table th.col-end-group, table.pair-table td.col-end-group {
+  border-right: 2px solid var(--border);
+}
+
+/* Sortable headers */
+table.pair-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+table.pair-table th.sortable:hover { filter: brightness(1.05); }
+.sort-arrow { display: inline-block; margin-left: 6px; font-size: 9px; opacity: 0.85; }
+.sort-arrow .dim { opacity: 0.35; }
+
 table.pair-table td {
-  padding: 12px;
+  padding: 10px 12px;
   text-align: center;
   border-bottom: 1px solid var(--border-light);
-  background: var(--bg-surface);
 }
-table.pair-table tr.pair-row:hover td { background: var(--bg-surface-alt); cursor: pointer; }
-table.pair-table td.pair-name { font-weight: 700; text-align: center; font-size: 14px; }
+table.pair-table tr.pair-row:hover td { filter: brightness(1.04); cursor: pointer; }
+table.pair-table td.pair-name { font-weight: 700; text-align: center; font-size: 13px; }
 table.pair-table td.spread-num {
   font-family: 'Roboto Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
@@ -1279,6 +1313,20 @@ table.pair-table td.spread-num {
 }
 .ladder-count-pill.dec { background: rgba(220,38,38,0.1); color: var(--red); }
 .ladder-count-pill.inc { background: rgba(22,163,74,0.1); color: var(--green); }
+
+/* Expiry filter dropdown */
+.expiry-filter {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.expiry-filter:focus { border-color: var(--accent); }
 
 /* ===== Ladder Modal ===== */
 .ladder-modal-overlay {

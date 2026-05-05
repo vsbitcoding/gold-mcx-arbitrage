@@ -360,21 +360,23 @@ const PairRow = memo(function PairRow({ row, onManage }) {
   const incCount = row.increase_ladders.length;
   return (
     <tr className={`pair-row status-${row.status}`}>
-      <td className="pair-name">
+      <td className="pair-name gc-identity">
         <div>{row.label || row.name}</div>
-        {row.expiry_label && <div className="pair-expiry">{row.expiry_label}</div>}
       </td>
-      <td className="spread-num dec-tone">{fmtSpread(row.decrease_spread)}</td>
-      <td className="spread-num inc-tone">{fmtSpread(row.increase_spread)}</td>
-      <td>
+      <td className="gc-identity col-end-group">
+        <div className="pair-expiry">{row.expiry_label || "—"}</div>
+      </td>
+      <td className="spread-num dec-tone gc-decrease">{fmtSpread(row.decrease_spread)}</td>
+      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(row.increase_spread)}</td>
+      <td className="gc-status">
         <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
           <span className="blip" />
           {STATUS_LABEL[row.status] || row.status}
         </span>
       </td>
-      <td><span className="ladder-count-pill dec">▼ {decCount}</span></td>
-      <td><span className="ladder-count-pill inc">▲ {incCount}</span></td>
-      <td>
+      <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
+      <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
+      <td className="gc-status">
         <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>Manage</button>
       </td>
     </tr>
@@ -388,12 +390,32 @@ const PairRow = memo(function PairRow({ row, onManage }) {
   prev.row.expiry_label === next.row.expiry_label
 ));
 
+function SortableTh({ label, field, sort, setSort, ...rest }) {
+  const active = sort.field === field;
+  const dir = active ? sort.dir : null;
+  function toggle() {
+    if (!active) setSort({ field, dir: "asc" });
+    else if (dir === "asc") setSort({ field, dir: "desc" });
+    else setSort({ field: null, dir: "asc" });
+  }
+  return (
+    <th {...rest} onClick={toggle} className={`sortable ${rest.className || ""}`}>
+      <span className="th-label">{label}</span>
+      <span className="sort-arrow">
+        {active ? (dir === "asc" ? "▲" : "▼") : <span className="dim">⇅</span>}
+      </span>
+    </th>
+  );
+}
+
 const PAIR_PAGE_SIZE = 12;
 
 export default function LiveSpreadTable({ rows, onSaved }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [tab, setTab] = useState("cross");  // cross | calendar
+  const [expiryFilter, setExpiryFilter] = useState("all");
+  const [tab, setTab] = useState("cross");
+  const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [page, setPage] = useState(1);
   const [openPair, setOpenPair] = useState(null);
 
@@ -402,6 +424,20 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
   const tabRows = tab === "cross" ? crossRows : calendarRows;
 
+  // Available expiries (for the dropdown filter)
+  const expiryOptions = useMemo(() => {
+    const seen = new Set();
+    const opts = [];
+    tabRows.forEach((r) => {
+      const k = r.expiry_label || "";
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        opts.push(k);
+      }
+    });
+    return opts;
+  }, [tabRows]);
+
   const counts = useMemo(() => ({
     all: tabRows.length,
     armed: tabRows.filter((r) => r.status === "armed").length,
@@ -409,27 +445,61 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     idle: tabRows.filter((r) => r.status === "idle").length,
   }), [tabRows]);
 
-  const filtered = tabRows.filter((r) => {
+  const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    if (term) {
-      const hit = (r.name || "").toLowerCase().includes(term) ||
-                  (r.label || "").toLowerCase().includes(term) ||
-                  (r.expiry_label || "").toLowerCase().includes(term);
-      if (!hit) return false;
-    }
-    if (filter === "all") return true;
-    return r.status === filter;
-  });
+    return tabRows.filter((r) => {
+      if (term) {
+        const hit = (r.name || "").toLowerCase().includes(term) ||
+                    (r.label || "").toLowerCase().includes(term) ||
+                    (r.expiry_label || "").toLowerCase().includes(term);
+        if (!hit) return false;
+      }
+      if (expiryFilter !== "all" && r.expiry_label !== expiryFilter) return false;
+      if (filter === "all") return true;
+      return r.status === filter;
+    });
+  }, [tabRows, search, filter, expiryFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAIR_PAGE_SIZE));
+  // Sort
+  const sortedRows = useMemo(() => {
+    if (!sort.field) return filtered;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const field = sort.field;
+    function key(r) {
+      switch (field) {
+        case "label": return (r.label || "").toLowerCase();
+        case "expiry": return r.big_expiry || r.expiry_label || "";
+        case "decrease_spread": return r.decrease_spread ?? -Infinity;
+        case "increase_spread": return r.increase_spread ?? -Infinity;
+        case "status": return r.status || "";
+        case "decrease_count": return r.decrease_ladders.length;
+        case "increase_count": return r.increase_ladders.length;
+        default: return 0;
+      }
+    }
+    return [...filtered].sort((a, b) => {
+      const ka = key(a), kb = key(b);
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return 1 * dir;
+      return 0;
+    });
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAIR_PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * PAIR_PAGE_SIZE;
-  const slice = filtered.slice(start, start + PAIR_PAGE_SIZE);
+  const slice = sortedRows.slice(start, start + PAIR_PAGE_SIZE);
 
-  // Reset to page 1 on tab/filter change
-  useEffect(() => { setPage(1); }, [tab, filter, search]);
+  useEffect(() => { setPage(1); }, [tab, filter, search, expiryFilter, sort.field, sort.dir]);
 
   const openRow = openPair ? rows.find((r) => r.name === openPair) : null;
+
+  function resetFilters() {
+    setSearch("");
+    setFilter("all");
+    setExpiryFilter("all");
+    setSort({ field: null, dir: "asc" });
+  }
 
   return (
     <div className="sessions-container">
@@ -447,6 +517,10 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <div className="search-container">
             <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          <select className="expiry-filter" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+            <option value="all">All expiries</option>
+            {expiryOptions.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
+          </select>
           <div className="filter-tabs">
             <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
               All <span className="count">{counts.all}</span>
@@ -461,25 +535,35 @@ export default function LiveSpreadTable({ rows, onSaved }) {
               Idle <span className="count">{counts.idle}</span>
             </button>
           </div>
+          {(search || filter !== "all" || expiryFilter !== "all" || sort.field) && (
+            <button className="btn btn-secondary btn-sm" onClick={resetFilters} title="Clear filters & sort">Reset</button>
+          )}
         </div>
       </div>
 
       <div className="table-container">
         <table className="pair-table">
           <thead>
+            <tr className="group-row">
+              <th colSpan={2} className="cg-identity col-end-group">Identity</th>
+              <th className="cg-decrease">▼ Decrease</th>
+              <th className="cg-increase col-end-group">▲ Increase</th>
+              <th colSpan={4} className="cg-status">Status &amp; Ladders</th>
+            </tr>
             <tr>
-              <th>{tab === "cross" ? "Pair" : "Calendar Spread"}</th>
-              <th>Decrease Spread</th>
-              <th>Increase Spread</th>
-              <th>Status</th>
-              <th>Decrease</th>
-              <th>Increase</th>
-              <th>Action</th>
+              <SortableTh label={tab === "cross" ? "Pair" : "Spread"} field="label" sort={sort} setSort={setSort} className="gc-identity" />
+              <SortableTh label="Expiry" field="expiry" sort={sort} setSort={setSort} className="gc-identity col-end-group" />
+              <SortableTh label="Spread" field="decrease_spread" sort={sort} setSort={setSort} className="gc-decrease" />
+              <SortableTh label="Spread" field="increase_spread" sort={sort} setSort={setSort} className="gc-increase col-end-group" />
+              <SortableTh label="Status" field="status" sort={sort} setSort={setSort} className="gc-status" />
+              <SortableTh label="Dec ▼" field="decrease_count" sort={sort} setSort={setSort} className="gc-status" />
+              <SortableTh label="Inc ▲" field="increase_count" sort={sort} setSort={setSort} className="gc-status" />
+              <th className="gc-status">Action</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="empty-state">No pairs match the filter.</td></tr>
+            {sortedRows.length === 0 ? (
+              <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
             ) : slice.map((r) => (
               <PairRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
             ))}
@@ -487,9 +571,9 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         </table>
       </div>
 
-      {filtered.length > PAIR_PAGE_SIZE && (
+      {sortedRows.length > PAIR_PAGE_SIZE && (
         <div className="pagination-controls">
-          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, filtered.length)} of {filtered.length}</div>
+          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, sortedRows.length)} of {sortedRows.length}</div>
           <div className="pager">
             <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
