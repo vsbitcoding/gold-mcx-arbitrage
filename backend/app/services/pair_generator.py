@@ -54,10 +54,12 @@ def _expiry_short(dt: datetime) -> str:
 def generate_cross_pairs(active: dict[str, list[dict]]) -> list[dict]:
     """For each cross template × each (matching) expiry month, build a pair.
 
-    'Matching' means both legs have a contract in the same calendar month.
-    For Mini pairs, "same month" means Mini's nearest contract that pairs with
-    that month (since Mini expires on 5th — usually Mini's month name aligns
-    to the EOM contract's month).
+    Pairing rule:
+      - Non-Mini pairs (Petal-Guinea, Petal-Ten, Guinea-Ten):
+        same-calendar-month for both legs.
+      - Mini pairs (Petal-Mini, Guinea-Mini, Ten-Mini):
+        Mini leg = NEXT month AFTER the big leg's expiry (Logic 1, per client).
+        e.g. Petal 29 May → Mini 5 Jun.
     """
     pairs: list[dict] = []
     for big, small, big_lots, small_lots in CROSS_TEMPLATES:
@@ -66,10 +68,11 @@ def generate_cross_pairs(active: dict[str, list[dict]]) -> list[dict]:
         if not big_contracts or not small_contracts:
             continue
 
-        # Iterate over big leg's expiries; for each, find the same-calendar-month
-        # contract on the small leg.
         for bc in big_contracts:
-            sc = _match_contract_for_month(small_contracts, bc["expiry"])
+            if small == "mini":
+                sc = _match_next_month_after(small_contracts, bc["expiry"])
+            else:
+                sc = _match_contract_for_month(small_contracts, bc["expiry"])
             if not sc:
                 continue
             month_tag = _expiry_tag(bc["expiry"])
@@ -139,9 +142,7 @@ def generate_calendar_pairs(active: dict[str, list[dict]]) -> list[dict]:
 
 
 def _match_contract_for_month(contracts: list[dict], target_expiry: datetime) -> Optional[dict]:
-    """Find contract whose expiry is in the same calendar month as target.
-    For Mini (expires on 5th), this pairs Mini-of-month-X with Petal/Ten/Guinea-of-month-X.
-    Falls back to nearest expiry if exact month not found."""
+    """Find contract whose expiry is in the same calendar month as target."""
     same_month = [
         c for c in contracts
         if c["expiry"].year == target_expiry.year
@@ -152,6 +153,14 @@ def _match_contract_for_month(contracts: list[dict], target_expiry: datetime) ->
     # Fallback: closest expiry
     nearest = min(contracts, key=lambda c: abs((c["expiry"] - target_expiry).total_seconds()))
     return nearest
+
+
+def _match_next_month_after(contracts: list[dict], target_expiry: datetime) -> Optional[dict]:
+    """Find first contract whose expiry is AFTER target_expiry (Logic 1 for Mini)."""
+    after = [c for c in contracts if c["expiry"] > target_expiry]
+    if not after:
+        return None
+    return min(after, key=lambda c: c["expiry"])
 
 
 def generate_all(active: dict[str, list[dict]]) -> list[dict]:
