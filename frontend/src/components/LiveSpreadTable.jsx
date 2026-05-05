@@ -542,7 +542,17 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       </div>
 
       <div className="table-container">
-        <table className="pair-table">
+        <table className="pair-table fixed">
+          <colgroup>
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "18%" }} />
+          </colgroup>
           <thead>
             <tr className="group-row">
               <th colSpan={2} className="cg-identity col-end-group">Identity</th>

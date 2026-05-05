@@ -1240,6 +1240,11 @@ input.cell:focus {
 
 /* ===== Compact pair table ===== */
 table.pair-table { width: 100%; border-collapse: collapse; }
+table.pair-table.fixed { table-layout: fixed; }
+table.pair-table.fixed th, table.pair-table.fixed td {
+  overflow: hidden; text-overflow: ellipsis;
+}
+table.pair-table tbody tr.pair-row { height: 56px; }
 table.pair-table th {
   background: var(--th-bg);
   color: var(--th-color);
