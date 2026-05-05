@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.config import settings
@@ -44,3 +44,23 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
         return username
     except jwt.PyJWTError:
         raise creds_error
+
+
+def verify_api_key_value(key: str | None) -> bool:
+    if not key:
+        return False
+    return key in settings.public_api_keys
+
+
+def require_api_key(
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    api_key: str | None = Query(None),
+) -> str:
+    """FastAPI dependency: accept `X-API-Key` header or `api_key` query param."""
+    key = x_api_key or api_key
+    if not verify_api_key_value(key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+    return key

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     APP_SECRET_KEY: str = "change-me"
     TRADING_MODE: str = "paper"
 
+    # Public API keys (comma-separated). Each key authorises a /api/v1/* client.
+    PUBLIC_API_KEYS: str = ""
+
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
 
@@ -31,6 +34,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def public_api_keys(self) -> set[str]:
+        return {k.strip() for k in self.PUBLIC_API_KEYS.split(",") if k.strip()}
 
 
 settings = Settings()
