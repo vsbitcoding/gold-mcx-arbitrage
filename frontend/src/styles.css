@@ -1319,16 +1319,25 @@ table.pair-table td.spread-num {
 .ladder-count-pill.dec { background: rgba(220,38,38,0.1); color: var(--red); }
 .ladder-count-pill.inc { background: rgba(22,163,74,0.1); color: var(--green); }
 
-/* Group summary row */
-table.pair-table tr.group-summary td { font-weight: 700; }
-table.pair-table tr.group-summary {
-  cursor: pointer;
+/* Front row (default visible — shows current/front month) */
+table.pair-table tr.pair-row.open td {
+  border-bottom-color: var(--accent);
 }
-table.pair-table tr.group-summary:hover td { filter: brightness(1.04); }
-table.pair-table tr.group-summary.open td {
-  background: var(--accent-bg);
-  border-bottom: 2px solid var(--accent);
+.front-row-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+.front-actions {
+  display: inline-flex;
+  gap: 4px;
+  justify-content: center;
+}
+.row-toggle.compact {
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.row-toggle.compact:hover { background: var(--bg-hover); }
 .row-toggle {
   display: inline-flex;
   align-items: center;

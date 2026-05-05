@@ -354,72 +354,58 @@ function LadderModal({ row, onClose, onChange }) {
   );
 }
 
-// ===== Group summary row (one per unique label) =====
-// Shows the NEAREST expiry's spread (most actively traded) so the row isn't blank.
-const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
-  const totalDec = group.rows.reduce((s, r) => s + r.decrease_ladders.length, 0);
-  const totalInc = group.rows.reduce((s, r) => s + r.increase_ladders.length, 0);
-  const inPos = group.rows.filter((r) => r.status === "in_position").length;
-  const armed = group.rows.filter((r) => r.status === "armed").length;
-  const aggStatus = inPos > 0 ? "in_position" : armed > 0 ? "armed" : "idle";
-
-  // Pick nearest-expiry row as the "front month" representative
-  const front = [...group.rows].sort((a, b) => {
-    const ea = a.big_expiry || ""; const eb = b.big_expiry || "";
-    return ea < eb ? -1 : ea > eb ? 1 : 0;
-  })[0] || group.rows[0];
-
-  // When collapsed, show the front-month spread as a glance value.
-  // When expanded, hide the spread numbers (sub-rows have them per expiry).
+// ===== Front-month row (default visible) =====
+// Acts as the primary row for each pair — full data + Manage button.
+// Has a "+N more" button to expand the other expiries below.
+const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onToggle, onManage }) {
+  const decCount = row.decrease_ladders.length;
+  const incCount = row.increase_ladders.length;
   return (
-    <tr className={`pair-row group-summary status-${aggStatus} ${expanded ? "open" : ""}`} onClick={onToggle}>
-      <td className="pair-name gc-identity" colSpan={2}>
-        <button className="row-toggle">
-          <span className="caret">{expanded ? "▾" : "▸"}</span>
-          <span className="group-label">{group.label}</span>
-          <span className="group-meta">{group.rows.length} expiries</span>
-        </button>
+    <tr className={`pair-row status-${row.status} ${expanded ? "open" : ""}`}>
+      <td className="pair-name gc-identity">
+        <div className="front-row-name">
+          <button className="row-toggle compact" onClick={onToggle} title={expanded ? "Hide other months" : "Show other months"}>
+            <span className="caret">{expanded ? "▾" : "▸"}</span>
+          </button>
+          <span className="group-label">{label}</span>
+        </div>
       </td>
-      {expanded ? (
-        <>
-          <td className="gc-decrease group-collapsed-cell"></td>
-          <td className="gc-increase col-end-group group-collapsed-cell"></td>
-        </>
-      ) : (
-        <>
-          <td className="spread-num dec-tone gc-decrease">
-            {fmtSpread(front?.decrease_spread)}
-            <div className="spread-front-label">{front?.expiry_label || ""}</div>
-          </td>
-          <td className="spread-num inc-tone gc-increase col-end-group">
-            {fmtSpread(front?.increase_spread)}
-            <div className="spread-front-label">{front?.expiry_label || ""}</div>
-          </td>
-        </>
-      )}
+      <td className="gc-identity col-end-group">
+        <div className="pair-expiry">{row.expiry_label || "—"}</div>
+      </td>
+      <td className="spread-num dec-tone gc-decrease">{fmtSpread(row.decrease_spread)}</td>
+      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(row.increase_spread)}</td>
       <td className="gc-status">
-        <span className={`badge ${STATUS_CLASS[aggStatus] || "badge-idle"}`}>
+        <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
           <span className="blip" />
-          {inPos > 0 ? `${inPos} Open` : armed > 0 ? `${armed} Armed` : "Idle"}
+          {STATUS_LABEL[row.status] || row.status}
         </span>
       </td>
-      <td className="gc-status"><span className="ladder-count-pill dec">▼ {totalDec}</span></td>
-      <td className="gc-status"><span className="ladder-count-pill inc">▲ {totalInc}</span></td>
+      <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
+      <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
       <td className="gc-status">
-        <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
-          {expanded ? "Hide" : "Show all"}
-        </button>
+        <div className="front-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>Manage</button>
+          {otherCount > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={onToggle}>
+              {expanded ? "Hide" : `+${otherCount}`}
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
 }, (prev, next) => (
   prev.expanded === next.expanded &&
-  prev.group.rows === next.group.rows
+  prev.row.decrease_spread === next.row.decrease_spread &&
+  prev.row.increase_spread === next.row.increase_spread &&
+  prev.row.status === next.row.status &&
+  prev.row.decrease_ladders === next.row.decrease_ladders &&
+  prev.row.increase_ladders === next.row.increase_ladders
 ));
 
-// ===== Single expiry sub-row (shown when group expanded) =====
-// Doesn't repeat pair name — just expiry as the primary identifier.
-const PairSubRow = memo(function PairSubRow({ row, onManage }) {
+// ===== Other-month sub-row (shown when expanded) =====
+const OtherMonthRow = memo(function OtherMonthRow({ row, onManage }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
   return (
@@ -656,11 +642,24 @@ export default function LiveSpreadTable({ rows, onSaved }) {
               <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
             ) : sliceGroups.flatMap((g) => {
               const isOpen = !!expandedGroups[g.label];
+              // Sort by expiry ASC — front month first
+              const sortedByExpiry = [...g.rows].sort((a, b) =>
+                (a.big_expiry || "") < (b.big_expiry || "") ? -1 : 1
+              );
+              const front = sortedByExpiry[0];
+              const others = sortedByExpiry.slice(1);
               return [
-                <GroupRow key={`g:${g.label}`} group={g} expanded={isOpen}
-                  onToggle={() => toggleGroup(g.label)} />,
-                ...(isOpen ? g.rows.map((r) => (
-                  <PairSubRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
+                <FrontRow
+                  key={`f:${g.label}`}
+                  row={front}
+                  label={g.label}
+                  otherCount={others.length}
+                  expanded={isOpen}
+                  onToggle={() => toggleGroup(g.label)}
+                  onManage={(n) => setOpenPair(n)}
+                />,
+                ...(isOpen ? others.map((r) => (
+                  <OtherMonthRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
                 )) : []),
               ];
             })}
