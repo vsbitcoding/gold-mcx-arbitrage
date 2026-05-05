@@ -41,6 +41,9 @@ _REQUIRED_COLUMNS = {
         ("small_exit_price", "FLOAT"),
         ("weight_grams", "INTEGER"),
     ],
+    "positions": [
+        ("ladder_rule_id", "INTEGER"),
+    ],
 }
 
 

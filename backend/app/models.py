@@ -42,6 +42,7 @@ class Position(Base):
     small_price = Column(Float, nullable=False)
     is_paper = Column(Boolean, default=True)
     status = Column(String(16), default="open", index=True)  # open | closed
+    ladder_rule_id = Column(Integer, nullable=True, index=True)
 
 
 class TradeHistory(Base):
@@ -94,4 +95,27 @@ class LastQuote(Base):
     bid = Column(Float, default=0.0)
     ask = Column(Float, default=0.0)
     ltp = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LadderRule(Base):
+    """Multiple entry/exit/cap ladders per pair-side. Each ladder fires and
+    runs independently with its own weight cap and armed state."""
+    __tablename__ = "ladder_rules"
+
+    id = Column(Integer, primary_key=True)
+    pair_name = Column(String(64), nullable=False, index=True)
+    side = Column(String(16), nullable=False, index=True)  # decrease | increase
+
+    entry = Column(Float, nullable=True)
+    exit = Column(Float, nullable=True)
+    max_weight_grams = Column(Integer, nullable=True)
+
+    pending_max_weight_grams = Column(Integer, nullable=True)
+    has_pending_cap = Column(Integer, default=0, nullable=False)
+
+    sort_order = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

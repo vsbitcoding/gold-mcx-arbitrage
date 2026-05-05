@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, control, feed, history, pairs, positions, ws as ws_route
+from app.routes import auth, control, feed, history, ladders, pairs, positions, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
+from app.services.ladder_migration import migrate_once as migrate_ladders
 from app.services.maintenance import start_in_background as start_maintenance
 from app.services.market_data import quote_store
 
@@ -33,6 +34,7 @@ app.include_router(positions.router)
 app.include_router(history.router)
 app.include_router(control.router)
 app.include_router(feed.router)
+app.include_router(ladders.router)
 app.include_router(ws_route.router)
 
 
@@ -40,6 +42,7 @@ app.include_router(ws_route.router)
 async def startup() -> None:
     Base.metadata.create_all(bind=engine)
     run_simple_migrations()
+    migrate_ladders()
     restored = quote_store.restore_from_db()
     if restored:
         logging.getLogger("startup").info("Restored %d cached quotes from DB", restored)

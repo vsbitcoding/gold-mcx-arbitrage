@@ -55,4 +55,16 @@ export const api = {
   pauseAll: () => request("/api/control/pause-all", { method: "POST" }),
   health: () => request("/api/health"),
   feedStatus: () => request("/api/feed/status"),
+  // Ladder CRUD
+  createLadder: (body) => request("/api/ladders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
+  updateLadder: (id, body) => request(`/api/ladders/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
+  deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
 };

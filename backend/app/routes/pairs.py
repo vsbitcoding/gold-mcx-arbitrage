@@ -1,85 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.config import MAX_ALLOWED_WEIGHT_GRAMS, PAIRS
 from app.database import get_db
-from app.models import PairRule, Position
 from app.security import get_current_user
 from app.services.snapshot import build_live_payload
-from app.services.trade_engine import prime_armed_state
 
 router = APIRouter(prefix="/api/pairs", tags=["pairs"])
 
 
-class RuleUpdate(BaseModel):
-    decrease_entry: float | None = None
-    decrease_exit: float | None = None
-    increase_entry: float | None = None
-    increase_exit: float | None = None
-    max_weight_grams: int | None = None
-
-
-def _ensure_rules(db: Session) -> None:
-    existing = {r.pair_name for r in db.query(PairRule).all()}
-    for p in PAIRS:
-        if p["name"] not in existing:
-            db.add(PairRule(pair_name=p["name"]))
-    db.commit()
-
-
 @router.get("/live")
 def live(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
-    _ensure_rules(db)
     return build_live_payload(db)
-
-
-@router.put("/{pair_name}/rule")
-def update_rule(
-    pair_name: str,
-    body: RuleUpdate,
-    db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
-):
-    valid = {p["name"] for p in PAIRS}
-    if pair_name not in valid:
-        raise HTTPException(404, "Unknown pair")
-
-    if body.max_weight_grams is not None and body.max_weight_grams > MAX_ALLOWED_WEIGHT_GRAMS:
-        raise HTTPException(
-            400,
-            f"Max weight cannot exceed {MAX_ALLOWED_WEIGHT_GRAMS}g",
-        )
-    if body.max_weight_grams is not None and body.max_weight_grams < 0:
-        raise HTTPException(400, "Max weight must be 0 or higher")
-
-    rule = db.query(PairRule).filter(PairRule.pair_name == pair_name).first()
-    if not rule:
-        rule = PairRule(pair_name=pair_name)
-        db.add(rule)
-
-    rule.decrease_entry = body.decrease_entry
-    rule.decrease_exit = body.decrease_exit
-    rule.increase_entry = body.increase_entry
-    rule.increase_exit = body.increase_exit
-
-    # Cap (max_weight_grams) handling:
-    # - If any open positions exist for this pair → store as PENDING (applies after square-off)
-    # - If no open positions → apply immediately
-    has_open = (
-        db.query(Position)
-        .filter(Position.pair_name == pair_name, Position.status == "open")
-        .first()
-        is not None
-    )
-    if has_open and body.max_weight_grams != rule.max_weight_grams:
-        rule.pending_max_weight_grams = body.max_weight_grams
-        rule.has_pending_cap = 1
-    else:
-        rule.max_weight_grams = body.max_weight_grams
-        rule.pending_max_weight_grams = None
-        rule.has_pending_cap = 0
-
-    db.commit()
-    prime_armed_state(pair_name)
-    return {"ok": True}

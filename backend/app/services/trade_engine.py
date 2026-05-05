@@ -1,25 +1,24 @@
-"""Trigger detection + paper trade execution.
+"""Trigger detection + paper trade execution with multiple ladders per side.
 
-PnL & exit logic uses the COVER-SIDE spread (the side at which you'd actually
-close the trade), per client's specification:
+Each pair-side can have many LadderRules. Each ladder fires and runs
+INDEPENDENTLY:
+  - Own entry threshold
+  - Own exit threshold
+  - Own weight cap (cumulative across ladder's open positions)
+  - Own armed state (must leave + re-enter trigger zone after fill)
 
-  Decrease trade  → opens at Decrease spread (sell big bid + buy small ask)
-                  → closes at Increase spread (buy big ask + sell small bid)
-                  → PnL = entry_decrease − current_increase
-
-  Increase trade  → opens at Increase spread (buy big ask + sell small bid)
-                  → closes at Decrease spread (sell big bid + buy small ask)
-                  → PnL = current_decrease − entry_increase
-
-Decrease and Increase sides run independently per pair — both can have a
-simultaneous open position.
+Cap semantics (per ladder):
+  - On save → fire to current cap (back-to-back if spread in zone)
+  - Cap full → no more fires until current ladder positions all square off
+  - Cap mid-trade change → stored as PENDING, applies after square-off
 """
 from datetime import datetime
+from typing import List
 
 from sqlalchemy.orm import Session
 
 from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, PAIRS, cycle_grams
-from app.models import PairRule, Position, TradeHistory
+from app.models import LadderRule, Position, TradeHistory
 from app.services.spread_engine import compute_pair
 
 
@@ -27,160 +26,122 @@ def _pair_def(name: str) -> dict | None:
     return next((p for p in PAIRS if p["name"] == name), None)
 
 
-def open_position_for_side(db: Session, pair_name: str, mode: str) -> Position | None:
-    return (
-        db.query(Position)
-        .filter(
-            Position.pair_name == pair_name,
-            Position.mode == mode,
-            Position.status == "open",
-        )
-        .first()
-    )
+# Per-ladder armed state (in-memory)
+_armed: dict[int, bool] = {}
 
 
-def open_positions_for_pair(db: Session, pair_name: str) -> list[Position]:
-    return (
-        db.query(Position)
-        .filter(Position.pair_name == pair_name, Position.status == "open")
-        .all()
-    )
+def prime_armed_state(ladder_id: int) -> None:
+    """Called when a ladder rule is saved/created so it fires immediately if
+    spread is already in trigger zone."""
+    _armed[ladder_id] = True
 
 
-def open_weight_grams(db: Session, pair_name: str, big_instrument: str) -> int:
-    """Sum of grams across all open positions for this pair."""
-    g = GRAMS_PER_LOT.get(big_instrument, 0)
-    rows = (
-        db.query(Position)
-        .filter(Position.pair_name == pair_name, Position.status == "open")
-        .all()
-    )
-    return sum(r.big_lots * g for r in rows)
-
-
-def effective_max_weight(rule: PairRule | None) -> int:
-    """Return user-set cap, or default 1000g if not set."""
+def effective_max_weight(rule: LadderRule | None) -> int:
     cap = rule.max_weight_grams if rule else None
     return cap if cap and cap > 0 else DEFAULT_MAX_WEIGHT_GRAMS
 
 
-def can_open_new_cycle(db: Session, pair: dict, rule: PairRule) -> bool:
-    """Cumulative weight cap (Option B). Defaults to 1000g if unset."""
+def open_positions_for_ladder(db: Session, ladder_id: int) -> List[Position]:
+    return (
+        db.query(Position)
+        .filter(Position.ladder_rule_id == ladder_id, Position.status == "open")
+        .all()
+    )
+
+
+def open_weight_grams_for_ladder(db: Session, ladder_id: int, big_instrument: str) -> int:
+    g = GRAMS_PER_LOT.get(big_instrument, 0)
+    rows = open_positions_for_ladder(db, ladder_id)
+    return sum(r.big_lots * g for r in rows)
+
+
+def can_open_new_cycle_for_ladder(
+    db: Session, pair: dict, rule: LadderRule
+) -> bool:
     cap = effective_max_weight(rule)
-    current = open_weight_grams(db, pair["name"], pair["big"])
+    current = open_weight_grams_for_ladder(db, rule.id, pair["big"])
     new_cycle = cycle_grams(pair)
     return (current + new_cycle) <= cap
 
 
 def reconcile_pending_caps(db: Session) -> None:
-    """Apply pending cap changes once a pair has no open positions (square-off)."""
-    rules = (
-        db.query(PairRule)
-        .filter(PairRule.has_pending_cap == 1)
-        .all()
-    )
+    """Apply pending cap changes once a ladder has no open positions."""
+    rules = db.query(LadderRule).filter(LadderRule.has_pending_cap == 1).all()
     for rule in rules:
-        has_open = (
-            db.query(Position)
-            .filter(Position.pair_name == rule.pair_name, Position.status == "open")
-            .first()
-            is not None
-        )
-        if not has_open:
+        if not open_positions_for_ladder(db, rule.id):
             rule.max_weight_grams = rule.pending_max_weight_grams
             rule.pending_max_weight_grams = None
             rule.has_pending_cap = 0
-            # Re-prime armed so next round can fire immediately if spread is in zone
-            _dec_armed[rule.pair_name] = True
-            _inc_armed[rule.pair_name] = True
+            _armed[rule.id] = True  # re-prime for next round
 
 
 def evaluate(db: Session) -> None:
-    """Per-side evaluation:
-
-    1. While armed AND spread in trigger zone AND cap has room → fire.
-       Keeps firing every tick until cap is full (continuous fill).
-    2. Once cap full → disarm. Cap change alone does NOT re-fire.
-    3. Spread leaves zone → re-arm (next round).
-    4. Each open position has its own exit watch on the cover-side spread.
-    """
     reconcile_pending_caps(db)
-    rules = db.query(PairRule).all()
-    for rule in rules:
-        pair = _pair_def(rule.pair_name)
+
+    # Group ladder rules by pair to avoid recomputing snapshots
+    rules = db.query(LadderRule).filter(LadderRule.enabled == True).all()
+    by_pair: dict[str, list[LadderRule]] = {}
+    for r in rules:
+        by_pair.setdefault(r.pair_name, []).append(r)
+
+    for pair_name, ladders in by_pair.items():
+        pair = _pair_def(pair_name)
         if not pair:
             continue
         snap = compute_pair(pair)
         dec_spread = snap["decrease_spread"]
         inc_spread = snap["increase_spread"]
 
-        # ----- Decrease side -----
-        if rule.decrease_entry is not None and dec_spread is not None:
-            if dec_spread < rule.decrease_entry:
-                # Spread outside trigger zone → arm for the next round
-                _dec_armed[rule.pair_name] = True
-            elif _dec_armed.get(rule.pair_name, False):
-                # Spread in zone AND armed → try to fire (cap permitting)
-                if can_open_new_cycle(db, pair, rule):
-                    _open_trade(db, pair, "decrease", snap)
-                    db.flush()
-                    if not can_open_new_cycle(db, pair, rule):
-                        # Cap is now full → disarm; must exit zone to re-fill
-                        _dec_armed[rule.pair_name] = False
-                else:
-                    # Cap was already full → disarm
-                    _dec_armed[rule.pair_name] = False
-
-        # Auto-close every open Decrease pos when cover spread hits exit
-        if rule.decrease_exit is not None and inc_spread is not None:
-            for p in db.query(Position).filter(
-                Position.pair_name == rule.pair_name,
-                Position.mode == "decrease",
-                Position.status == "open",
-            ).all():
-                if inc_spread <= rule.decrease_exit:
-                    _close_trade(db, p, snap, closed_by="auto")
-
-        # ----- Increase side -----
-        if rule.increase_entry is not None and inc_spread is not None:
-            if inc_spread > rule.increase_entry:
-                _inc_armed[rule.pair_name] = True
-            elif _inc_armed.get(rule.pair_name, False):
-                if can_open_new_cycle(db, pair, rule):
-                    _open_trade(db, pair, "increase", snap)
-                    db.flush()
-                    if not can_open_new_cycle(db, pair, rule):
-                        _inc_armed[rule.pair_name] = False
-                else:
-                    _inc_armed[rule.pair_name] = False
-
-        # Auto-close every open Increase pos when cover spread hits exit
-        if rule.increase_exit is not None and dec_spread is not None:
-            for p in db.query(Position).filter(
-                Position.pair_name == rule.pair_name,
-                Position.mode == "increase",
-                Position.status == "open",
-            ).all():
-                if dec_spread >= rule.increase_exit:
-                    _close_trade(db, p, snap, closed_by="auto")
+        for rule in ladders:
+            if rule.side == "decrease":
+                _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread)
+            else:
+                _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread)
 
     db.commit()
 
 
-# Per pair-side armed state. After firing we disarm; next fire requires spread
-# to leave the trigger zone first (prevents runaway loops).
-_dec_armed: dict[str, bool] = {}
-_inc_armed: dict[str, bool] = {}
+def _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread):
+    # Entry/firing logic
+    if rule.entry is not None and dec_spread is not None:
+        if dec_spread < rule.entry:
+            _armed[rule.id] = True
+        elif _armed.get(rule.id, False):
+            if can_open_new_cycle_for_ladder(db, pair, rule):
+                _open_trade(db, pair, "decrease", snap, rule.id)
+                db.flush()
+                if not can_open_new_cycle_for_ladder(db, pair, rule):
+                    _armed[rule.id] = False
+            else:
+                _armed[rule.id] = False
+
+    # Exit logic — close all open positions for this ladder when cover spread hits exit
+    if rule.exit is not None and inc_spread is not None:
+        for p in open_positions_for_ladder(db, rule.id):
+            if inc_spread <= rule.exit:
+                _close_trade(db, p, snap, closed_by="auto")
 
 
-def prime_armed_state(pair_name: str) -> None:
-    """Call when client saves a new rule — primes both sides so the next valid
-    tick fires immediately if spread is already inside the trigger zone."""
-    _dec_armed[pair_name] = True
-    _inc_armed[pair_name] = True
+def _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread):
+    if rule.entry is not None and inc_spread is not None:
+        if inc_spread > rule.entry:
+            _armed[rule.id] = True
+        elif _armed.get(rule.id, False):
+            if can_open_new_cycle_for_ladder(db, pair, rule):
+                _open_trade(db, pair, "increase", snap, rule.id)
+                db.flush()
+                if not can_open_new_cycle_for_ladder(db, pair, rule):
+                    _armed[rule.id] = False
+            else:
+                _armed[rule.id] = False
+
+    if rule.exit is not None and dec_spread is not None:
+        for p in open_positions_for_ladder(db, rule.id):
+            if dec_spread >= rule.exit:
+                _close_trade(db, p, snap, closed_by="auto")
 
 
-def _open_trade(db: Session, pair: dict, mode: str, snap: dict) -> None:
+def _open_trade(db: Session, pair: dict, mode: str, snap: dict, ladder_id: int) -> None:
     if mode == "decrease":
         big_price = snap["big_bid"]
         small_price = snap["small_ask"]
@@ -200,19 +161,19 @@ def _open_trade(db: Session, pair: dict, mode: str, snap: dict) -> None:
         small_price=small_price,
         is_paper=True,
         status="open",
+        ladder_rule_id=ladder_id,
     )
     db.add(pos)
 
 
 def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None:
-    """Close uses the COVER-SIDE spread (opposite of entry)."""
     if pos.mode == "decrease":
-        exit_spread = snap["increase_spread"]   # cover by buying big back
+        exit_spread = snap["increase_spread"]
         big_exit = snap["big_ask"]
         small_exit = snap["small_bid"]
         pnl = (pos.entry_spread - exit_spread) * pos.big_lots
     else:
-        exit_spread = snap["decrease_spread"]   # cover by selling big back
+        exit_spread = snap["decrease_spread"]
         big_exit = snap["big_bid"]
         small_exit = snap["small_ask"]
         pnl = (exit_spread - pos.entry_spread) * pos.big_lots
@@ -263,7 +224,6 @@ def manual_close(db: Session, position_id: int) -> TradeHistory | None:
 
 
 def live_pnl(pos: Position) -> float:
-    """Live PnL using cover-side spread (the spread you'd actually close at)."""
     pair = _pair_def(pos.pair_name)
     if not pair:
         return 0.0
@@ -273,7 +233,6 @@ def live_pnl(pos: Position) -> float:
         if cover is None:
             return 0.0
         return round((pos.entry_spread - cover) * pos.big_lots, 2)
-    # increase
     cover = snap["decrease_spread"]
     if cover is None:
         return 0.0
