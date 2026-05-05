@@ -3,16 +3,16 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.config import PAIRS
 from app.database import get_db
 from app.models import TradeHistory
 from app.security import get_current_user
+from app.services import pair_registry
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 def _pair_def(name: str) -> dict | None:
-    return next((p for p in PAIRS if p["name"] == name), None)
+    return pair_registry.get_pair(name)
 
 
 @router.get("")

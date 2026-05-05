@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.config import GRAMS_PER_LOT, PAIRS
+from app.config import GRAMS_PER_LOT
 from app.database import get_db
 from app.models import Position
 from app.security import get_current_user
+from app.services import pair_registry
 from app.services.spread_engine import compute_pair
 from app.services.trade_engine import live_pnl, manual_close
 
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api/positions", tags=["positions"])
 
 
 def _enrich(p: Position) -> dict:
-    pair_def = next((x for x in PAIRS if x["name"] == p.pair_name), None)
+    pair_def = pair_registry.get_pair(p.pair_name)
     snap = compute_pair(pair_def) if pair_def else None
     big_inst = pair_def["big"] if pair_def else None
     small_inst = pair_def["small"] if pair_def else None
