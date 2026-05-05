@@ -2,16 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.config import MAX_ALLOWED_WEIGHT_GRAMS, PAIRS
+from app.config import MAX_ALLOWED_WEIGHT_GRAMS
 from app.database import get_db
 from app.models import LadderRule, Position
 from app.security import get_current_user
+from app.services import pair_registry
 from app.services.trade_engine import prime_armed_state
 
 router = APIRouter(prefix="/api/ladders", tags=["ladders"])
-
-
-VALID_PAIRS = {p["name"] for p in PAIRS}
 
 
 class LadderCreate(BaseModel):
@@ -65,7 +63,7 @@ def create_ladder(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
-    if body.pair_name not in VALID_PAIRS:
+    if not pair_registry.get_pair(body.pair_name):
         raise HTTPException(404, "Unknown pair")
     _validate_weight(body.max_weight_grams)
 

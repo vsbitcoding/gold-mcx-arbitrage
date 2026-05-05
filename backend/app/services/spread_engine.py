@@ -1,39 +1,69 @@
-"""Pure spread math. Decrease and Increase spreads from bid/ask only (no LTP)."""
-from app.config import MULTIPLIERS, PAIRS
+"""Per-pair spread math. Reads quotes from quote_store keyed by security_id.
+
+Decrease Spread = (Big.bid × big_mult) − (Small.ask × small_mult)
+Increase Spread = (Big.ask × big_mult) − (Small.bid × small_mult)
+
+For cross pairs the multipliers come from MULTIPLIERS.
+For calendar pairs both legs use the SAME instrument multiplier.
+"""
+from __future__ import annotations
+
+from app.config import MULTIPLIERS
 from app.services.market_data import quote_store
+from app.services.pair_registry import get_pairs
 
 
 def _rate(price: float, instrument: str) -> float:
     return price * MULTIPLIERS.get(instrument, 1.0)
 
 
+def _bid(q): return q.bid or q.ltp
+def _ask(q): return q.ask or q.ltp
+
+
 def compute_pair(pair: dict) -> dict:
-    """Compute decrease and increase spreads for a single pair."""
-    big_q = quote_store.get(pair["big"])
-    small_q = quote_store.get(pair["small"])
+    """Compute decrease/increase spreads for a pair using its security_id quotes."""
+    big_q = quote_store.get(pair["big_security_id"])
+    small_q = quote_store.get(pair["small_security_id"])
+
+    big_bid = _bid(big_q); big_ask = _ask(big_q)
+    small_bid = _bid(small_q); small_ask = _ask(small_q)
 
     decrease_spread = None
     increase_spread = None
 
-    if big_q.bid and small_q.ask:
-        decrease_spread = round(_rate(big_q.bid, pair["big"]) - _rate(small_q.ask, pair["small"]), 4)
-    if big_q.ask and small_q.bid:
-        increase_spread = round(_rate(big_q.ask, pair["big"]) - _rate(small_q.bid, pair["small"]), 4)
+    if big_bid and small_ask:
+        decrease_spread = round(
+            _rate(big_bid, pair["big"]) - _rate(small_ask, pair["small"]), 4
+        )
+    if big_ask and small_bid:
+        increase_spread = round(
+            _rate(big_ask, pair["big"]) - _rate(small_bid, pair["small"]), 4
+        )
 
     return {
         "name": pair["name"],
+        "type": pair["type"],
+        "label": pair.get("label", pair["name"]),
+        "expiry_label": pair.get("expiry_label", ""),
         "big": pair["big"],
         "small": pair["small"],
         "big_lots": pair["big_lots"],
         "small_lots": pair["small_lots"],
-        "big_bid": big_q.bid,
-        "big_ask": big_q.ask,
-        "small_bid": small_q.bid,
-        "small_ask": small_q.ask,
+        "big_security_id": pair["big_security_id"],
+        "small_security_id": pair["small_security_id"],
+        "big_trading_symbol": pair.get("big_trading_symbol", ""),
+        "small_trading_symbol": pair.get("small_trading_symbol", ""),
+        "big_expiry": pair.get("big_expiry", ""),
+        "small_expiry": pair.get("small_expiry", ""),
+        "big_bid": big_bid,
+        "big_ask": big_ask,
+        "small_bid": small_bid,
+        "small_ask": small_ask,
         "decrease_spread": decrease_spread,
         "increase_spread": increase_spread,
     }
 
 
 def compute_all() -> list[dict]:
-    return [compute_pair(p) for p in PAIRS]
+    return [compute_pair(p) for p in get_pairs()]

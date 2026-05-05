@@ -360,7 +360,10 @@ const PairRow = memo(function PairRow({ row, onManage }) {
   const incCount = row.increase_ladders.length;
   return (
     <tr className={`pair-row status-${row.status}`}>
-      <td className="pair-name">{row.name}</td>
+      <td className="pair-name">
+        <div>{row.label || row.name}</div>
+        {row.expiry_label && <div className="pair-expiry">{row.expiry_label}</div>}
+      </td>
       <td className="spread-num dec-tone">{fmtSpread(row.decrease_spread)}</td>
       <td className="spread-num inc-tone">{fmtSpread(row.increase_spread)}</td>
       <td>
@@ -381,26 +384,50 @@ const PairRow = memo(function PairRow({ row, onManage }) {
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.status === next.row.status &&
   prev.row.decrease_ladders === next.row.decrease_ladders &&
-  prev.row.increase_ladders === next.row.increase_ladders
+  prev.row.increase_ladders === next.row.increase_ladders &&
+  prev.row.expiry_label === next.row.expiry_label
 ));
+
+const PAIR_PAGE_SIZE = 12;
 
 export default function LiveSpreadTable({ rows, onSaved }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [tab, setTab] = useState("cross");  // cross | calendar
+  const [page, setPage] = useState(1);
   const [openPair, setOpenPair] = useState(null);
 
-  const counts = useMemo(() => ({
-    all: rows.length,
-    armed: rows.filter((r) => r.status === "armed").length,
-    in_position: rows.filter((r) => r.status === "in_position").length,
-    idle: rows.filter((r) => r.status === "idle").length,
-  }), [rows]);
+  // Split by type
+  const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
+  const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
+  const tabRows = tab === "cross" ? crossRows : calendarRows;
 
-  const filtered = rows.filter((r) => {
-    if (search && !r.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const counts = useMemo(() => ({
+    all: tabRows.length,
+    armed: tabRows.filter((r) => r.status === "armed").length,
+    in_position: tabRows.filter((r) => r.status === "in_position").length,
+    idle: tabRows.filter((r) => r.status === "idle").length,
+  }), [tabRows]);
+
+  const filtered = tabRows.filter((r) => {
+    const term = search.toLowerCase();
+    if (term) {
+      const hit = (r.name || "").toLowerCase().includes(term) ||
+                  (r.label || "").toLowerCase().includes(term) ||
+                  (r.expiry_label || "").toLowerCase().includes(term);
+      if (!hit) return false;
+    }
     if (filter === "all") return true;
     return r.status === filter;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAIR_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PAIR_PAGE_SIZE;
+  const slice = filtered.slice(start, start + PAIR_PAGE_SIZE);
+
+  // Reset to page 1 on tab/filter change
+  useEffect(() => { setPage(1); }, [tab, filter, search]);
 
   const openRow = openPair ? rows.find((r) => r.name === openPair) : null;
 
@@ -408,9 +435,17 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     <div className="sessions-container">
       <div className="sessions-header">
         <h2>Live Spread Monitor</h2>
+        <div className="pair-tabs">
+          <button className={`pair-tab ${tab === "cross" ? "active" : ""}`} onClick={() => setTab("cross")}>
+            Cross Pairs <span className="count">{crossRows.length}</span>
+          </button>
+          <button className={`pair-tab ${tab === "calendar" ? "active" : ""}`} onClick={() => setTab("calendar")}>
+            Calendar Spreads <span className="count">{calendarRows.length}</span>
+          </button>
+        </div>
         <div className="header-controls">
           <div className="search-container">
-            <input placeholder="Search pair..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="filter-tabs">
             <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
@@ -433,7 +468,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         <table className="pair-table">
           <thead>
             <tr>
-              <th>Pair</th>
+              <th>{tab === "cross" ? "Pair" : "Calendar Spread"}</th>
               <th>Decrease Spread</th>
               <th>Increase Spread</th>
               <th>Status</th>
@@ -445,12 +480,25 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="empty-state">No pairs match the filter.</td></tr>
-            ) : filtered.map((r) => (
+            ) : slice.map((r) => (
               <PairRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
             ))}
           </tbody>
         </table>
       </div>
+
+      {filtered.length > PAIR_PAGE_SIZE && (
+        <div className="pagination-controls">
+          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, filtered.length)} of {filtered.length}</div>
+          <div className="pager">
+            <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+            <button className="active">{safePage}</button>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+            <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+          </div>
+        </div>
+      )}
 
       {openRow && (
         <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />

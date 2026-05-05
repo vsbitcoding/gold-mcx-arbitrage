@@ -17,13 +17,14 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, PAIRS, cycle_grams
+from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, cycle_grams
 from app.models import LadderRule, Position, TradeHistory
+from app.services import pair_registry
 from app.services.spread_engine import compute_pair
 
 
 def _pair_def(name: str) -> dict | None:
-    return next((p for p in PAIRS if p["name"] == name), None)
+    return pair_registry.get_pair(name)
 
 
 # Per-ladder armed state (in-memory)

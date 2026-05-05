@@ -1191,6 +1191,53 @@ input.cell:focus {
   font-size: 13px;
 }
 
+/* ===== Pair tabs (Cross / Calendar) ===== */
+.pair-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: -1px;
+  width: 100%;
+}
+.pair-tab {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pair-tab:hover { color: var(--text-primary); }
+.pair-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.pair-tab .count {
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  border-radius: 100px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pair-tab.active .count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.pair-expiry {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 /* ===== Compact pair table ===== */
 table.pair-table { width: 100%; border-collapse: collapse; }
 table.pair-table th {

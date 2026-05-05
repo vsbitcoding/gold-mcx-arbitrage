@@ -36,15 +36,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-PAIRS = [
-    {"name": "Petal-Guinea", "big": "petal", "small": "guinea", "big_lots": 8, "small_lots": 1},
-    {"name": "Petal-Ten", "big": "petal", "small": "ten", "big_lots": 10, "small_lots": 1},
-    {"name": "Petal-Mini", "big": "petal", "small": "mini", "big_lots": 100, "small_lots": 1},
-    {"name": "Guinea-Ten", "big": "guinea", "small": "ten", "big_lots": 5, "small_lots": 4},
-    {"name": "Guinea-Mini", "big": "guinea", "small": "mini", "big_lots": 25, "small_lots": 2},
-    {"name": "Ten-Mini", "big": "ten", "small": "mini", "big_lots": 10, "small_lots": 1},
-]
-
 MULTIPLIERS = {"petal": 10.0, "guinea": 1.25, "ten": 1.0, "mini": 1.0}
 
 # Gold weight (grams) per single lot of each MCX contract
@@ -58,4 +49,4 @@ MAX_ALLOWED_WEIGHT_GRAMS = 1000
 
 def cycle_grams(pair: dict) -> int:
     """Gold weight (grams) of one full hedge cycle for this pair (big-side)."""
-    return pair["big_lots"] * GRAMS_PER_LOT[pair["big"]]
+    return pair["big_lots"] * GRAMS_PER_LOT.get(pair["big"], 0)

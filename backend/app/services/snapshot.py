@@ -1,8 +1,9 @@
-"""Build live spread payload with multi-ladder rule lists per pair-side."""
+"""Build live spread payload with multi-ladder rules per pair-side."""
 from sqlalchemy.orm import Session
 
-from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, MAX_ALLOWED_WEIGHT_GRAMS, PAIRS, cycle_grams
+from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, MAX_ALLOWED_WEIGHT_GRAMS, cycle_grams
 from app.models import LadderRule, Position
+from app.services import pair_registry
 from app.services.spread_engine import compute_all
 from app.services.trade_engine import effective_max_weight
 
@@ -20,22 +21,20 @@ def _ladder_dict(r: LadderRule, open_weight: int) -> dict:
         "open_weight_grams": open_weight,
         "sort_order": r.sort_order or 0,
         "enabled": bool(r.enabled),
-        "open_count": 0,  # filled below
+        "open_count": 0,
     }
 
 
 def build_live_payload(db: Session) -> list[dict]:
-    # Load all ladder rules
     ladders = db.query(LadderRule).order_by(LadderRule.sort_order, LadderRule.id).all()
 
-    # Open positions grouped by ladder_rule_id
     open_positions = db.query(Position).filter(Position.status == "open").all()
     open_by_ladder: dict[int, list[Position]] = {}
     for p in open_positions:
         if p.ladder_rule_id is not None:
             open_by_ladder.setdefault(p.ladder_rule_id, []).append(p)
 
-    pair_def_by_name = {p["name"]: p for p in PAIRS}
+    pair_def_by_name = {p["name"]: p for p in pair_registry.get_pairs()}
 
     snaps = compute_all()
     out = []
@@ -65,7 +64,6 @@ def build_live_payload(db: Session) -> list[dict]:
                 if opens:
                     any_increase_open = True
 
-        # Pair-level status
         if any_decrease_open or any_increase_open:
             status = "in_position"
         elif decrease_ladders or increase_ladders:

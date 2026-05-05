@@ -1,13 +1,11 @@
-"""Dhan WebSocket live feed using official dhanhq SDK MarketFeed.
+"""Dhan WebSocket live feed for ALL active MCX gold contracts (~24 instruments).
 
-24/7 design:
-  - On startup: generate access_token via TOTP+MPIN, resolve current MCX securities
-  - Run dhanhq MarketFeed in dedicated thread (handles binary decode + reconnect)
-  - Watchdog thread: every 5 min checks token expiry; if < 30 min remaining,
-    closes WS to force reconnect with fresh token
-  - On disconnect (network/token/market close): retry loop regenerates token
-    and reconnects with exponential backoff capped at 2 min
-  - Falls back to simulated feed only if credentials are completely missing
+Auto-flow:
+  1. Generate access_token via TOTP+MPIN (services.dhan_auth)
+  2. Refresh pair_registry → resolves all active contracts and builds 56 pairs
+  3. Subscribe to all unique security_ids in Full mode
+  4. quote_store keyed by security_id → spread engine pulls per-pair
+  5. Watchdog handles token refresh, silent-feed reconnect, daily refresh
 """
 from __future__ import annotations
 
@@ -18,6 +16,15 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from app.config import settings
+from app.database import SessionLocal
+from app.services import dhan_auth, pair_registry
+from app.services.broadcaster import broadcaster
+from app.services.market_data import quote_store
+from app.services.snapshot import build_live_payload
+from app.services.trade_engine import evaluate
+
+log = logging.getLogger("dhan_feed")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
@@ -26,42 +33,28 @@ def _ist_now() -> datetime:
 
 
 def is_market_open() -> bool:
-    """MCX commodity hours: Mon-Fri 9:00 AM to 11:30 PM IST. Saturday morning
-    session and holidays not supported (treats as closed — safe default)."""
     n = _ist_now()
-    # weekday(): Mon=0 ... Sun=6. Closed on Sat (5) and Sun (6).
     if n.weekday() >= 5:
         return False
     open_t = n.replace(hour=9, minute=0, second=0, microsecond=0)
     close_t = n.replace(hour=23, minute=30, second=0, microsecond=0)
     return open_t <= n <= close_t
 
-from app.config import settings
-from app.database import SessionLocal
-from app.services import dhan_auth
-from app.services.broadcaster import broadcaster
-from app.services.instrument_resolver import resolve_near_month_ids
-from app.services.market_data import quote_store
-from app.services.snapshot import build_live_payload
-from app.services.trade_engine import evaluate
 
-log = logging.getLogger("dhan_feed")
-
-# Module-level state for status endpoint + watchdog
 _state: dict = {
-    "mode": "starting",          # starting | live | simulated | reconnecting
+    "mode": "starting",
     "client_id": "",
     "client_name": "",
     "token_expiry_epoch": 0.0,
     "last_tick_epoch": 0.0,
     "last_token_refresh_epoch": 0.0,
-    "instruments": {},
+    "instruments": {},  # security_id -> {short, trading_symbol, expiry}
     "ws_connected": False,
     "reconnect_count": 0,
     "last_error": "",
 }
 _state_lock = threading.Lock()
-_active_feed = None  # current MarketFeed instance (for watchdog to close)
+_active_feed = None
 
 
 def get_status() -> dict:
@@ -94,20 +87,14 @@ def _eval_and_broadcast() -> None:
         db.close()
 
 
-# Backward-compat alias
-def _eval_safely() -> None:
-    _eval_and_broadcast()
-
-
 _last_reconnect_epoch: float = 0.0
-RECONNECT_GRACE_SECONDS = 300  # don't force another reconnect within 5 min
+RECONNECT_GRACE_SECONDS = 300
 
 
 def _trigger_reconnect(reason: str) -> None:
-    """Force a WS reconnect, with grace-period guard so we never bounce."""
     global _active_feed, _last_reconnect_epoch
     if time.time() - _last_reconnect_epoch < RECONNECT_GRACE_SECONDS:
-        return  # in grace window, skip
+        return
     _last_reconnect_epoch = time.time()
     log.warning("Watchdog forcing reconnect: %s", reason)
     dhan_auth.invalidate()
@@ -119,10 +106,6 @@ def _trigger_reconnect(reason: str) -> None:
 
 
 def _watchdog() -> None:
-    """Watchdog signals (with 5-min grace between forced reconnects):
-       1. Token expires in <30 min → force fresh login
-       2. Market hours + no tick in 3+ min → silent WS, reconnect
-       3. Just AFTER market open (9:01-9:05 IST) → daily fresh subscription"""
     last_postmarket_open = None
     while True:
         time.sleep(60)
@@ -131,19 +114,14 @@ def _watchdog() -> None:
             mode = _state["mode"]
             last_tick = _state["last_tick_epoch"]
 
-        # 1. Token expiring soon
         if expiry and (expiry - time.time()) < 30 * 60:
             _trigger_reconnect("token expiring")
             continue
-
-        # 2. Silent feed during market hours
         if mode == "live" and is_market_open() and last_tick:
             age = time.time() - last_tick
             if age > 180:
                 _trigger_reconnect(f"no tick for {int(age)}s during market hours")
                 continue
-
-        # 3. Daily fresh-subscription right AFTER market opens (9:01-9:05 IST)
         ist = _ist_now()
         today = ist.date()
         if (
@@ -157,7 +135,6 @@ def _watchdog() -> None:
 
 
 def _run_real_feed_thread() -> None:
-    """Blocking SDK feed loop with reconnect + token refresh."""
     global _active_feed
     from dhanhq import marketfeed
     from dhanhq.dhan_context import DhanContext
@@ -184,35 +161,22 @@ def _run_real_feed_thread() -> None:
                 token.expires_in() / 3600,
             )
 
-            # Logic 1 (Mini Next-Month): Petal/Guinea/Ten = nearest end-of-month
-            # (with 3-day buffer to skip illiquid expiry days), Mini = next-month
-            # contract after that expiry. Auto-rolls every month.
-            resolved = resolve_near_month_ids(min_days_ahead=3, mini_rule="next_month")
-            if not resolved:
-                # Last-resort fallback if buffer too aggressive
-                resolved = resolve_near_month_ids(min_days_ahead=0, mini_rule="next_month")
-            if not resolved:
-                raise RuntimeError("No active MCX gold instruments resolved.")
+            # Refresh pair registry → build all 56 pairs and gather subscription list
+            n = pair_registry.refresh(min_days_ahead=1, max_per_instrument=6)
+            if n == 0:
+                raise RuntimeError("Pair registry empty — no active MCX gold contracts resolved.")
 
-            sec_to_name = {str(info["security_id"]): short for short, info in resolved.items()}
-            instruments_meta = {
-                short: {
-                    "security_id": info["security_id"],
-                    "trading_symbol": info["trading_symbol"],
-                    "expiry": info["expiry"].strftime("%Y-%m-%d"),
-                }
-                for short, info in resolved.items()
-            }
-            _set_state(instruments=instruments_meta)
+            subs = pair_registry.get_subscriptions()
+            _set_state(instruments=subs)
 
+            # Build instrument tuples: (exchange, security_id, request_code)
             instruments = [
-                (marketfeed.MarketFeed.MCX, str(info["security_id"]), marketfeed.MarketFeed.Full)
-                for info in resolved.values()
+                (marketfeed.MarketFeed.MCX, str(sid), marketfeed.MarketFeed.Full)
+                for sid in subs.keys()
             ]
             log.info(
-                "Subscribing %d instruments: %s",
-                len(instruments),
-                ", ".join(f"{n}={i['security_id']}" for n, i in resolved.items()),
+                "Subscribing to %d unique contracts for %d pairs",
+                len(instruments), n,
             )
 
             ctx = DhanContext(settings.DHAN_CLIENT_ID, token.access_token)
@@ -224,17 +188,15 @@ def _run_real_feed_thread() -> None:
                     return
                 t = data.get("type")
                 sec_id = str(data.get("security_id", ""))
-                name = sec_to_name.get(sec_id)
-                if not name:
+                if not sec_id or sec_id not in subs:
                     return
 
-                key = f"{name}:{t}"
+                key = f"{sec_id}:{t}"
                 tick_counts[key] = tick_counts.get(key, 0) + 1
                 if tick_counts[key] == 1:
-                    log.info("FIRST tick %s: ltp=%s depth=%s keys=%s",
-                             key, data.get("LTP"),
-                             bool(data.get("depth")),
-                             list(data.keys())[:8])
+                    short = subs[sec_id].get("short", "?")
+                    log.info("FIRST tick %s/%s: ltp=%s depth=%s",
+                             short, key, data.get("LTP"), bool(data.get("depth")))
 
                 try:
                     ltp = float(data.get("LTP") or 0)
@@ -253,13 +215,12 @@ def _run_real_feed_thread() -> None:
                         except (TypeError, ValueError):
                             pass
 
-                # Preserve previous good prices if this tick has zeros (e.g. OI-only packets)
-                existing = quote_store.get(name)
+                existing = quote_store.get(sec_id)
                 bid = bid or existing.bid
                 ask = ask or existing.ask
                 ltp = ltp or existing.ltp
                 if bid or ask or ltp:
-                    quote_store.update(name, bid=bid, ask=ask, ltp=ltp, ts=time.time())
+                    quote_store.update(sec_id, bid=bid, ask=ask, ltp=ltp, ts=time.time())
                 _set_state(last_tick_epoch=time.time(), ws_connected=True, mode="live")
 
                 now = time.time()
@@ -276,19 +237,13 @@ def _run_real_feed_thread() -> None:
                 _set_state(ws_connected=False)
 
             feed = marketfeed.MarketFeed(
-                ctx,
-                instruments,
-                version="v2",
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close,
+                ctx, instruments, version="v2",
+                on_message=on_message, on_error=on_error, on_close=on_close,
             )
             _active_feed = feed
-            # Reset stale-tick timer so watchdog gives this connection a 3-min
-            # grace window before considering it silent.
             _set_state(last_tick_epoch=time.time())
             log.info("Starting MarketFeed.run() — real ticks incoming.")
-            feed.run()  # blocking until disconnect
+            feed.run()
             log.info("MarketFeed.run() exited normally.")
             backoff = 5
         except Exception as e:
@@ -306,14 +261,17 @@ def _run_real_feed_thread() -> None:
 
 def _run_simulated_thread() -> None:
     import random
-    base = {"petal": 122.0, "guinea": 968.0, "ten": 1218.0, "mini": 12180.0}
     log.warning("SIMULATED feed (no Dhan credentials).")
-    _set_state(mode="simulated", instruments={k: {"trading_symbol": k.upper()} for k in base})
+    pair_registry.refresh(min_days_ahead=1, max_per_instrument=6)
+    subs = pair_registry.get_subscriptions()
+    _set_state(mode="simulated", instruments=subs)
+    base_by_short = {"petal": 122.0, "guinea": 968.0, "ten": 1218.0, "mini": 12180.0}
     while True:
-        for inst, mid in base.items():
+        for sid, info in subs.items():
+            mid = base_by_short.get(info["short"], 100.0)
             jitter = random.uniform(-0.5, 0.5)
             quote_store.update(
-                inst,
+                sid,
                 bid=round(mid + jitter - 0.05, 2),
                 ask=round(mid + jitter + 0.05, 2),
                 ltp=round(mid + jitter, 2),
@@ -325,9 +283,7 @@ def _run_simulated_thread() -> None:
 
 
 def start_feed_in_background(loop: asyncio.AbstractEventLoop):
-    creds_ok = bool(
-        settings.DHAN_CLIENT_ID and settings.DHAN_MPIN and settings.DHAN_TOTP_SECRET
-    )
+    creds_ok = bool(settings.DHAN_CLIENT_ID and settings.DHAN_MPIN and settings.DHAN_TOTP_SECRET)
     target = _run_real_feed_thread if creds_ok else _run_simulated_thread
     feed_thread = threading.Thread(target=target, daemon=True, name="dhan-feed")
     feed_thread.start()

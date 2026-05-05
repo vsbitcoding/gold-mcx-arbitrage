@@ -1,5 +1,5 @@
-"""In-memory live quote store with DB persistence so the dashboard never goes
-blank across service restarts or market holidays.
+"""In-memory live quote store (keyed by security_id). Persists to DB so the
+dashboard never goes blank across service restarts or market holidays.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class Quote:
     timestamp: float = 0.0
 
 
-PERSIST_THROTTLE_SECONDS = 30  # write to DB at most every 30s per instrument
+PERSIST_THROTTLE_SECONDS = 30
 
 
 class QuoteStore:
@@ -28,50 +28,47 @@ class QuoteStore:
         self._last_persist: dict[str, float] = {}
         self._lock = Lock()
 
-    def update(self, instrument: str, bid: float, ask: float, ltp: float, ts: float) -> None:
+    def update(self, security_id: str, bid: float, ask: float, ltp: float, ts: float) -> None:
+        sid = str(security_id)
         with self._lock:
-            self._quotes[instrument] = Quote(bid=bid, ask=ask, ltp=ltp, timestamp=ts)
-        # Persist throttled — only save non-zero quotes (don't overwrite good data with 0)
-        if (bid or ask or ltp) and self._should_persist(instrument):
-            self._persist(instrument, bid, ask, ltp)
+            self._quotes[sid] = Quote(bid=bid, ask=ask, ltp=ltp, timestamp=ts)
+        if (bid or ask or ltp) and self._should_persist(sid):
+            self._persist(sid, bid, ask, ltp)
 
-    def _should_persist(self, instrument: str) -> bool:
+    def _should_persist(self, sid: str) -> bool:
         now = time.time()
-        last = self._last_persist.get(instrument, 0)
+        last = self._last_persist.get(sid, 0)
         if now - last >= PERSIST_THROTTLE_SECONDS:
-            self._last_persist[instrument] = now
+            self._last_persist[sid] = now
             return True
         return False
 
-    def _persist(self, instrument: str, bid: float, ask: float, ltp: float) -> None:
+    def _persist(self, sid: str, bid: float, ask: float, ltp: float) -> None:
         try:
             from app.database import SessionLocal
             from app.models import LastQuote
             db = SessionLocal()
             try:
-                row = db.query(LastQuote).filter(LastQuote.instrument == instrument).first()
+                row = db.query(LastQuote).filter(LastQuote.instrument == sid).first()
                 if row:
-                    row.bid = bid
-                    row.ask = ask
-                    row.ltp = ltp
+                    row.bid = bid; row.ask = ask; row.ltp = ltp
                 else:
-                    db.add(LastQuote(instrument=instrument, bid=bid, ask=ask, ltp=ltp))
+                    db.add(LastQuote(instrument=sid, bid=bid, ask=ask, ltp=ltp))
                 db.commit()
             finally:
                 db.close()
         except Exception as e:
             log.debug("persist failed: %s", e)
 
-    def get(self, instrument: str) -> Quote:
+    def get(self, security_id: str) -> Quote:
         with self._lock:
-            return self._quotes.get(instrument, Quote())
+            return self._quotes.get(str(security_id), Quote())
 
     def all(self) -> dict[str, Quote]:
         with self._lock:
             return dict(self._quotes)
 
     def restore_from_db(self) -> int:
-        """Load last known quotes from DB into memory (called on startup)."""
         try:
             from app.database import SessionLocal
             from app.models import LastQuote
@@ -81,9 +78,7 @@ class QuoteStore:
                 with self._lock:
                     for r in rows:
                         self._quotes[r.instrument] = Quote(
-                            bid=r.bid or 0,
-                            ask=r.ask or 0,
-                            ltp=r.ltp or 0,
+                            bid=r.bid or 0, ask=r.ask or 0, ltp=r.ltp or 0,
                             timestamp=time.time(),
                         )
                 return len(rows)
