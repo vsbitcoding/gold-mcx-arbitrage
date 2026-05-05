@@ -27,15 +27,28 @@ CROSS_TEMPLATES = [
 
 CALENDAR_INSTRUMENTS = ["petal", "guinea", "ten", "mini"]
 
+# MCX trading symbols (as Dhan / MCX list them)
+MCX_SYMBOL = {
+    "petal": "GOLDPETAL",
+    "guinea": "GOLDGUINEA",
+    "ten": "GOLDTEN",
+    "mini": "GOLDM",
+}
+
 
 def _expiry_tag(dt: datetime) -> str:
-    """Compact expiry label for pair name: 2026-05-29."""
+    """Stable internal name part: 2026-05-29."""
     return dt.strftime("%Y-%m-%d")
 
 
+def _expiry_mcx(dt: datetime) -> str:
+    """MCX-style short expiry: 29MAY26."""
+    return dt.strftime("%d%b%y").upper()
+
+
 def _expiry_short(dt: datetime) -> str:
-    """Human-friendly short label: 29 May."""
-    return dt.strftime("%-d %b")
+    """Human label: 29 May 2026."""
+    return dt.strftime("%-d %b %Y")
 
 
 def generate_cross_pairs(active: dict[str, list[dict]]) -> list[dict]:
@@ -60,11 +73,15 @@ def generate_cross_pairs(active: dict[str, list[dict]]) -> list[dict]:
             if not sc:
                 continue
             month_tag = _expiry_tag(bc["expiry"])
+            big_sym = MCX_SYMBOL[big]
+            small_sym = MCX_SYMBOL[small]
             pairs.append({
                 "type": "cross",
                 "name": f"{big.capitalize()}-{small.capitalize()}@{month_tag}",
-                "label": f"{big.capitalize()}-{small.capitalize()}",
+                "label": f"{big_sym} / {small_sym}",
+                "mcx_label": f"{big_sym} / {small_sym}",
                 "expiry_label": _expiry_short(bc["expiry"]),
+                "expiry_short": _expiry_mcx(bc["expiry"]),
                 "big": big,
                 "small": small,
                 "big_lots": big_lots,
@@ -97,11 +114,16 @@ def generate_calendar_pairs(active: dict[str, list[dict]]) -> list[dict]:
             near_tag = _expiry_tag(near["expiry"])
             far_tag = _expiry_tag(far["expiry"])
             name = f"{short.capitalize()}@{near_tag}/{far_tag}"
+            sym = MCX_SYMBOL[short]
+            far_short = _expiry_mcx(far["expiry"])
+            near_short = _expiry_mcx(near["expiry"])
             pairs.append({
                 "type": "calendar",
                 "name": name,
-                "label": short.capitalize(),
-                "expiry_label": f"{_expiry_short(near['expiry'])} → {_expiry_short(far['expiry'])}",
+                "label": f"{sym} {far_short}-{near_short}",
+                "mcx_label": f"{sym} {far_short} / {sym} {near_short}",
+                "expiry_label": f"Far {_expiry_short(far['expiry'])} − Near {_expiry_short(near['expiry'])}",
+                "expiry_short": f"{far_short}-{near_short}",
                 "big": short,
                 "small": short,
                 "big_lots": 1,
