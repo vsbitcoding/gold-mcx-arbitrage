@@ -27,12 +27,12 @@ CROSS_TEMPLATES = [
 
 CALENDAR_INSTRUMENTS = ["petal", "guinea", "ten", "mini"]
 
-# MCX trading symbols (as Dhan / MCX list them)
+# Display names (GOLD prefix dropped — common knowledge it's gold trading)
 MCX_SYMBOL = {
-    "petal": "GOLDPETAL",
-    "guinea": "GOLDGUINEA",
-    "ten": "GOLDTEN",
-    "mini": "GOLDM",
+    "petal": "PETAL",
+    "guinea": "GUINEA",
+    "ten": "TEN",
+    "mini": "MINI",
 }
 
 
