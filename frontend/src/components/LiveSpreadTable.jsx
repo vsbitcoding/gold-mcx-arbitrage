@@ -22,6 +22,7 @@ function ladderStatus(ladder) {
   return { label: "Armed", cls: "ldr-armed" };
 }
 
+// ===== Ladder Card (used inside the modal) =====
 function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -31,19 +32,16 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
     max_weight_grams: ladder.max_weight_grams ?? "",
   });
   const [saving, setSaving] = useState(false);
-
   const lastServerRef = useRef({
     entry: ladder.entry ?? "",
     exit: ladder.exit ?? "",
     max_weight_grams: ladder.max_weight_grams ?? "",
   });
 
-  // Sync if server values change AND user isn't editing (no dirty fields)
   useEffect(() => {
     const serverEntry = ladder.entry ?? "";
     const serverExit = ladder.exit ?? "";
     const serverMax = ladder.max_weight_grams ?? "";
-
     setDraft((d) => {
       const wasDirty =
         String(d.entry) !== String(lastServerRef.current.entry) ||
@@ -64,16 +62,10 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   const eff = ladder.effective_max_weight || defaultMaxWeight;
   const usedPct = eff > 0 ? Math.min(100, ((ladder.open_weight_grams || 0) / eff) * 100) : 0;
 
-  function update(field, value) {
-    setDraft((d) => ({ ...d, [field]: value }));
-  }
-
+  function update(field, value) { setDraft((d) => ({ ...d, [field]: value })); }
   function onWeightChange(v) {
-    if (v !== "" && Number(v) > maxAllowed) {
-      update("max_weight_grams", String(maxAllowed));
-    } else {
-      update("max_weight_grams", v);
-    }
+    if (v !== "" && Number(v) > maxAllowed) update("max_weight_grams", String(maxAllowed));
+    else update("max_weight_grams", v);
   }
 
   async function save() {
@@ -87,11 +79,8 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
       });
       toast.success("Saved");
       onChange?.();
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { toast.error(e.message); }
+    finally { setSaving(false); }
   }
 
   async function togglePause() {
@@ -104,14 +93,12 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
       });
       toast.success(ladder.enabled ? "Paused" : "Resumed");
       onChange?.();
-    } catch (e) {
-      toast.error(e.message);
-    }
+    } catch (e) { toast.error(e.message); }
   }
 
   async function remove() {
     if (ladder.open_count > 0) {
-      toast.error("Cannot delete — open trades for this ladder. Square off first.");
+      toast.error("Cannot delete — open trades. Square off first.");
       return;
     }
     const ok = await confirm({
@@ -125,9 +112,7 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
       await api.deleteLadder(ladder.id);
       toast.success("Deleted");
       onChange?.();
-    } catch (e) {
-      toast.error(e.message);
-    }
+    } catch (e) { toast.error(e.message); }
   }
 
   return (
@@ -136,47 +121,33 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
         <span className={`ladder-status ${status.cls}`}>
           <span className="dot" />{status.label}
         </span>
-        <button
-          className="ladder-icon-btn"
-          onClick={togglePause}
-          title={ladder.enabled ? "Pause this ladder" : "Resume"}
-        >
+        <button className="ladder-icon-btn" onClick={togglePause} title={ladder.enabled ? "Pause" : "Resume"}>
           {ladder.enabled ? "⏸" : "▶"}
         </button>
-        <button className="ladder-icon-btn danger" onClick={remove} title="Delete ladder">×</button>
+        <button className="ladder-icon-btn danger" onClick={remove} title="Delete">×</button>
       </div>
-
       <div className="ladder-fields">
         <label>
           <span>Entry</span>
-          <input
-            type="number" step="0.01" inputMode="decimal" placeholder="e.g. 200"
-            value={draft.entry ?? ""}
-            onChange={(e) => update("entry", e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
+          <input type="number" step="0.01" inputMode="decimal" placeholder="e.g. 200"
+            value={draft.entry ?? ""} onChange={(e) => update("entry", e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()} />
         </label>
         <label>
           <span>Exit</span>
-          <input
-            type="number" step="0.01" inputMode="decimal" placeholder="e.g. 100"
-            value={draft.exit ?? ""}
-            onChange={(e) => update("exit", e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
+          <input type="number" step="0.01" inputMode="decimal" placeholder="e.g. 100"
+            value={draft.exit ?? ""} onChange={(e) => update("exit", e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()} />
         </label>
         <label>
           <span>Max (g)</span>
-          <input
-            type="number" min="0" max={maxAllowed} step="1"
+          <input type="number" min="0" max={maxAllowed} step="1"
             placeholder={String(defaultMaxWeight)}
             value={draft.max_weight_grams ?? ""}
             onChange={(e) => onWeightChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-          />
+            onKeyDown={(e) => e.key === "Enter" && save()} />
         </label>
       </div>
-
       <div className="ladder-cap-row">
         <div className="ladder-cap-bar">
           <div className={`fill ${usedPct >= 100 ? "full" : usedPct >= 80 ? "high" : usedPct >= 50 ? "mid" : "low"}`}
@@ -193,13 +164,8 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
           </span>
         )}
       </div>
-
       {dirty && (
-        <button
-          className={`ladder-save-btn ${saving ? "saving" : ""}`}
-          onClick={save}
-          disabled={saving}
-        >
+        <button className={`ladder-save-btn ${saving ? "saving" : ""}`} onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save changes"}
         </button>
       )}
@@ -215,14 +181,10 @@ function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
 
   async function submit(e) {
     e.preventDefault();
-    if (entry === "") {
-      toast.error("Entry is required");
-      return;
-    }
+    if (entry === "") { toast.error("Entry is required"); return; }
     try {
       await api.createLadder({
-        pair_name: pairName,
-        side,
+        pair_name: pairName, side,
         entry: Number(entry),
         exit: exit === "" ? null : Number(exit),
         max_weight_grams: weight === "" ? null : Number(weight),
@@ -230,9 +192,7 @@ function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
       setEntry(""); setExit(""); setWeight("");
       toast.success(`${cap(side)} ladder added`);
       onCreated?.();
-    } catch (e) {
-      toast.error(e.message);
-    }
+    } catch (e) { toast.error(e.message); }
   }
 
   return (
@@ -241,12 +201,12 @@ function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
       <div className="ladder-fields">
         <label>
           <span>Entry</span>
-          <input type="number" step="0.01" inputMode="decimal" placeholder="Required"
+          <input type="number" step="0.01" placeholder="Required"
             value={entry} onChange={(e) => setEntry(e.target.value)} />
         </label>
         <label>
           <span>Exit</span>
-          <input type="number" step="0.01" inputMode="decimal" placeholder="Optional"
+          <input type="number" step="0.01" placeholder="Optional"
             value={exit} onChange={(e) => setExit(e.target.value)} />
         </label>
         <label>
@@ -261,43 +221,52 @@ function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
             }} />
         </label>
       </div>
-      <button type="submit" className="ladder-add-btn">Add Ladder</button>
+      <button type="submit" className="ladder-add-btn">+ Add Ladder</button>
     </form>
   );
 }
 
-const PairCard = memo(function PairCard({ row, expanded, onToggle, onChange }) {
+// ===== Modal: ladder editor for a single pair =====
+function LadderModal({ row, onClose, onChange }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  if (!row) return null;
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
-  const totalActive = (row.decrease_open ? 1 : 0) + (row.increase_open ? 1 : 0);
 
   return (
-    <div className={`spread-pair-card status-${row.status}`}>
-      <button className="pair-card-head" onClick={onToggle}>
-        <span className="caret">{expanded ? "▾" : "▸"}</span>
-        <span className="pair-card-title">{row.name}</span>
-        <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
-          <span className="blip" />
-          {STATUS_LABEL[row.status] || row.status}
-        </span>
-        <span className="pair-card-meta">
-          {decCount + incCount > 0 && <span>{decCount + incCount} ladder{decCount + incCount > 1 ? "s" : ""}</span>}
-        </span>
-      </button>
-
-      <div className="pair-card-spreads">
-        <div className="spread-block dec">
-          <div className="spread-label">▼ Decrease Spread</div>
-          <div className="spread-value">{fmtSpread(row.decrease_spread)}</div>
+    <div className="ladder-modal-overlay" onClick={onClose}>
+      <div className="ladder-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ladder-modal-head">
+          <div className="ladder-modal-title">
+            <span className="pair-card-title">{row.name}</span>
+            <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
+              <span className="blip" />
+              {STATUS_LABEL[row.status] || row.status}
+            </span>
+          </div>
+          <div className="ladder-modal-spreads">
+            <div className="modal-spread dec">
+              <div className="lbl">▼ Decrease</div>
+              <div className="val">{fmtSpread(row.decrease_spread)}</div>
+            </div>
+            <div className="modal-spread inc">
+              <div className="lbl">▲ Increase</div>
+              <div className="val">{fmtSpread(row.increase_spread)}</div>
+            </div>
+          </div>
+          <button className="drawer-close" onClick={onClose}>×</button>
         </div>
-        <div className="spread-block inc">
-          <div className="spread-label">▲ Increase Spread</div>
-          <div className="spread-value">{fmtSpread(row.increase_spread)}</div>
-        </div>
-      </div>
 
-      {expanded && (
-        <div className="pair-card-ladders">
+        <div className="ladder-modal-body">
           <div className="ladder-side dec-side">
             <div className="ladder-side-head">
               <span className="side-arrow">▼</span> Decrease Ladders
@@ -336,15 +305,55 @@ const PairCard = memo(function PairCard({ row, expanded, onToggle, onChange }) {
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
-});
+}
+
+// ===== Compact table row =====
+const PairRow = memo(function PairRow({ row, onManage }) {
+  const decCount = row.decrease_ladders.length;
+  const incCount = row.increase_ladders.length;
+  return (
+    <tr className={`pair-row status-${row.status}`}>
+      <td className="pair-name">{row.name}</td>
+      <td className="spread-num dec-tone">{fmtSpread(row.decrease_spread)}</td>
+      <td className="spread-num inc-tone">{fmtSpread(row.increase_spread)}</td>
+      <td>
+        <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
+          <span className="blip" />
+          {STATUS_LABEL[row.status] || row.status}
+        </span>
+      </td>
+      <td>
+        <span className="ladder-count-pill dec" title={`${decCount} decrease ladders`}>
+          ▼ {decCount}
+        </span>
+      </td>
+      <td>
+        <span className="ladder-count-pill inc" title={`${incCount} increase ladders`}>
+          ▲ {incCount}
+        </span>
+      </td>
+      <td>
+        <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>
+          Manage
+        </button>
+      </td>
+    </tr>
+  );
+}, (prev, next) => (
+  prev.row.decrease_spread === next.row.decrease_spread &&
+  prev.row.increase_spread === next.row.increase_spread &&
+  prev.row.status === next.row.status &&
+  prev.row.decrease_ladders === next.row.decrease_ladders &&
+  prev.row.increase_ladders === next.row.increase_ladders
+));
 
 export default function LiveSpreadTable({ rows, onSaved }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [expanded, setExpanded] = useState({});
+  const [openPair, setOpenPair] = useState(null);
 
   const counts = useMemo(() => ({
     all: rows.length,
@@ -359,18 +368,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     return r.status === filter;
   });
 
-  function toggle(name) {
-    setExpanded((e) => ({ ...e, [name]: !e[name] }));
-  }
-
-  function expandAll() {
-    const all = {};
-    rows.forEach((r) => { all[r.name] = true; });
-    setExpanded(all);
-  }
-  function collapseAll() {
-    setExpanded({});
-  }
+  const openRow = openPair ? rows.find((r) => r.name === openPair) : null;
 
   return (
     <div className="sessions-container">
@@ -380,8 +378,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <div className="search-container">
             <input placeholder="Search pair..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={expandAll}>Expand All</button>
-          <button className="btn btn-secondary btn-sm" onClick={collapseAll}>Collapse</button>
           <div className="filter-tabs">
             <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
               All <span className="count">{counts.all}</span>
@@ -399,19 +395,32 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         </div>
       </div>
 
-      <div className="pair-cards-grid">
-        {filtered.length === 0 ? (
-          <div className="empty-state">No pairs match the filter.</div>
-        ) : filtered.map((r) => (
-          <PairCard
-            key={r.name}
-            row={r}
-            expanded={!!expanded[r.name]}
-            onToggle={() => toggle(r.name)}
-            onChange={onSaved}
-          />
-        ))}
+      <div className="table-container">
+        <table className="pair-table">
+          <thead>
+            <tr>
+              <th>Pair</th>
+              <th>Decrease Spread</th>
+              <th>Increase Spread</th>
+              <th>Status</th>
+              <th>Decrease</th>
+              <th>Increase</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} className="empty-state">No pairs match the filter.</td></tr>
+            ) : filtered.map((r) => (
+              <PairRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {openRow && (
+        <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />
+      )}
     </div>
   );
 }

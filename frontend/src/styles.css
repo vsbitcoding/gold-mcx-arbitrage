@@ -1191,13 +1191,137 @@ input.cell:focus {
   font-size: 13px;
 }
 
-/* ===== SPREAD PAIR CARDS (Ladder system) ===== */
-.pair-cards-grid {
+/* ===== Compact pair table ===== */
+table.pair-table { width: 100%; border-collapse: collapse; }
+table.pair-table th {
+  background: var(--th-bg);
+  color: var(--th-color);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+}
+table.pair-table td {
+  padding: 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+table.pair-table tr.pair-row:hover td { background: var(--bg-surface-alt); cursor: pointer; }
+table.pair-table td.pair-name { font-weight: 700; text-align: center; font-size: 14px; }
+table.pair-table td.spread-num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+}
+.spread-num.dec-tone { color: var(--red); }
+.spread-num.inc-tone { color: var(--green); }
+.ladder-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ladder-count-pill.dec { background: rgba(220,38,38,0.1); color: var(--red); }
+.ladder-count-pill.inc { background: rgba(22,163,74,0.1); color: var(--green); }
+
+/* ===== Ladder Modal ===== */
+.ladder-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  backdrop-filter: blur(3px);
+  z-index: 1500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 30px 20px;
+  animation: fade-in 0.2s ease;
+}
+.ladder-modal {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  width: min(1100px, 96vw);
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 16px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  border-top: 4px solid var(--accent);
+  animation: slide-up 0.2s ease;
+  overflow: hidden;
 }
+.ladder-modal-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-surface-alt);
+  flex-wrap: wrap;
+}
+.ladder-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ladder-modal-title .pair-card-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.ladder-modal-spreads {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+.modal-spread {
+  text-align: center;
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.modal-spread.dec { background: rgba(220,38,38,0.08); }
+.modal-spread.inc { background: rgba(22,163,74,0.08); }
+.modal-spread .lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 700;
+}
+.modal-spread.dec .lbl { color: var(--red); }
+.modal-spread.inc .lbl { color: var(--green); }
+.modal-spread .val {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 800;
+}
+.modal-spread.dec .val { color: var(--red); }
+.modal-spread.inc .val { color: var(--green); }
+
+.ladder-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Ladder side panel inside modal */
+.ladder-modal .ladder-side {
+  padding: 16px 18px;
+  border-right: 1px solid var(--border);
+}
+.ladder-modal .ladder-side:last-child { border-right: none; }
+.ladder-modal .ladder-side.dec-side { background: rgba(220,38,38,0.025); }
+.ladder-modal .ladder-side.inc-side { background: rgba(22,163,74,0.025); }
 .spread-pair-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
