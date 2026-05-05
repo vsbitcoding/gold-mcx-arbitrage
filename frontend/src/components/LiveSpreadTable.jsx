@@ -369,22 +369,34 @@ const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
     return ea < eb ? -1 : ea > eb ? 1 : 0;
   })[0] || group.rows[0];
 
+  // When collapsed, show the front-month spread as a glance value.
+  // When expanded, hide the spread numbers (sub-rows have them per expiry).
   return (
-    <tr className={`pair-row group-summary status-${aggStatus}`} onClick={onToggle}>
-      <td className="pair-name gc-identity">
+    <tr className={`pair-row group-summary status-${aggStatus} ${expanded ? "open" : ""}`} onClick={onToggle}>
+      <td className="pair-name gc-identity" colSpan={2}>
         <button className="row-toggle">
           <span className="caret">{expanded ? "▾" : "▸"}</span>
-          <span>{group.label}</span>
+          <span className="group-label">{group.label}</span>
+          <span className="group-meta">{group.rows.length} expiries</span>
         </button>
       </td>
-      <td className="gc-identity col-end-group">
-        <div className="pair-expiry">
-          <strong style={{ color: "var(--text-primary)" }}>{front?.expiry_label || "—"}</strong>
-          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>+{group.rows.length - 1} more</div>
-        </div>
-      </td>
-      <td className="spread-num dec-tone gc-decrease">{fmtSpread(front?.decrease_spread)}</td>
-      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(front?.increase_spread)}</td>
+      {expanded ? (
+        <>
+          <td className="gc-decrease group-collapsed-cell"></td>
+          <td className="gc-increase col-end-group group-collapsed-cell"></td>
+        </>
+      ) : (
+        <>
+          <td className="spread-num dec-tone gc-decrease">
+            {fmtSpread(front?.decrease_spread)}
+            <div className="spread-front-label">{front?.expiry_label || ""}</div>
+          </td>
+          <td className="spread-num inc-tone gc-increase col-end-group">
+            {fmtSpread(front?.increase_spread)}
+            <div className="spread-front-label">{front?.expiry_label || ""}</div>
+          </td>
+        </>
+      )}
       <td className="gc-status">
         <span className={`badge ${STATUS_CLASS[aggStatus] || "badge-idle"}`}>
           <span className="blip" />
@@ -406,16 +418,17 @@ const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
 ));
 
 // ===== Single expiry sub-row (shown when group expanded) =====
+// Doesn't repeat pair name — just expiry as the primary identifier.
 const PairSubRow = memo(function PairSubRow({ row, onManage }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
   return (
     <tr className={`pair-row sub-row status-${row.status}`}>
-      <td className="pair-name gc-identity sub-name">
-        <span className="sub-indent">↳</span> {row.label}
-      </td>
-      <td className="gc-identity col-end-group">
-        <div className="pair-expiry">{row.expiry_label || "—"}</div>
+      <td className="gc-identity sub-name" colSpan={2}>
+        <div className="sub-row-label">
+          <span className="sub-indent">└</span>
+          <span className="sub-expiry-text">{row.expiry_label || "—"}</span>
+        </div>
       </td>
       <td className="spread-num dec-tone gc-decrease">{fmtSpread(row.decrease_spread)}</td>
       <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(row.increase_spread)}</td>

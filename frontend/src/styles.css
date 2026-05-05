@@ -1323,27 +1323,66 @@ table.pair-table td.spread-num {
 table.pair-table tr.group-summary td { font-weight: 700; }
 table.pair-table tr.group-summary {
   cursor: pointer;
-  background: var(--bg-surface-alt);
 }
 table.pair-table tr.group-summary:hover td { filter: brightness(1.04); }
+table.pair-table tr.group-summary.open td {
+  background: var(--accent-bg);
+  border-bottom: 2px solid var(--accent);
+}
 .row-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: transparent;
   border: none;
   font: inherit;
   color: inherit;
   cursor: pointer;
   padding: 0;
+  width: 100%;
+  text-align: left;
 }
 .row-toggle .caret { color: var(--text-muted); font-size: 11px; min-width: 14px; }
+.group-label { font-size: 14px; font-weight: 800; }
+.group-meta {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+.spread-front-label {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.group-collapsed-cell { background: var(--bg-surface-alt) !important; }
 
 /* Sub row (expiry inside a group) */
-table.pair-table tr.sub-row { background: var(--bg-surface); }
+table.pair-table tr.sub-row { background: var(--bg-surface-alt); }
 table.pair-table tr.sub-row td { font-size: 12px; }
-table.pair-table tr.sub-row td.sub-name { padding-left: 24px; font-weight: 500; color: var(--text-secondary); }
-.sub-indent { color: var(--text-muted); margin-right: 6px; }
+table.pair-table tr.sub-row td.sub-name {
+  padding-left: 28px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.sub-row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.sub-indent { color: var(--text-muted); font-weight: 400; }
+.sub-expiry-text { color: var(--text-primary); }
+table.pair-table tr.sub-row:last-child td:first-child {
+  border-bottom-left-radius: 8px;
+}
 
 /* Expiry filter dropdown */
 .expiry-filter {
