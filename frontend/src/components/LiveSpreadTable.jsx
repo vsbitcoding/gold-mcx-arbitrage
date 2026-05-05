@@ -5,6 +5,7 @@ import { useConfirm } from "./ConfirmDialog.jsx";
 
 const STATUS_LABEL = { idle: "Idle", armed: "Armed", in_position: "In Position" };
 const STATUS_CLASS = { idle: "badge-idle", armed: "badge-armed", in_position: "badge-position" };
+const PER_PAGE = 5;
 
 function fmtSpread(v) {
   return v === null || v === undefined ? "—" : Number(v).toFixed(2);
@@ -16,14 +17,14 @@ function ladderStatus(ladder) {
   if (ladder.open_count > 0) {
     const eff = ladder.effective_max_weight || 1;
     if (ladder.open_weight_grams >= eff) return { label: "Full", cls: "ldr-full" };
-    return { label: `${ladder.open_count} open`, cls: "ldr-running" };
+    return { label: `${ladder.open_count} Open`, cls: "ldr-running" };
   }
   if (ladder.entry === null || ladder.entry === undefined) return { label: "Not set", cls: "ldr-idle" };
   return { label: "Armed", cls: "ldr-armed" };
 }
 
-// ===== Ladder Card (used inside the modal) =====
-function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
+// ===== Table row for one ladder (inline-edit) =====
+function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onChange }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [draft, setDraft] = useState({
@@ -39,17 +40,15 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   });
 
   useEffect(() => {
-    const serverEntry = ladder.entry ?? "";
-    const serverExit = ladder.exit ?? "";
-    const serverMax = ladder.max_weight_grams ?? "";
+    const sE = ladder.entry ?? "", sX = ladder.exit ?? "", sM = ladder.max_weight_grams ?? "";
     setDraft((d) => {
       const wasDirty =
         String(d.entry) !== String(lastServerRef.current.entry) ||
         String(d.exit) !== String(lastServerRef.current.exit) ||
         String(d.max_weight_grams) !== String(lastServerRef.current.max_weight_grams);
-      lastServerRef.current = { entry: serverEntry, exit: serverExit, max_weight_grams: serverMax };
+      lastServerRef.current = { entry: sE, exit: sX, max_weight_grams: sM };
       if (wasDirty) return d;
-      return { entry: serverEntry, exit: serverExit, max_weight_grams: serverMax };
+      return { entry: sE, exit: sX, max_weight_grams: sM };
     });
   }, [ladder.entry, ladder.exit, ladder.max_weight_grams]);
 
@@ -61,13 +60,13 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   const status = ladderStatus(ladder);
   const eff = ladder.effective_max_weight || defaultMaxWeight;
   const usedPct = eff > 0 ? Math.min(100, ((ladder.open_weight_grams || 0) / eff) * 100) : 0;
+  const fillCls = usedPct >= 100 ? "full" : usedPct >= 80 ? "high" : usedPct >= 50 ? "mid" : "low";
 
   function update(field, value) { setDraft((d) => ({ ...d, [field]: value })); }
   function onWeightChange(v) {
     if (v !== "" && Number(v) > maxAllowed) update("max_weight_grams", String(maxAllowed));
     else update("max_weight_grams", v);
   }
-
   async function save() {
     if (!dirty || saving) return;
     setSaving(true);
@@ -82,28 +81,21 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
     } catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
   }
-
   async function togglePause() {
     try {
       await api.updateLadder(ladder.id, {
-        entry: ladder.entry,
-        exit: ladder.exit,
-        max_weight_grams: ladder.max_weight_grams,
+        entry: ladder.entry, exit: ladder.exit, max_weight_grams: ladder.max_weight_grams,
         enabled: !ladder.enabled,
       });
       toast.success(ladder.enabled ? "Paused" : "Resumed");
       onChange?.();
     } catch (e) { toast.error(e.message); }
   }
-
   async function remove() {
-    if (ladder.open_count > 0) {
-      toast.error("Cannot delete — open trades. Square off first.");
-      return;
-    }
+    if (ladder.open_count > 0) { toast.error("Cannot delete — open trades for this ladder"); return; }
     const ok = await confirm({
       title: "Delete this ladder?",
-      message: `Remove ${cap(side)} ladder (entry=${ladder.entry ?? "—"}, exit=${ladder.exit ?? "—"})?`,
+      message: `Remove ${cap(side)} ladder #${idx + 1} (entry=${ladder.entry ?? "—"})?`,
       confirmText: "Delete",
       danger: true,
     });
@@ -116,72 +108,70 @@ function LadderCard({ ladder, defaultMaxWeight, maxAllowed, side, onChange }) {
   }
 
   return (
-    <div className={`ladder-card ${side}-card ${!ladder.enabled ? "paused" : ""}`}>
-      <div className="ladder-card-top">
-        <span className={`ladder-status ${status.cls}`}>
-          <span className="dot" />{status.label}
-        </span>
-        <button className="ladder-icon-btn" onClick={togglePause} title={ladder.enabled ? "Pause" : "Resume"}>
-          {ladder.enabled ? "⏸" : "▶"}
-        </button>
-        <button className="ladder-icon-btn danger" onClick={remove} title="Delete">×</button>
-      </div>
-      <div className="ladder-fields">
-        <label>
-          <span>Entry</span>
-          <input type="number" step="0.01" inputMode="decimal" placeholder="e.g. 200"
-            value={draft.entry ?? ""} onChange={(e) => update("entry", e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()} />
-        </label>
-        <label>
-          <span>Exit</span>
-          <input type="number" step="0.01" inputMode="decimal" placeholder="e.g. 100"
-            value={draft.exit ?? ""} onChange={(e) => update("exit", e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()} />
-        </label>
-        <label>
-          <span>Max (g)</span>
-          <input type="number" min="0" max={maxAllowed} step="1"
-            placeholder={String(defaultMaxWeight)}
-            value={draft.max_weight_grams ?? ""}
-            onChange={(e) => onWeightChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()} />
-        </label>
-      </div>
-      <div className="ladder-cap-row">
-        <div className="ladder-cap-bar">
-          <div className={`fill ${usedPct >= 100 ? "full" : usedPct >= 80 ? "high" : usedPct >= 50 ? "mid" : "low"}`}
-               style={{ width: `${usedPct}%` }} />
+    <tr className={`ldr-table-row ${!ladder.enabled ? "paused" : ""}`}>
+      <td className="ldr-num">{idx + 1}</td>
+      <td>
+        <span className={`ladder-status ${status.cls}`}><span className="dot" />{status.label}</span>
+      </td>
+      <td>
+        <input className={`cell ${draft.entry !== String(ladder.entry ?? "") ? "dirty" : ""}`}
+          type="number" step="0.01" placeholder="Entry"
+          value={draft.entry ?? ""} onChange={(e) => update("entry", e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()} />
+      </td>
+      <td>
+        <input className={`cell ${draft.exit !== String(ladder.exit ?? "") ? "dirty" : ""}`}
+          type="number" step="0.01" placeholder="Exit"
+          value={draft.exit ?? ""} onChange={(e) => update("exit", e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()} />
+      </td>
+      <td>
+        <input className={`cell ${draft.max_weight_grams !== String(ladder.max_weight_grams ?? "") ? "dirty" : ""}`}
+          type="number" min="0" max={maxAllowed} step="1"
+          placeholder={String(defaultMaxWeight)}
+          value={draft.max_weight_grams ?? ""}
+          onChange={(e) => onWeightChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()} />
+      </td>
+      <td className="ldr-used">
+        <div className="ldr-used-bar">
+          <div className={`fill ${fillCls}`} style={{ width: `${usedPct}%` }} />
         </div>
-        <div className="ladder-cap-text">
-          <strong>{ladder.open_weight_grams || 0}</strong>
-          <span> / </span>
-          <span>{eff}g</span>
+        <div className="ldr-used-text">
+          <strong>{ladder.open_weight_grams || 0}</strong>/{eff}g
         </div>
         {ladder.has_pending_cap && (
-          <span className="ladder-pending-pill" title="Cap change applies after square-off">
+          <div className="ldr-pending-mini" title="Cap change pending — applies after square-off">
             ⏳ {ladder.pending_max_weight_grams ?? "default"}g
-          </span>
+          </div>
         )}
-      </div>
-      {dirty && (
-        <button className={`ladder-save-btn ${saving ? "saving" : ""}`} onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save changes"}
+      </td>
+      <td className="ldr-actions">
+        {dirty && (
+          <button className="btn btn-primary btn-sm save-btn" onClick={save} disabled={saving}>
+            {saving ? "…" : "Save"}
+          </button>
+        )}
+        <button className="ldr-icon" onClick={togglePause} title={ladder.enabled ? "Pause" : "Resume"}>
+          {ladder.enabled ? "⏸" : "▶"}
         </button>
-      )}
-    </div>
+        <button className="ldr-icon danger" onClick={remove} title="Delete">×</button>
+      </td>
+    </tr>
   );
 }
 
-function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated }) {
+function AddLadderInline({ pairName, side, defaultMaxWeight, maxAllowed, onCreated }) {
   const toast = useToast();
   const [entry, setEntry] = useState("");
   const [exit, setExit] = useState("");
   const [weight, setWeight] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
     if (entry === "") { toast.error("Entry is required"); return; }
+    setSubmitting(true);
     try {
       await api.createLadder({
         pair_name: pairName, side,
@@ -193,41 +183,107 @@ function AddLadderForm({ pairName, side, defaultMaxWeight, maxAllowed, onCreated
       toast.success(`${cap(side)} ladder added`);
       onCreated?.();
     } catch (e) { toast.error(e.message); }
+    finally { setSubmitting(false); }
   }
 
   return (
-    <form className={`add-ladder ${side}-card`} onSubmit={submit}>
-      <div className="add-ladder-head">+ New {cap(side)} Ladder</div>
-      <div className="ladder-fields">
-        <label>
-          <span>Entry</span>
-          <input type="number" step="0.01" placeholder="Required"
-            value={entry} onChange={(e) => setEntry(e.target.value)} />
-        </label>
-        <label>
-          <span>Exit</span>
-          <input type="number" step="0.01" placeholder="Optional"
-            value={exit} onChange={(e) => setExit(e.target.value)} />
-        </label>
-        <label>
-          <span>Max (g)</span>
-          <input type="number" min="0" max={maxAllowed} step="1"
-            placeholder={String(defaultMaxWeight)}
-            value={weight}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v !== "" && Number(v) > maxAllowed) setWeight(String(maxAllowed));
-              else setWeight(v);
-            }} />
-        </label>
-      </div>
-      <button type="submit" className="ladder-add-btn">+ Add Ladder</button>
+    <form className={`add-ladder-row ${side}-add`} onSubmit={submit}>
+      <input type="number" step="0.01" placeholder="Entry (required)"
+        value={entry} onChange={(e) => setEntry(e.target.value)} className="cell" />
+      <input type="number" step="0.01" placeholder="Exit"
+        value={exit} onChange={(e) => setExit(e.target.value)} className="cell" />
+      <input type="number" min="0" max={maxAllowed} step="1"
+        placeholder={`Max (${defaultMaxWeight})`}
+        value={weight}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v !== "" && Number(v) > maxAllowed) setWeight(String(maxAllowed));
+          else setWeight(v);
+        }}
+        className="cell" />
+      <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>
+        + Add
+      </button>
     </form>
+  );
+}
+
+function LadderTable({ pairName, side, ladders, defaultMaxWeight, maxAllowed, onChange }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(ladders.length / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PER_PAGE;
+  const slice = ladders.slice(start, start + PER_PAGE);
+
+  return (
+    <div className={`ladder-side-table ${side}-side`}>
+      <div className="ladder-side-head">
+        <span className="side-arrow">{side === "decrease" ? "▼" : "▲"}</span>
+        {cap(side)} Ladders
+        <span className="side-count">{ladders.length}</span>
+      </div>
+
+      <div className="add-ladder-section">
+        <AddLadderInline
+          pairName={pairName} side={side}
+          defaultMaxWeight={defaultMaxWeight}
+          maxAllowed={maxAllowed}
+          onCreated={() => { onChange(); setPage(totalPages); }}
+        />
+      </div>
+
+      {ladders.length === 0 ? (
+        <div className="empty-state ladder-empty">No ladders yet — add one above.</div>
+      ) : (
+        <>
+          <div className="ladder-table-wrap">
+            <table className="ladder-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 32 }}>#</th>
+                  <th>Status</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>Max (g)</th>
+                  <th>Weight Used</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slice.map((l, i) => (
+                  <LadderTableRow
+                    key={l.id} ladder={l} idx={start + i}
+                    defaultMaxWeight={defaultMaxWeight}
+                    maxAllowed={maxAllowed}
+                    side={side}
+                    onChange={onChange}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="ladder-pager">
+              <span>Page {safePage} / {totalPages}</span>
+              <div className="pager-buttons">
+                <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                <span className="pager-cur">{safePage}</span>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 // ===== Modal: ladder editor for a single pair =====
 function LadderModal({ row, onClose, onChange }) {
+  const [tab, setTab] = useState("decrease");
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
@@ -266,51 +322,40 @@ function LadderModal({ row, onClose, onChange }) {
           <button className="drawer-close" onClick={onClose}>×</button>
         </div>
 
-        <div className="ladder-modal-body">
-          <div className="ladder-side dec-side">
-            <div className="ladder-side-head">
-              <span className="side-arrow">▼</span> Decrease Ladders
-              <span className="side-count">{decCount}</span>
-            </div>
-            <div className="ladder-grid">
-              {row.decrease_ladders.map((l) => (
-                <LadderCard key={l.id} ladder={l} side="decrease"
-                  defaultMaxWeight={row.default_max_weight}
-                  maxAllowed={row.max_allowed_weight}
-                  onChange={onChange} />
-              ))}
-              <AddLadderForm pairName={row.name} side="decrease"
-                defaultMaxWeight={row.default_max_weight}
-                maxAllowed={row.max_allowed_weight}
-                onCreated={onChange} />
-            </div>
-          </div>
+        <div className="ladder-modal-tabs">
+          <button className={`mtab dec ${tab === "decrease" ? "active" : ""}`} onClick={() => setTab("decrease")}>
+            ▼ Decrease <span className="mtab-count">{decCount}</span>
+          </button>
+          <button className={`mtab inc ${tab === "increase" ? "active" : ""}`} onClick={() => setTab("increase")}>
+            ▲ Increase <span className="mtab-count">{incCount}</span>
+          </button>
+        </div>
 
-          <div className="ladder-side inc-side">
-            <div className="ladder-side-head">
-              <span className="side-arrow">▲</span> Increase Ladders
-              <span className="side-count">{incCount}</span>
-            </div>
-            <div className="ladder-grid">
-              {row.increase_ladders.map((l) => (
-                <LadderCard key={l.id} ladder={l} side="increase"
-                  defaultMaxWeight={row.default_max_weight}
-                  maxAllowed={row.max_allowed_weight}
-                  onChange={onChange} />
-              ))}
-              <AddLadderForm pairName={row.name} side="increase"
-                defaultMaxWeight={row.default_max_weight}
-                maxAllowed={row.max_allowed_weight}
-                onCreated={onChange} />
-            </div>
-          </div>
+        <div className="ladder-modal-body">
+          {tab === "decrease" ? (
+            <LadderTable
+              pairName={row.name} side="decrease"
+              ladders={row.decrease_ladders}
+              defaultMaxWeight={row.default_max_weight}
+              maxAllowed={row.max_allowed_weight}
+              onChange={onChange}
+            />
+          ) : (
+            <LadderTable
+              pairName={row.name} side="increase"
+              ladders={row.increase_ladders}
+              defaultMaxWeight={row.default_max_weight}
+              maxAllowed={row.max_allowed_weight}
+              onChange={onChange}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ===== Compact table row =====
+// ===== Main pair table =====
 const PairRow = memo(function PairRow({ row, onManage }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
@@ -325,20 +370,10 @@ const PairRow = memo(function PairRow({ row, onManage }) {
           {STATUS_LABEL[row.status] || row.status}
         </span>
       </td>
+      <td><span className="ladder-count-pill dec">▼ {decCount}</span></td>
+      <td><span className="ladder-count-pill inc">▲ {incCount}</span></td>
       <td>
-        <span className="ladder-count-pill dec" title={`${decCount} decrease ladders`}>
-          ▼ {decCount}
-        </span>
-      </td>
-      <td>
-        <span className="ladder-count-pill inc" title={`${incCount} increase ladders`}>
-          ▲ {incCount}
-        </span>
-      </td>
-      <td>
-        <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>
-          Manage
-        </button>
+        <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>Manage</button>
       </td>
     </tr>
   );

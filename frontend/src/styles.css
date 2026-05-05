@@ -1309,19 +1309,239 @@ table.pair-table td.spread-num {
 
 .ladder-modal-body {
   flex: 1;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Ladder side panel inside modal */
-.ladder-modal .ladder-side {
-  padding: 16px 18px;
-  border-right: 1px solid var(--border);
+/* Tabs */
+.ladder-modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-alt);
 }
-.ladder-modal .ladder-side:last-child { border-right: none; }
-.ladder-modal .ladder-side.dec-side { background: rgba(220,38,38,0.025); }
-.ladder-modal .ladder-side.inc-side { background: rgba(22,163,74,0.025); }
+.mtab {
+  padding: 12px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mtab:hover { color: var(--text-primary); }
+.mtab.active.dec { color: var(--red); border-bottom-color: var(--red); }
+.mtab.active.inc { color: var(--green); border-bottom-color: var(--green); }
+.mtab-count {
+  background: var(--bg-primary);
+  border-radius: 100px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.mtab.active.dec .mtab-count { background: var(--red); color: #fff; }
+.mtab.active.inc .mtab-count { background: var(--green); color: #fff; }
+
+/* Single side panel inside modal body */
+.ladder-side-table {
+  padding: 16px 20px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ladder-side-table .ladder-side-head {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.ladder-side-table.dec-side .ladder-side-head { color: var(--red); }
+.ladder-side-table.inc-side .ladder-side-head { color: var(--green); }
+.ladder-side-table .side-count {
+  margin-left: auto;
+  background: var(--bg-primary);
+  border-radius: 100px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* Add ladder inline form (compact row) */
+.add-ladder-section {
+  background: var(--bg-surface-alt);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.add-ladder-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 100px;
+  gap: 8px;
+  align-items: center;
+}
+.add-ladder-row .cell {
+  width: 100%;
+  max-width: none;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+/* Ladder data table */
+.ladder-table-wrap { overflow-x: auto; }
+table.ladder-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+table.ladder-table thead th {
+  background: var(--th-bg);
+  color: var(--th-color);
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+table.ladder-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: middle;
+}
+table.ladder-table tbody tr:last-child td { border-bottom: none; }
+table.ladder-table tbody tr.paused { opacity: 0.55; }
+table.ladder-table tbody tr:hover td { background: var(--bg-surface-alt); }
+
+td.ldr-num {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+table.ladder-table input.cell {
+  width: 100%;
+  max-width: none;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+td.ldr-used { min-width: 140px; }
+.ldr-used-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ldr-used-bar .fill { height: 100%; transition: width 0.4s ease; }
+.ldr-used-bar .fill.low  { background: var(--accent); }
+.ldr-used-bar .fill.mid  { background: var(--yellow); }
+.ldr-used-bar .fill.high { background: #fb923c; }
+.ldr-used-bar .fill.full { background: var(--red); }
+.ldr-used-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.ldr-used-text strong { color: var(--text-primary); font-weight: 700; }
+.ldr-pending-mini {
+  font-size: 9px;
+  color: var(--yellow);
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+td.ldr-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+td.ldr-actions .save-btn {
+  margin-right: 4px;
+  animation: dirty-pulse 1.5s infinite;
+}
+.ldr-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+  padding: 0;
+}
+.ldr-icon:hover { background: var(--bg-primary); color: var(--text-primary); }
+.ldr-icon.danger:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+
+/* Status badge in row */
+.ladder-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ladder-status .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* Pagination */
+.ladder-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 4px;
+}
+.ladder-pager .pager-buttons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.ladder-pager .pager-buttons button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.ladder-pager .pager-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
+.ladder-pager .pager-cur {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.ladder-empty.empty-state { padding: 30px; }
 .spread-pair-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
