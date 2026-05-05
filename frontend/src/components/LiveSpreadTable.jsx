@@ -354,14 +354,55 @@ function LadderModal({ row, onClose, onChange }) {
   );
 }
 
-// ===== Main pair table =====
-const PairRow = memo(function PairRow({ row, onManage }) {
+// ===== Group summary row (one per unique label) =====
+const GroupRow = memo(function GroupRow({ group, expanded, onToggle }) {
+  const totalDec = group.rows.reduce((s, r) => s + r.decrease_ladders.length, 0);
+  const totalInc = group.rows.reduce((s, r) => s + r.increase_ladders.length, 0);
+  const inPos = group.rows.filter((r) => r.status === "in_position").length;
+  const armed = group.rows.filter((r) => r.status === "armed").length;
+  const aggStatus = inPos > 0 ? "in_position" : armed > 0 ? "armed" : "idle";
+
+  return (
+    <tr className={`pair-row group-summary status-${aggStatus}`} onClick={onToggle}>
+      <td className="pair-name gc-identity">
+        <button className="row-toggle">
+          <span className="caret">{expanded ? "▾" : "▸"}</span>
+          <span>{group.label}</span>
+        </button>
+      </td>
+      <td className="gc-identity col-end-group">
+        <div className="pair-expiry">{group.rows.length} expiries</div>
+      </td>
+      <td className="spread-num dec-tone gc-decrease">—</td>
+      <td className="spread-num inc-tone gc-increase col-end-group">—</td>
+      <td className="gc-status">
+        <span className={`badge ${STATUS_CLASS[aggStatus] || "badge-idle"}`}>
+          <span className="blip" />
+          {inPos > 0 ? `${inPos} Open` : armed > 0 ? `${armed} Armed` : "Idle"}
+        </span>
+      </td>
+      <td className="gc-status"><span className="ladder-count-pill dec">▼ {totalDec}</span></td>
+      <td className="gc-status"><span className="ladder-count-pill inc">▲ {totalInc}</span></td>
+      <td className="gc-status">
+        <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+          {expanded ? "Hide" : "Show"} {group.rows.length}
+        </button>
+      </td>
+    </tr>
+  );
+}, (prev, next) => (
+  prev.expanded === next.expanded &&
+  prev.group.rows === next.group.rows
+));
+
+// ===== Single expiry sub-row (shown when group expanded) =====
+const PairSubRow = memo(function PairSubRow({ row, onManage }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
   return (
-    <tr className={`pair-row status-${row.status}`}>
-      <td className="pair-name gc-identity">
-        <div>{row.label || row.name}</div>
+    <tr className={`pair-row sub-row status-${row.status}`}>
+      <td className="pair-name gc-identity sub-name">
+        <span className="sub-indent">↳</span> {row.label}
       </td>
       <td className="gc-identity col-end-group">
         <div className="pair-expiry">{row.expiry_label || "—"}</div>
@@ -418,6 +459,11 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [page, setPage] = useState(1);
   const [openPair, setOpenPair] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  function toggleGroup(label) {
+    setExpandedGroups((g) => ({ ...g, [label]: !g[label] }));
+  }
 
   // Split by type
   const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
@@ -485,10 +531,21 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     });
   }, [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAIR_PAGE_SIZE));
+  // Group rows by label (PETAL / GUINEA, PETAL / TEN, etc.)
+  const groupedRows = useMemo(() => {
+    const map = new Map();
+    for (const r of sortedRows) {
+      const k = r.label;
+      if (!map.has(k)) map.set(k, { label: k, rows: [] });
+      map.get(k).rows.push(r);
+    }
+    return Array.from(map.values());
+  }, [sortedRows]);
+
+  const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAIR_PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * PAIR_PAGE_SIZE;
-  const slice = sortedRows.slice(start, start + PAIR_PAGE_SIZE);
+  const sliceGroups = groupedRows.slice(start, start + PAIR_PAGE_SIZE);
 
   useEffect(() => { setPage(1); }, [tab, filter, search, expiryFilter, sort.field, sort.dir]);
 
@@ -572,18 +629,25 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 ? (
+            {groupedRows.length === 0 ? (
               <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
-            ) : slice.map((r) => (
-              <PairRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
-            ))}
+            ) : sliceGroups.flatMap((g) => {
+              const isOpen = !!expandedGroups[g.label];
+              return [
+                <GroupRow key={`g:${g.label}`} group={g} expanded={isOpen}
+                  onToggle={() => toggleGroup(g.label)} />,
+                ...(isOpen ? g.rows.map((r) => (
+                  <PairSubRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
+                )) : []),
+              ];
+            })}
           </tbody>
         </table>
       </div>
 
-      {sortedRows.length > PAIR_PAGE_SIZE && (
+      {groupedRows.length > PAIR_PAGE_SIZE && (
         <div className="pagination-controls">
-          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, sortedRows.length)} of {sortedRows.length}</div>
+          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
           <div className="pager">
             <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
             <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>

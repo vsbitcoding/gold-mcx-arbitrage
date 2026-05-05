@@ -1319,6 +1319,32 @@ table.pair-table td.spread-num {
 .ladder-count-pill.dec { background: rgba(220,38,38,0.1); color: var(--red); }
 .ladder-count-pill.inc { background: rgba(22,163,74,0.1); color: var(--green); }
 
+/* Group summary row */
+table.pair-table tr.group-summary td { font-weight: 700; }
+table.pair-table tr.group-summary {
+  cursor: pointer;
+  background: var(--bg-surface-alt);
+}
+table.pair-table tr.group-summary:hover td { filter: brightness(1.04); }
+.row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.row-toggle .caret { color: var(--text-muted); font-size: 11px; min-width: 14px; }
+
+/* Sub row (expiry inside a group) */
+table.pair-table tr.sub-row { background: var(--bg-surface); }
+table.pair-table tr.sub-row td { font-size: 12px; }
+table.pair-table tr.sub-row td.sub-name { padding-left: 24px; font-weight: 500; color: var(--text-secondary); }
+.sub-indent { color: var(--text-muted); margin-right: 6px; }
+
 /* Expiry filter dropdown */
 .expiry-filter {
   padding: 7px 12px;
