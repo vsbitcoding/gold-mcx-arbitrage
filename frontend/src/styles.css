@@ -2069,3 +2069,152 @@ td.ldr-actions .save-btn {
   .pair-card-title { font-size: 13px; }
   .section-spread { font-size: 13px; }
 }
+
+/* ===== Responsive: Modal + Ladder Table ===== */
+@media (max-width: 1024px) {
+  .ladder-modal { width: 96vw; height: 92vh; }
+  .ladder-modal-head { padding: 12px 14px; gap: 10px; }
+  .ladder-modal-title .pair-card-title { font-size: 16px; }
+  .modal-spread { padding: 4px 10px; }
+  .modal-spread .val { font-size: 14px; }
+  .ladder-side-table { padding: 12px 14px; }
+  .add-ladder-row { grid-template-columns: 1fr 1fr 1fr 80px; gap: 6px; }
+  table.ladder-table tbody tr { height: 50px; }
+  td.ldr-used { min-width: 110px; }
+}
+
+@media (max-width: 768px) {
+  /* Modal goes full screen */
+  .ladder-modal-overlay { padding: 0; }
+  .ladder-modal {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top: none;
+  }
+  .ladder-modal-head {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+  .ladder-modal-title { width: 100%; }
+  .ladder-modal-spreads {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .modal-spread { flex: 1; padding: 4px 8px; }
+  .ladder-modal-tabs { padding: 0 10px; }
+  .mtab { padding: 10px 14px; font-size: 12px; }
+  .ladder-side-table { padding: 10px 12px; gap: 10px; }
+  .ladder-side-head { font-size: 12px; }
+
+  /* Table → vertical card list */
+  .ladder-table-wrap {
+    border: none;
+    overflow: visible;
+    min-height: 260px;
+  }
+  table.ladder-table,
+  table.ladder-table thead,
+  table.ladder-table tbody,
+  table.ladder-table tr,
+  table.ladder-table td,
+  table.ladder-table th { display: block; width: 100%; }
+  table.ladder-table thead { display: none; }
+  table.ladder-table { background: transparent; border: none; }
+  table.ladder-table tbody tr {
+    height: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 10px;
+    align-items: center;
+  }
+  table.ladder-table tbody td {
+    border: none;
+    padding: 4px 0;
+  }
+  table.ladder-table tbody td.ldr-num {
+    grid-column: 1;
+    grid-row: 1;
+    text-align: left;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+  table.ladder-table tbody td.ldr-num::before { content: "#"; color: var(--text-muted); margin-right: 2px; }
+  table.ladder-table tbody td:nth-child(2) { /* Status */
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  table.ladder-table tbody td:nth-child(3),  /* Entry */
+  table.ladder-table tbody td:nth-child(4),  /* Exit */
+  table.ladder-table tbody td:nth-child(5) { /* Max */
+    grid-column: span 1;
+  }
+  table.ladder-table tbody td:nth-child(3)::before {
+    content: "Entry"; display: block; font-size: 9px; font-weight: 700;
+    color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;
+  }
+  table.ladder-table tbody td:nth-child(4)::before {
+    content: "Exit"; display: block; font-size: 9px; font-weight: 700;
+    color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;
+  }
+  table.ladder-table tbody td:nth-child(5)::before {
+    content: "Max (g)"; display: block; font-size: 9px; font-weight: 700;
+    color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;
+  }
+  /* Place 3 input cells side-by-side */
+  table.ladder-table tbody tr {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  table.ladder-table tbody td.ldr-num { grid-column: 1 / span 2; }
+  table.ladder-table tbody td:nth-child(2) { grid-column: 3; grid-row: 1; }
+  table.ladder-table tbody td:nth-child(3) { grid-column: 1; grid-row: 2; }
+  table.ladder-table tbody td:nth-child(4) { grid-column: 2; grid-row: 2; }
+  table.ladder-table tbody td:nth-child(5) { grid-column: 3; grid-row: 2; }
+  table.ladder-table tbody td.ldr-used {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  table.ladder-table tbody td.ldr-actions {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    text-align: right;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-light);
+  }
+  td.ldr-actions .save-btn { margin-right: 6px; }
+
+  /* Add form stacked */
+  .add-ladder-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .add-ladder-row > input:nth-child(3) { grid-column: span 2; }
+  .add-ladder-row > button { grid-column: span 2; }
+
+  .ladder-pager { font-size: 11px; }
+  .ladder-pager .pager-buttons button { width: 26px; height: 26px; }
+
+  /* Make the main pair table scrollable horizontally */
+  table.pair-table { min-width: 720px; font-size: 12px; }
+  table.pair-table th { padding: 8px 6px; font-size: 10px; }
+  table.pair-table td { padding: 9px 6px; }
+}
+
+@media (max-width: 480px) {
+  .ladder-modal-head { padding: 8px 10px; }
+  .ladder-modal-title .pair-card-title { font-size: 14px; }
+  .modal-spread .val { font-size: 13px; }
+  .modal-spread .lbl { font-size: 8px; }
+  .mtab { padding: 8px 10px; font-size: 11px; }
+  .ladder-side-table { padding: 8px 10px; }
+  .add-ladder-row { grid-template-columns: 1fr 1fr; }
+  .ladder-status { font-size: 9px; padding: 2px 7px; }
+  .ladder-status .dot { width: 5px; height: 5px; }
+  .ldr-icon { width: 24px; height: 24px; font-size: 11px; }
+}
