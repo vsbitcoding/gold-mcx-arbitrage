@@ -263,18 +263,16 @@ function LadderTable({ pairName, side, ladders, defaultMaxWeight, maxAllowed, on
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="ladder-pager">
-              <span>Page {safePage} / {totalPages}</span>
-              <div className="pager-buttons">
-                <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
-                <span className="pager-cur">{safePage}</span>
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
-                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
-              </div>
+          <div className={`ladder-pager ${totalPages > 1 ? "" : "invisible"}`}>
+            <span>Page {safePage} / {totalPages}</span>
+            <div className="pager-buttons">
+              <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+              <span className="pager-cur">{safePage}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+              <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
             </div>
-          )}
+          </div>
         </>
       )}
     </div>
@@ -332,7 +330,7 @@ function LadderModal({ row, onClose, onChange }) {
         </div>
 
         <div className="ladder-modal-body">
-          {tab === "decrease" ? (
+          <div style={{ display: tab === "decrease" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
             <LadderTable
               pairName={row.name} side="decrease"
               ladders={row.decrease_ladders}
@@ -340,7 +338,8 @@ function LadderModal({ row, onClose, onChange }) {
               maxAllowed={row.max_allowed_weight}
               onChange={onChange}
             />
-          ) : (
+          </div>
+          <div style={{ display: tab === "increase" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column" }}>
             <LadderTable
               pairName={row.name} side="increase"
               ladders={row.increase_ladders}
@@ -348,7 +347,7 @@ function LadderModal({ row, onClose, onChange }) {
               maxAllowed={row.max_allowed_weight}
               onChange={onChange}
             />
-          )}
+          </div>
         </div>
       </div>
     </div>

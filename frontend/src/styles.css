@@ -1250,7 +1250,7 @@ table.pair-table td.spread-num {
   background: var(--bg-surface);
   border-radius: 12px;
   width: min(1100px, 96vw);
-  max-height: 92vh;
+  height: min(720px, 90vh);
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0,0,0,0.35);
@@ -1309,9 +1309,11 @@ table.pair-table td.spread-num {
 
 .ladder-modal-body {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 /* Tabs */
@@ -1353,10 +1355,12 @@ table.pair-table td.spread-num {
 .ladder-side-table {
   padding: 16px 20px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  scrollbar-gutter: stable;
 }
 .ladder-side-table .ladder-side-head {
   font-size: 13px;
@@ -1401,7 +1405,11 @@ table.pair-table td.spread-num {
 }
 
 /* Ladder data table */
-.ladder-table-wrap { overflow-x: auto; }
+.ladder-table-wrap {
+  overflow-x: auto;
+  flex: 1;
+  min-height: 320px;
+}
 table.ladder-table {
   width: 100%;
   border-collapse: collapse;
@@ -1409,7 +1417,9 @@ table.ladder-table {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  table-layout: fixed;
 }
+table.ladder-table tbody tr { height: 56px; }
 table.ladder-table thead th {
   background: var(--th-bg);
   color: var(--th-color);
@@ -1517,7 +1527,9 @@ td.ldr-actions .save-btn {
   font-size: 12px;
   color: var(--text-muted);
   padding: 6px 4px;
+  min-height: 36px;
 }
+.ladder-pager.invisible { visibility: hidden; }
 .ladder-pager .pager-buttons {
   display: flex;
   gap: 4px;
