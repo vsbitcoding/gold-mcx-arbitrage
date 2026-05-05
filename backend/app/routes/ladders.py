@@ -109,20 +109,11 @@ def update_ladder(
     if body.enabled is not None:
         rule.enabled = body.enabled
 
-    # Cap update — if open positions for this ladder, store as pending
-    has_open = (
-        db.query(Position)
-        .filter(Position.ladder_rule_id == rule_id, Position.status == "open")
-        .first()
-        is not None
-    )
-    if has_open and body.max_weight_grams != rule.max_weight_grams:
-        rule.pending_max_weight_grams = body.max_weight_grams
-        rule.has_pending_cap = 1
-    else:
-        rule.max_weight_grams = body.max_weight_grams
-        rule.pending_max_weight_grams = None
-        rule.has_pending_cap = 0
+    # Cap update applies IMMEDIATELY (no pending). Bot will check on next tick
+    # and fire any allowed trades if conditions are still met.
+    rule.max_weight_grams = body.max_weight_grams
+    rule.pending_max_weight_grams = None
+    rule.has_pending_cap = 0
 
     db.commit()
     prime_armed_state(rule.id)
