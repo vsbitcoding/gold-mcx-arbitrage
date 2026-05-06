@@ -1390,10 +1390,31 @@ table.pair-table tr.pair-row.open .caret {
 .ladder-modal { position: relative; }
 .ladder-modal > .ladder-modal-head .drawer-close {
   position: absolute;
-  top: 12px;
-  right: 14px;
-  z-index: 2;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
 }
+.ladder-modal > .ladder-modal-head .drawer-close:hover {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+  transform: rotate(90deg);
+}
+/* Reserve enough room so spread pills never sit under the close button */
 .ladder-modal-head { padding-right: 56px; }
 .row-toggle.compact {
   padding: 2px 6px;
@@ -1531,9 +1552,9 @@ table.pair-table tr.pair-row + tr.pair-row:not(.sub-row) td {
 }
 .ladder-modal-spreads {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   margin-left: auto;
-  margin-right: 8px;
+  margin-right: 0;
 }
 .modal-spread {
   text-align: center;
