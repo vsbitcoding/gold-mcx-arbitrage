@@ -127,9 +127,6 @@ def update_ladder(
         changes.append(f"cap {rule.max_weight_grams}g → {body.max_weight_grams}g")
         rule.max_weight_grams = body.max_weight_grams
 
-    rule.pending_max_weight_grams = None
-    rule.has_pending_cap = 0
-
     db.commit()
     prime_armed_state(rule.id)
     if changes:

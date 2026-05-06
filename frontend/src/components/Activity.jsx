@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
+import { fmtDateTime } from "../utils/format.js";
 
 const ACTION_META = {
   ladder_created: { label: "Created", cls: "act-create" },
@@ -11,15 +12,6 @@ const ACTION_META = {
   history_purged: { label: "Auto-Purge", cls: "act-system" },
   daily_clear: { label: "Daily Clear", cls: "act-system" },
 };
-
-function fmtTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit", month: "short",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
-  });
-}
 
 export default function Activity() {
   const [events, setEvents] = useState([]);
@@ -106,7 +98,7 @@ export default function Activity() {
               const meta = ACTION_META[e.action] || { label: e.action, cls: "" };
               return (
                 <tr key={e.id}>
-                  <td className="num time-cell">{fmtTime(e.timestamp)}</td>
+                  <td className="num time-cell">{fmtDateTime(e.timestamp)}</td>
                   <td><span className={`badge ${meta.cls}`}>{meta.label}</span></td>
                   <td className="num">{e.pair_name || "—"}</td>
                   <td>{e.side ? <span className={`badge ${e.side === "decrease" ? "badge-decrease" : "badge-increase"}`}>{e.side}</span> : "—"}</td>

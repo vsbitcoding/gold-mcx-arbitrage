@@ -53,7 +53,6 @@ export const api = {
   closePosition: (id) => request(`/api/positions/${id}/close`, { method: "POST" }),
   history: (days = 7, pairName) => request(`/api/history?days=${days}${pairName ? `&pair_name=${encodeURIComponent(pairName)}` : ""}`),
   deleteHistory: (id) => request(`/api/history/${id}`, { method: "DELETE" }),
-  pauseAll: () => request("/api/control/pause-all", { method: "POST" }),
   health: () => request("/api/health"),
   feedStatus: () => request("/api/feed/status"),
   // Ladder CRUD
