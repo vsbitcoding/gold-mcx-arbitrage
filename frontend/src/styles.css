@@ -1777,6 +1777,12 @@ td.ldr-actions .save-btn {
   font-family: 'Roboto Mono', ui-monospace, monospace;
   font-weight: 700;
 }
+.summary-block.compact { margin: 0 0 12px; }
+.modal-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .spread-pair-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);

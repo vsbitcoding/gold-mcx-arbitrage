@@ -279,6 +279,211 @@ function LadderTable({ pairName, side, ladders, defaultMaxWeight, maxAllowed, on
   );
 }
 
+// ===== Per-pair Positions tab =====
+function PairPositionsTab({ pairName }) {
+  const [data, setData] = useState({ positions: [], summaries: [] });
+  const [page, setPage] = useState(1);
+  const PER = 5;
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const r = await api.positions(pairName).catch(() => null);
+      if (alive && r) setData(r);
+    }
+    load();
+    const t = setInterval(load, 2000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pairName]);
+
+  const total = data.positions.length;
+  const totalPages = Math.max(1, Math.ceil(total / PER));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PER;
+  const slice = data.positions.slice(start, start + PER);
+
+  return (
+    <div className="modal-tab-pane">
+      {data.summaries.length > 0 && (
+        <div className="summary-block compact">
+          <div className="summary-title">Aggregate (weighted by gram)</div>
+          <table className="summary-table">
+            <thead>
+              <tr>
+                <th>Mode</th><th>Trades</th><th>Total Wt</th><th>Avg Entry</th><th>Cover</th><th>Live PnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.summaries.map((s) => (
+                <tr key={s.mode}>
+                  <td>
+                    <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span>
+                  </td>
+                  <td>{s.count}</td>
+                  <td>{s.total_weight_grams}g</td>
+                  <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
+                  <td className="spread-num">{s.cover_spread === null ? "—" : Number(s.cover_spread).toFixed(2)}</td>
+                  <td className={s.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                    {s.live_pnl >= 0 ? "+" : ""}{s.live_pnl}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {total === 0 ? (
+        <div className="empty-state">No active positions for this pair.</div>
+      ) : (
+        <>
+          <table className="ladder-table">
+            <thead>
+              <tr>
+                <th>Mode</th><th>Entry</th><th>Cover</th><th>Lots</th><th>Weight</th><th>Time</th><th>Live PnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    <span className={`badge ${p.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{p.mode}</span>
+                  </td>
+                  <td className="spread-num">{Number(p.entry_spread).toFixed(2)}</td>
+                  <td className="spread-num">{p.cover_spread === null ? "—" : Number(p.cover_spread).toFixed(2)}</td>
+                  <td>{p.big_lots}/{p.small_lots}</td>
+                  <td>{p.weight_grams}g</td>
+                  <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(p.entry_time).toLocaleTimeString()}</td>
+                  <td className={p.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                    {p.live_pnl >= 0 ? "+" : ""}{p.live_pnl}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="ladder-pager">
+              <span>Page {safePage} / {totalPages} · {total} total</span>
+              <div className="pager-buttons">
+                <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                <span className="pager-cur">{safePage}</span>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ===== Per-pair History tab =====
+function PairHistoryTab({ pairName }) {
+  const [data, setData] = useState({ trades: [], summaries: [] });
+  const [page, setPage] = useState(1);
+  const PER = 5;
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const r = await api.history(30, pairName).catch(() => null);
+      if (alive && r) setData(r);
+    }
+    load();
+    const t = setInterval(load, 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pairName]);
+
+  const total = data.trades.length;
+  const totalPages = Math.max(1, Math.ceil(total / PER));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PER;
+  const slice = data.trades.slice(start, start + PER);
+
+  return (
+    <div className="modal-tab-pane">
+      {data.summaries.length > 0 && (
+        <div className="summary-block compact">
+          <div className="summary-title">Aggregate (weighted by gram)</div>
+          <table className="summary-table">
+            <thead>
+              <tr>
+                <th>Mode</th><th>Trades</th><th>Total Wt</th><th>Avg Entry</th><th>Avg Exit</th><th>Total PnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.summaries.map((s) => (
+                <tr key={s.mode}>
+                  <td>
+                    <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span>
+                  </td>
+                  <td>{s.count}</td>
+                  <td>{s.total_weight_grams}g</td>
+                  <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
+                  <td className="spread-num">{s.avg_exit_spread === null ? "—" : Number(s.avg_exit_spread).toFixed(2)}</td>
+                  <td className={s.total_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                    {s.total_pnl >= 0 ? "+" : ""}{s.total_pnl}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {total === 0 ? (
+        <div className="empty-state">No history for this pair.</div>
+      ) : (
+        <>
+          <table className="ladder-table">
+            <thead>
+              <tr>
+                <th>Mode</th><th>Entry</th><th>Exit</th><th>Move</th><th>Weight</th><th>Closed</th><th>PnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map((r) => {
+                const move = r.exit_spread - r.entry_spread;
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{r.mode}</span>
+                    </td>
+                    <td className="spread-num">{Number(r.entry_spread).toFixed(2)}</td>
+                    <td className="spread-num">{Number(r.exit_spread).toFixed(2)}</td>
+                    <td className={`spread-num ${move >= 0 ? "pnl-positive" : "pnl-negative"}`}>
+                      {move >= 0 ? "+" : ""}{move.toFixed(2)}
+                    </td>
+                    <td>{r.weight_grams}g</td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      {new Date(r.exit_time).toLocaleString("en-IN", { hour12: false })}
+                    </td>
+                    <td className={r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                      {r.pnl >= 0 ? "+" : ""}{r.pnl}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="ladder-pager">
+              <span>Page {safePage} / {totalPages} · {total} total</span>
+              <div className="pager-buttons">
+                <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                <span className="pager-cur">{safePage}</span>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ===== Modal: ladder editor for a single pair =====
 function LadderModal({ row, onClose, onChange }) {
   const [tab, setTab] = useState("decrease");
@@ -327,6 +532,12 @@ function LadderModal({ row, onClose, onChange }) {
           <button className={`mtab inc ${tab === "increase" ? "active" : ""}`} onClick={() => setTab("increase")}>
             ▲ Increase <span className="mtab-count">{incCount}</span>
           </button>
+          <button className={`mtab ${tab === "positions" ? "active" : ""}`} onClick={() => setTab("positions")}>
+            Positions
+          </button>
+          <button className={`mtab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
+            History
+          </button>
         </div>
 
         <div className="ladder-modal-body">
@@ -347,6 +558,12 @@ function LadderModal({ row, onClose, onChange }) {
               maxAllowed={row.max_allowed_weight}
               onChange={onChange}
             />
+          </div>
+          <div style={{ display: tab === "positions" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", overflow: "auto", padding: "16px 20px" }}>
+            <PairPositionsTab pairName={row.name} />
+          </div>
+          <div style={{ display: tab === "history" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", overflow: "auto", padding: "16px 20px" }}>
+            <PairHistoryTab pairName={row.name} />
           </div>
         </div>
       </div>

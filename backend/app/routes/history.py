@@ -47,16 +47,15 @@ def _build_history_summaries(enriched: list[dict]) -> list[dict]:
 @router.get("")
 def list_history(
     days: int = Query(30, ge=1, le=365),
+    pair_name: str | None = None,
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
     since = datetime.utcnow() - timedelta(days=days)
-    rows = (
-        db.query(TradeHistory)
-        .filter(TradeHistory.exit_time >= since)
-        .order_by(TradeHistory.exit_time.desc())
-        .all()
-    )
+    q = db.query(TradeHistory).filter(TradeHistory.exit_time >= since)
+    if pair_name:
+        q = q.filter(TradeHistory.pair_name == pair_name)
+    rows = q.order_by(TradeHistory.exit_time.desc()).all()
     out = []
     for r in rows:
         pair_def = _pair_def(r.pair_name)

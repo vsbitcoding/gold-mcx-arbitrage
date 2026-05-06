@@ -100,8 +100,15 @@ def _build_summaries(enriched: list[dict]) -> list[dict]:
 
 
 @router.get("")
-def list_open(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
-    rows = db.query(Position).filter(Position.status == "open").order_by(Position.id.desc()).all()
+def list_open(
+    pair_name: str | None = None,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    q = db.query(Position).filter(Position.status == "open")
+    if pair_name:
+        q = q.filter(Position.pair_name == pair_name)
+    rows = q.order_by(Position.id.desc()).all()
     enriched = [_enrich(p) for p in rows]
     return {
         "positions": enriched,
