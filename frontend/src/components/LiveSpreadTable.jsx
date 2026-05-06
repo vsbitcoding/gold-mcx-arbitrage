@@ -532,12 +532,6 @@ function LadderModal({ row, onClose, onChange }) {
           <button className={`mtab inc ${tab === "increase" ? "active" : ""}`} onClick={() => setTab("increase")}>
             ▲ Increase <span className="mtab-count">{incCount}</span>
           </button>
-          <button className={`mtab ${tab === "positions" ? "active" : ""}`} onClick={() => setTab("positions")}>
-            Positions
-          </button>
-          <button className={`mtab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
-            History
-          </button>
         </div>
 
         <div className="ladder-modal-body">
@@ -559,12 +553,66 @@ function LadderModal({ row, onClose, onChange }) {
               onChange={onChange}
             />
           </div>
-          <div style={{ display: tab === "positions" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", overflow: "auto", padding: "16px 20px" }}>
-            <PairPositionsTab pairName={row.name} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Standalone Positions modal =====
+function PositionsModal({ row, onClose }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  if (!row) return null;
+  return (
+    <div className="ladder-modal-overlay" onClick={onClose}>
+      <div className="ladder-modal info-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ladder-modal-head">
+          <div className="ladder-modal-title">
+            <span className="pair-card-title">{row.name}</span>
+            <span className="info-modal-tag">Active Positions</span>
           </div>
-          <div style={{ display: tab === "history" ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", overflow: "auto", padding: "16px 20px" }}>
-            <PairHistoryTab pairName={row.name} />
+          <button className="drawer-close" onClick={onClose}>×</button>
+        </div>
+        <div className="ladder-modal-body" style={{ overflow: "auto", padding: "16px 20px" }}>
+          <PairPositionsTab pairName={row.name} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Standalone History modal =====
+function HistoryModal({ row, onClose }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  if (!row) return null;
+  return (
+    <div className="ladder-modal-overlay" onClick={onClose}>
+      <div className="ladder-modal info-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ladder-modal-head">
+          <div className="ladder-modal-title">
+            <span className="pair-card-title">{row.name}</span>
+            <span className="info-modal-tag">Trade History</span>
           </div>
+          <button className="drawer-close" onClick={onClose}>×</button>
+        </div>
+        <div className="ladder-modal-body" style={{ overflow: "auto", padding: "16px 20px" }}>
+          <PairHistoryTab pairName={row.name} />
         </div>
       </div>
     </div>
@@ -574,7 +622,7 @@ function LadderModal({ row, onClose, onChange }) {
 // ===== Front-month row (default visible) =====
 // Acts as the primary row for each pair — full data + Manage button.
 // Has a "+N more" button to expand the other expiries below.
-const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onToggle, onManage }) {
+const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onToggle, onManage, onPositions, onHistory }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
 
@@ -612,14 +660,28 @@ const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onTo
       <td className="gc-status">
         <div className="front-actions">
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-xs"
             onClick={(e) => { e.stopPropagation(); onManage(row.name); }}
           >
             Manage
           </button>
+          <button
+            className="btn btn-secondary btn-xs"
+            onClick={(e) => { e.stopPropagation(); onPositions(row.name); }}
+            title="Active positions for this pair"
+          >
+            Positions
+          </button>
+          <button
+            className="btn btn-secondary btn-xs"
+            onClick={(e) => { e.stopPropagation(); onHistory(row.name); }}
+            title="Trade history for this pair"
+          >
+            History
+          </button>
           {otherCount > 0 && (
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-ghost btn-xs"
               onClick={(e) => { e.stopPropagation(); onToggle(); }}
             >
               {expanded ? "Hide" : `+${otherCount}`}
@@ -639,7 +701,7 @@ const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onTo
 ));
 
 // ===== Other-month sub-row (shown when expanded) =====
-const OtherMonthRow = memo(function OtherMonthRow({ row, onManage }) {
+const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPositions, onHistory }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
   return (
@@ -661,7 +723,11 @@ const OtherMonthRow = memo(function OtherMonthRow({ row, onManage }) {
       <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
       <td className="gc-status">
-        <button className="btn btn-primary btn-sm" onClick={() => onManage(row.name)}>Manage</button>
+        <div className="front-actions">
+          <button className="btn btn-primary btn-xs" onClick={() => onManage(row.name)}>Manage</button>
+          <button className="btn btn-secondary btn-xs" onClick={() => onPositions(row.name)}>Positions</button>
+          <button className="btn btn-secondary btn-xs" onClick={() => onHistory(row.name)}>History</button>
+        </div>
       </td>
     </tr>
   );
@@ -702,6 +768,8 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [page, setPage] = useState(1);
   const [openPair, setOpenPair] = useState(null);
+  const [openPositionsPair, setOpenPositionsPair] = useState(null);
+  const [openHistoryPair, setOpenHistoryPair] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
 
   function toggleGroup(label) {
@@ -793,6 +861,8 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   useEffect(() => { setPage(1); }, [tab, filter, search, expiryFilter, sort.field, sort.dir]);
 
   const openRow = openPair ? rows.find((r) => r.name === openPair) : null;
+  const positionsRow = openPositionsPair ? rows.find((r) => r.name === openPositionsPair) : null;
+  const historyRow = openHistoryPair ? rows.find((r) => r.name === openHistoryPair) : null;
 
   function resetFilters() {
     setSearch("");
@@ -891,9 +961,17 @@ export default function LiveSpreadTable({ rows, onSaved }) {
                   expanded={isOpen}
                   onToggle={() => toggleGroup(g.label)}
                   onManage={(n) => setOpenPair(n)}
+                  onPositions={(n) => setOpenPositionsPair(n)}
+                  onHistory={(n) => setOpenHistoryPair(n)}
                 />,
                 ...(isOpen ? others.map((r) => (
-                  <OtherMonthRow key={r.name} row={r} onManage={(n) => setOpenPair(n)} />
+                  <OtherMonthRow
+                    key={r.name}
+                    row={r}
+                    onManage={(n) => setOpenPair(n)}
+                    onPositions={(n) => setOpenPositionsPair(n)}
+                    onHistory={(n) => setOpenHistoryPair(n)}
+                  />
                 )) : []),
               ];
             })}
@@ -916,6 +994,12 @@ export default function LiveSpreadTable({ rows, onSaved }) {
 
       {openRow && (
         <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />
+      )}
+      {positionsRow && (
+        <PositionsModal row={positionsRow} onClose={() => setOpenPositionsPair(null)} />
+      )}
+      {historyRow && (
+        <HistoryModal row={historyRow} onClose={() => setOpenHistoryPair(null)} />
       )}
     </div>
   );
