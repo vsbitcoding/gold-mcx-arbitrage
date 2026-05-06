@@ -1381,6 +1381,15 @@ table.pair-table tr.pair-row.open .caret {
   border-radius: 4px;
   margin-left: 8px;
 }
+/* Close button always pinned to top-right of every modal */
+.ladder-modal { position: relative; }
+.ladder-modal > .ladder-modal-head .drawer-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+}
+.ladder-modal-head { padding-right: 56px; }
 .row-toggle.compact {
   padding: 2px 6px;
   border-radius: 5px;
