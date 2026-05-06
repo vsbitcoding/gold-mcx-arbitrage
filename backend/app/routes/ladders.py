@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.config import MAX_ALLOWED_WEIGHT_GRAMS
 from app.database import get_db
-from app.models import LadderRule, Position
+from app.models import LadderRule
 from app.security import get_current_user
-from app.services import pair_registry
+from app.services import activity, pair_registry
 from app.services.trade_engine import prime_armed_state
 
 router = APIRouter(prefix="/api/ladders", tags=["ladders"])
@@ -24,7 +24,6 @@ class LadderUpdate(BaseModel):
     entry: float | None = None
     exit: float | None = None
     max_weight_grams: int | None = None
-    enabled: bool | None = None
 
 
 def _validate_weight(w: int | None) -> None:
@@ -44,8 +43,6 @@ def _to_dict(rule: LadderRule) -> dict:
         "entry": rule.entry,
         "exit": rule.exit,
         "max_weight_grams": rule.max_weight_grams,
-        "pending_max_weight_grams": rule.pending_max_weight_grams,
-        "has_pending_cap": bool(rule.has_pending_cap),
         "sort_order": rule.sort_order or 0,
         "enabled": bool(rule.enabled),
     }
@@ -89,6 +86,13 @@ def create_ladder(
     db.commit()
     db.refresh(rule)
     prime_armed_state(rule.id)
+    activity.log(
+        db, "ladder_created",
+        pair_name=body.pair_name, side=body.side, ladder_id=rule.id, actor="user",
+        summary=f"Ladder created · entry={body.entry} exit={body.exit} cap={body.max_weight_grams}g",
+        details={"entry": body.entry, "exit": body.exit, "max_weight_grams": body.max_weight_grams},
+        commit=True,
+    )
     return _to_dict(rule)
 
 
@@ -104,19 +108,38 @@ def update_ladder(
         raise HTTPException(404, "Ladder not found")
     _validate_weight(body.max_weight_grams)
 
-    rule.entry = body.entry
-    rule.exit = body.exit
-    if body.enabled is not None:
-        rule.enabled = body.enabled
+    # Cap is one-way: only-increase. Reject any decrease attempt.
+    if body.max_weight_grams is not None and rule.max_weight_grams is not None:
+        if body.max_weight_grams < rule.max_weight_grams:
+            raise HTTPException(
+                400,
+                f"Cap can only be increased. Current cap is {rule.max_weight_grams}g; cannot reduce to {body.max_weight_grams}g.",
+            )
 
-    # Cap update applies IMMEDIATELY (no pending). Bot will check on next tick
-    # and fire any allowed trades if conditions are still met.
-    rule.max_weight_grams = body.max_weight_grams
+    changes = []
+    if rule.entry != body.entry:
+        changes.append(f"entry {rule.entry} → {body.entry}")
+        rule.entry = body.entry
+    if rule.exit != body.exit:
+        changes.append(f"exit {rule.exit} → {body.exit}")
+        rule.exit = body.exit
+    if rule.max_weight_grams != body.max_weight_grams:
+        changes.append(f"cap {rule.max_weight_grams}g → {body.max_weight_grams}g")
+        rule.max_weight_grams = body.max_weight_grams
+
     rule.pending_max_weight_grams = None
     rule.has_pending_cap = 0
 
     db.commit()
     prime_armed_state(rule.id)
+    if changes:
+        activity.log(
+            db, "ladder_updated",
+            pair_name=rule.pair_name, side=rule.side, ladder_id=rule.id, actor="user",
+            summary="Ladder updated · " + ", ".join(changes),
+            details={"entry": rule.entry, "exit": rule.exit, "max_weight_grams": rule.max_weight_grams},
+            commit=True,
+        )
     return _to_dict(rule)
 
 
@@ -129,14 +152,14 @@ def delete_ladder(
     rule = db.query(LadderRule).filter(LadderRule.id == rule_id).first()
     if not rule:
         raise HTTPException(404, "Ladder not found")
-    has_open = (
-        db.query(Position)
-        .filter(Position.ladder_rule_id == rule_id, Position.status == "open")
-        .first()
-        is not None
-    )
-    if has_open:
-        raise HTTPException(400, "Cannot delete — open trades exist for this ladder. Square off first.")
+    pair_name, side = rule.pair_name, rule.side
+    cap = rule.max_weight_grams
     db.delete(rule)
+    activity.log(
+        db, "ladder_deleted",
+        pair_name=pair_name, side=side, ladder_id=rule_id, actor="user",
+        summary=f"Ladder deleted (cap was {cap}g)",
+        details={"max_weight_grams": cap},
+    )
     db.commit()
     return {"ok": True}

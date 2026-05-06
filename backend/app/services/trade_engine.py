@@ -4,13 +4,15 @@ Each pair-side can have many LadderRules. Each ladder fires and runs
 INDEPENDENTLY:
   - Own entry threshold
   - Own exit threshold
-  - Own weight cap (cumulative across ladder's open positions)
+  - Own weight cap (LIFETIME — total grams ever fired on this ladder)
   - Own armed state (must leave + re-enter trigger zone after fill)
 
-Cap semantics (per ladder):
-  - On save → fire to current cap (back-to-back if spread in zone)
-  - Cap full → no more fires until current ladder positions all square off
-  - Cap mid-trade change → stored as PENDING, applies after square-off
+Cap semantics (per ladder, lifetime):
+  - Fired counter = sum of (big_lots × grams_per_lot) across ALL positions
+    ever opened on this ladder (status = open OR closed). It never resets.
+  - Spread in trigger zone + fired_g + new_cycle_g ≤ cap → fire
+  - fired_g ≥ cap → ladder is LOCKED (no fires) until cap is RAISED
+  - Cap is one-way only: validation in routes/ladders.py disallows decrease
 """
 from datetime import datetime
 from typing import List
@@ -19,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, cycle_grams
 from app.models import LadderRule, Position, TradeHistory
-from app.services import pair_registry
+from app.services import activity, pair_registry
 from app.services.spread_engine import compute_pair
 
 
@@ -50,35 +52,36 @@ def open_positions_for_ladder(db: Session, ladder_id: int) -> List[Position]:
     )
 
 
-def open_weight_grams_for_ladder(db: Session, ladder_id: int, big_instrument: str) -> int:
+def fired_weight_grams_for_ladder(db: Session, ladder_id: int, big_instrument: str) -> int:
+    """LIFETIME fired weight for a ladder — sum across open + closed positions.
+
+    This counter never decreases on its own. To 'unlock', the user must
+    raise the ladder's cap (handled in routes/ladders.py).
+    """
     g = GRAMS_PER_LOT.get(big_instrument, 0)
-    rows = open_positions_for_ladder(db, ladder_id)
-    return sum(r.big_lots * g for r in rows)
+    open_rows = (
+        db.query(Position.big_lots)
+        .filter(Position.ladder_rule_id == ladder_id, Position.status == "open")
+        .all()
+    )
+    closed_rows = (
+        db.query(TradeHistory.big_lots)
+        .filter(TradeHistory.ladder_rule_id == ladder_id)
+        .all()
+    )
+    return sum(r[0] for r in open_rows) * g + sum(r[0] for r in closed_rows) * g
 
 
 def can_open_new_cycle_for_ladder(
     db: Session, pair: dict, rule: LadderRule
 ) -> bool:
     cap = effective_max_weight(rule)
-    current = open_weight_grams_for_ladder(db, rule.id, pair["big"])
+    fired = fired_weight_grams_for_ladder(db, rule.id, pair["big"])
     new_cycle = cycle_grams(pair)
-    return (current + new_cycle) <= cap
-
-
-def reconcile_pending_caps(db: Session) -> None:
-    """Apply pending cap changes once a ladder has no open positions."""
-    rules = db.query(LadderRule).filter(LadderRule.has_pending_cap == 1).all()
-    for rule in rules:
-        if not open_positions_for_ladder(db, rule.id):
-            rule.max_weight_grams = rule.pending_max_weight_grams
-            rule.pending_max_weight_grams = None
-            rule.has_pending_cap = 0
-            _armed[rule.id] = True  # re-prime for next round
+    return (fired + new_cycle) <= cap
 
 
 def evaluate(db: Session) -> None:
-    reconcile_pending_caps(db)
-
     # Group ladder rules by pair to avoid recomputing snapshots
     rules = db.query(LadderRule).filter(LadderRule.enabled == True).all()
     by_pair: dict[str, list[LadderRule]] = {}
@@ -165,6 +168,13 @@ def _open_trade(db: Session, pair: dict, mode: str, snap: dict, ladder_id: int) 
         ladder_rule_id=ladder_id,
     )
     db.add(pos)
+    weight = pair["big_lots"] * GRAMS_PER_LOT.get(pair["big"], 0)
+    activity.log(
+        db, "fire",
+        pair_name=pair["name"], side=mode, ladder_id=ladder_id, actor="auto",
+        summary=f"Fire {mode} @ {spread:.2f} · {weight}g",
+        details={"spread": spread, "weight_grams": weight, "big_lots": pair["big_lots"]},
+    )
 
 
 def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None:
@@ -199,9 +209,17 @@ def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None
         big_exit_price=big_exit,
         small_exit_price=small_exit,
         weight_grams=weight,
+        ladder_rule_id=pos.ladder_rule_id,
     )
     db.add(history)
     pos.status = "closed"
+    activity.log(
+        db, "exit",
+        pair_name=pos.pair_name, side=pos.mode, ladder_id=pos.ladder_rule_id,
+        actor=("auto" if closed_by == "auto" else "user"),
+        summary=f"Exit {pos.mode} @ {exit_spread:.2f} · PnL {pnl:+.2f}",
+        details={"entry_spread": pos.entry_spread, "exit_spread": exit_spread, "pnl": round(pnl, 2), "weight_grams": weight, "closed_by": closed_by},
+    )
 
 
 def manual_close(db: Session, position_id: int) -> TradeHistory | None:

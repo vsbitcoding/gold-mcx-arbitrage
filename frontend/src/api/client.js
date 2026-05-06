@@ -51,7 +51,8 @@ export const api = {
     }),
   positions: (pairName) => request(`/api/positions${pairName ? `?pair_name=${encodeURIComponent(pairName)}` : ""}`),
   closePosition: (id) => request(`/api/positions/${id}/close`, { method: "POST" }),
-  history: (days = 30, pairName) => request(`/api/history?days=${days}${pairName ? `&pair_name=${encodeURIComponent(pairName)}` : ""}`),
+  history: (days = 7, pairName) => request(`/api/history?days=${days}${pairName ? `&pair_name=${encodeURIComponent(pairName)}` : ""}`),
+  deleteHistory: (id) => request(`/api/history/${id}`, { method: "DELETE" }),
   pauseAll: () => request("/api/control/pause-all", { method: "POST" }),
   health: () => request("/api/health"),
   feedStatus: () => request("/api/feed/status"),
@@ -67,4 +68,15 @@ export const api = {
     body: JSON.stringify(body),
   }),
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
+  // Activity log
+  activity: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.days) q.set("days", params.days);
+    if (params.limit) q.set("limit", params.limit);
+    if (params.offset) q.set("offset", params.offset);
+    if (params.pair_name) q.set("pair_name", params.pair_name);
+    if (params.action) q.set("action", params.action);
+    const qs = q.toString();
+    return request(`/api/activity${qs ? `?${qs}` : ""}`);
+  },
 };

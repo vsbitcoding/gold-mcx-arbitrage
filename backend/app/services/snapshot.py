@@ -2,37 +2,45 @@
 from sqlalchemy.orm import Session
 
 from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, MAX_ALLOWED_WEIGHT_GRAMS, cycle_grams
-from app.models import LadderRule, Position
+from app.models import LadderRule, Position, TradeHistory
 from app.services import pair_registry
 from app.services.spread_engine import compute_all
 from app.services.trade_engine import effective_max_weight
 
 
-def _ladder_dict(r: LadderRule, open_weight: int) -> dict:
+def _ladder_dict(r: LadderRule, open_weight: int, fired_weight: int, open_count: int) -> dict:
+    cap = effective_max_weight(r)
     return {
         "id": r.id,
         "side": r.side,
         "entry": r.entry,
         "exit": r.exit,
         "max_weight_grams": r.max_weight_grams,
-        "pending_max_weight_grams": r.pending_max_weight_grams,
-        "has_pending_cap": bool(r.has_pending_cap),
-        "effective_max_weight": effective_max_weight(r),
-        "open_weight_grams": open_weight,
+        "effective_max_weight": cap,
+        "open_weight_grams": open_weight,         # currently-open weight (info only)
+        "fired_weight_grams": fired_weight,       # LIFETIME fired (used for cap check)
+        "headroom_grams": max(0, cap - fired_weight),
+        "locked": fired_weight >= cap,
         "sort_order": r.sort_order or 0,
         "enabled": bool(r.enabled),
-        "open_count": 0,
+        "open_count": open_count,
     }
 
 
 def build_live_payload(db: Session) -> list[dict]:
     ladders = db.query(LadderRule).order_by(LadderRule.sort_order, LadderRule.id).all()
 
+    # Open positions by ladder
     open_positions = db.query(Position).filter(Position.status == "open").all()
     open_by_ladder: dict[int, list[Position]] = {}
     for p in open_positions:
         if p.ladder_rule_id is not None:
             open_by_ladder.setdefault(p.ladder_rule_id, []).append(p)
+
+    # Closed-trade lots per ladder for lifetime counter
+    closed_lots_by_ladder: dict[int, int] = {}
+    for ladder_id, big_lots in db.query(TradeHistory.ladder_rule_id, TradeHistory.big_lots).filter(TradeHistory.ladder_rule_id.isnot(None)).all():
+        closed_lots_by_ladder[ladder_id] = closed_lots_by_ladder.get(ladder_id, 0) + (big_lots or 0)
 
     pair_def_by_name = {p["name"]: p for p in pair_registry.get_pairs()}
 
@@ -52,9 +60,10 @@ def build_live_payload(db: Session) -> list[dict]:
             if r.pair_name != s["name"]:
                 continue
             opens = open_by_ladder.get(r.id, [])
-            open_weight = sum(p.big_lots * big_g for p in opens)
-            d = _ladder_dict(r, open_weight)
-            d["open_count"] = len(opens)
+            open_lots = sum(p.big_lots for p in opens)
+            open_weight = open_lots * big_g
+            fired_weight = (open_lots + closed_lots_by_ladder.get(r.id, 0)) * big_g
+            d = _ladder_dict(r, open_weight, fired_weight, len(opens))
             if r.side == "decrease":
                 decrease_ladders.append(d)
                 if opens:

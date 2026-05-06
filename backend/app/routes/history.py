@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import TradeHistory
 from app.security import get_current_user
-from app.services import pair_registry
+from app.services import activity, pair_registry
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -94,3 +94,24 @@ def list_history(
         "trades": out,
         "summaries": _build_history_summaries(out),
     }
+
+
+@router.delete("/{trade_id}")
+def delete_trade(
+    trade_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    row = db.query(TradeHistory).filter(TradeHistory.id == trade_id).first()
+    if not row:
+        raise HTTPException(404, "History record not found")
+    pair_name, mode, pnl = row.pair_name, row.mode, row.pnl
+    db.delete(row)
+    activity.log(
+        db, "history_deleted",
+        pair_name=pair_name, side=mode, actor="user",
+        summary=f"History record #{trade_id} deleted (PnL was {pnl:+.2f})",
+        details={"trade_id": trade_id, "pnl": pnl},
+    )
+    db.commit()
+    return {"ok": True}

@@ -141,6 +141,11 @@ body {
   transition: all 0.15s;
 }
 .nav-tab:hover { background: var(--bg-primary); color: var(--text-primary); }
+.nav-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 .nav-badge {
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -1924,6 +1929,19 @@ td.ldr-actions .save-btn {
   letter-spacing: 0.5px;
   padding: 4px 10px;
 }
+/* Activity page action / actor badges */
+.badge.act-create  { background: rgba(22,163,74,0.15); color: var(--green); }
+.badge.act-update  { background: rgba(99,102,241,0.15); color: var(--accent); }
+.badge.act-delete  { background: rgba(220,38,38,0.15); color: var(--red); }
+.badge.act-fire    { background: rgba(245,158,11,0.18); color: #b45309; }
+.badge.act-exit    { background: rgba(14,165,233,0.18); color: #0369a1; }
+.badge.act-system  { background: rgba(127,127,127,0.18); color: var(--text-muted); font-style: italic; }
+.badge.actor-user   { background: rgba(99,102,241,0.10); color: var(--accent); }
+.badge.actor-auto   { background: rgba(245,158,11,0.10); color: #b45309; }
+.badge.actor-system { background: rgba(127,127,127,0.18); color: var(--text-muted); }
+.activity-page .info-table-wrap { margin-top: 16px; }
+.activity-table-wrap { max-height: calc(100vh - 220px); overflow: auto; }
+
 /* Aggregate block uses the same info-table look */
 .summary-block .info-table-wrap {
   background: var(--bg-surface);

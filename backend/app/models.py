@@ -70,6 +70,9 @@ class TradeHistory(Base):
     small_exit_price = Column(Float, nullable=True)
     weight_grams = Column(Integer, nullable=True)
 
+    # Link back to source ladder for lifetime-fired counter
+    ladder_rule_id = Column(Integer, nullable=True, index=True)
+
 
 from sqlalchemy import Index  # noqa: E402
 
@@ -111,6 +114,7 @@ class LadderRule(Base):
     exit = Column(Float, nullable=True)
     max_weight_grams = Column(Integer, nullable=True)
 
+    # Legacy pending-cap columns kept for backward compatibility (no longer written)
     pending_max_weight_grams = Column(Integer, nullable=True)
     has_pending_cap = Column(Integer, default=0, nullable=False)
 
@@ -119,3 +123,19 @@ class LadderRule(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ActivityLog(Base):
+    """Audit trail of every meaningful action: ladder lifecycle, fires, exits,
+    deletions, daily auto-clear, history purge."""
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    action = Column(String(48), nullable=False, index=True)
+    pair_name = Column(String(64), nullable=True, index=True)
+    side = Column(String(16), nullable=True)         # decrease | increase | None
+    ladder_id = Column(Integer, nullable=True)
+    actor = Column(String(16), default="user")       # user | system | auto
+    summary = Column(String(255), nullable=True)     # human-readable line
+    details = Column(Text, nullable=True)            # JSON blob with extra context

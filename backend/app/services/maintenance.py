@@ -1,6 +1,8 @@
-"""Background DB maintenance: prune old history, VACUUM SQLite occasionally.
-
-Runs in a daemon thread. No external schedulers required.
+"""Background DB maintenance:
+- Daily auto-clear of all ladder rules at MCX close (~23:35 IST = 18:05 UTC)
+- 7-day rolling history retention
+- Activity log: 30-day retention
+- Occasional SQLite VACUUM
 """
 from __future__ import annotations
 
@@ -13,12 +15,19 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import SessionLocal, engine
-from app.models import TradeHistory
+from app.models import ActivityLog, LadderRule, TradeHistory
+from app.services import activity
 
 log = logging.getLogger("maintenance")
 
-HISTORY_RETENTION_DAYS = 90
-RUN_INTERVAL_SECONDS = 24 * 3600  # daily
+HISTORY_RETENTION_DAYS = 7
+ACTIVITY_RETENTION_DAYS = 30
+
+# Daily auto-clear runs at 23:35 IST (= 18:05 UTC). MCX non-agri commodities
+# session closes at 23:30 IST.
+CLEAR_HOUR_UTC = 18
+CLEAR_MINUTE_UTC = 5
+TICK_SECONDS = 60
 
 
 def _prune_history() -> int:
@@ -26,6 +35,42 @@ def _prune_history() -> int:
     db = SessionLocal()
     try:
         n = db.query(TradeHistory).filter(TradeHistory.exit_time < cutoff).delete()
+        if n > 0:
+            activity.log(
+                db, "history_purged",
+                actor="system",
+                summary=f"Auto-purged {n} history records older than {HISTORY_RETENTION_DAYS} days",
+                details={"deleted": n, "retention_days": HISTORY_RETENTION_DAYS},
+            )
+        db.commit()
+        return n
+    finally:
+        db.close()
+
+
+def _prune_activity() -> int:
+    cutoff = datetime.utcnow() - timedelta(days=ACTIVITY_RETENTION_DAYS)
+    db = SessionLocal()
+    try:
+        n = db.query(ActivityLog).filter(ActivityLog.timestamp < cutoff).delete()
+        db.commit()
+        return n
+    finally:
+        db.close()
+
+
+def _daily_clear_ladders() -> int:
+    """Delete all ladder rules. Open positions are left as-is (per client spec)."""
+    db = SessionLocal()
+    try:
+        n = db.query(LadderRule).delete()
+        if n > 0:
+            activity.log(
+                db, "daily_clear",
+                actor="system",
+                summary=f"Daily auto-clear: deleted {n} ladders at MCX close",
+                details={"deleted": n},
+            )
         db.commit()
         return n
     finally:
@@ -40,18 +85,31 @@ def _vacuum() -> None:
 
 
 def _loop() -> None:
-    # First run after 60s (let app warm up); thereafter daily
-    time.sleep(60)
+    # Track which day we last ran the daily clear (UTC date) to avoid double-fire
+    last_clear_date: str | None = None
+    time.sleep(15)
     while True:
         try:
-            n = _prune_history()
-            log.info("Maintenance: pruned %d history rows older than %d days.", n, HISTORY_RETENTION_DAYS)
-            if n > 0:
-                _vacuum()
-                log.info("Maintenance: VACUUM done.")
+            now = datetime.utcnow()
+            today_str = now.date().isoformat()
+            # Daily auto-clear window: at or after 18:05 UTC on a fresh date
+            if (
+                last_clear_date != today_str
+                and (now.hour, now.minute) >= (CLEAR_HOUR_UTC, CLEAR_MINUTE_UTC)
+            ):
+                cleared = _daily_clear_ladders()
+                pruned = _prune_history()
+                act_pruned = _prune_activity()
+                log.info(
+                    "Daily auto-clear: %d ladders, %d history rows, %d activity rows.",
+                    cleared, pruned, act_pruned,
+                )
+                if pruned > 0 or cleared > 0:
+                    _vacuum()
+                last_clear_date = today_str
         except Exception as e:
             log.exception("Maintenance error: %s", e)
-        time.sleep(RUN_INTERVAL_SECONDS)
+        time.sleep(TICK_SECONDS)
 
 
 def start_in_background() -> threading.Thread:

@@ -3,8 +3,9 @@ import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
-import { ToastProvider, useToast } from "./components/Toast.jsx";
-import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
+import Activity from "./components/Activity.jsx";
+import { ToastProvider } from "./components/Toast.jsx";
+import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
@@ -13,9 +14,6 @@ function getStoredTheme() {
 }
 
 function Dashboard() {
-  const toast = useToast();
-  const confirm = useConfirm();
-
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
@@ -23,6 +21,7 @@ function Dashboard() {
   const [wsState, setWsState] = useState("connecting"); // connecting | live | reconnecting
   const [theme, setTheme] = useState(getStoredTheme());
   const [user] = useState("Vivek_Bitcoding");
+  const [page, setPage] = useState("dashboard");
   const fallbackRef = useRef(null);
 
   useEffect(() => {
@@ -35,7 +34,7 @@ function Dashboard() {
     try {
       const [op, h, fs] = await Promise.all([
         api.positions(),
-        api.history(30),
+        api.history(7),
         api.feedStatus().catch(() => null),
       ]);
       if (op && Array.isArray(op.positions)) setPositions(op.positions);
@@ -103,27 +102,6 @@ function Dashboard() {
     }
   }, [wsState]);
 
-  async function pauseAll() {
-    const anyOpen = positions.length > 0;
-    const ok = await confirm({
-      title: "Pause All Pairs?",
-      message: anyOpen
-        ? `${positions.length} trade${positions.length > 1 ? "s are" : " is"} still open. Pausing only clears entry/exit values — open trades will NOT be closed. Use "Square Off" individually to close them.`
-        : "Clear entry/exit values across all 6 pairs. Bot will stop firing new trades until you set new values.",
-      confirmText: "Pause All",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.pauseAll();
-      toast.success("All pairs paused.");
-      refreshSlow();
-      refreshPairsFallback();
-    } catch (e) {
-      toast.error(e.message);
-    }
-  }
-
   function logout() {
     clearToken();
     window.location.reload();
@@ -135,23 +113,29 @@ function Dashboard() {
 
   const onLocalSaved = () => {
     refreshSlow();
-    // pairs will refresh via WS push within ~100ms
   };
 
   return (
     <div className="app">
       <Header
         user={user}
-        onPause={pauseAll}
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
         feedStatus={feedStatus}
         wsState={wsState}
+        page={page}
+        onNavigate={setPage}
       />
       <div className="container">
-        <StatCards pairs={pairs} positions={positions} history={history} />
-        <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
+        {page === "dashboard" ? (
+          <>
+            <StatCards pairs={pairs} positions={positions} history={history} />
+            <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
+          </>
+        ) : (
+          <Activity />
+        )}
       </div>
     </div>
   );

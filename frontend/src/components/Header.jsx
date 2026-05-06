@@ -2,12 +2,13 @@ import React from "react";
 
 export default function Header({
   user,
-  onPause,
   onLogout,
   theme,
   onToggleTheme,
   feedStatus,
   wsState,
+  page,
+  onNavigate,
 }) {
   // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
   const dhanMode = feedStatus?.mode;
@@ -62,6 +63,20 @@ export default function Header({
           <span className="accent">Arbi</span>
           <span>Dash</span>
         </div>
+        <nav className="nav-tabs">
+          <button
+            className={`nav-tab ${page === "dashboard" ? "active" : ""}`}
+            onClick={() => onNavigate("dashboard")}
+          >
+            Dashboard
+          </button>
+          <button
+            className={`nav-tab ${page === "activity" ? "active" : ""}`}
+            onClick={() => onNavigate("activity")}
+          >
+            Activity
+          </button>
+        </nav>
       </div>
       <div className="header-right">
         <span className={`health-pill ${cls}`} title={tooltip}>
@@ -72,7 +87,6 @@ export default function Header({
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
-        <button className="btn btn-secondary" onClick={onPause}>Pause All</button>
         <span className="username-chip">{user || "User"}</span>
         <button className="btn btn-secondary" onClick={onLogout}>Logout</button>
       </div>

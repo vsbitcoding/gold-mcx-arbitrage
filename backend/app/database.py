@@ -40,6 +40,7 @@ _REQUIRED_COLUMNS = {
         ("big_exit_price", "FLOAT"),
         ("small_exit_price", "FLOAT"),
         ("weight_grams", "INTEGER"),
+        ("ladder_rule_id", "INTEGER"),
     ],
     "positions": [
         ("ladder_rule_id", "INTEGER"),

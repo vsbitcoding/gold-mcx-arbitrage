@@ -13,12 +13,8 @@ function fmtSpread(v) {
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 
 function ladderStatus(ladder) {
-  if (!ladder.enabled) return { label: "Paused", cls: "ldr-paused" };
-  if (ladder.open_count > 0) {
-    const eff = ladder.effective_max_weight || 1;
-    if (ladder.open_weight_grams >= eff) return { label: "Full", cls: "ldr-full" };
-    return { label: `${ladder.open_count} Open`, cls: "ldr-running" };
-  }
+  if (ladder.locked) return { label: "Locked", cls: "ldr-full" };
+  if (ladder.open_count > 0) return { label: `${ladder.open_count} Open`, cls: "ldr-running" };
   if (ladder.entry === null || ladder.entry === undefined) return { label: "Not set", cls: "ldr-idle" };
   return { label: "Armed", cls: "ldr-armed" };
 }
@@ -59,13 +55,19 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
 
   const status = ladderStatus(ladder);
   const eff = ladder.effective_max_weight || defaultMaxWeight;
-  const usedPct = eff > 0 ? Math.min(100, ((ladder.open_weight_grams || 0) / eff) * 100) : 0;
+  const fired = ladder.fired_weight_grams || 0;
+  const usedPct = eff > 0 ? Math.min(100, (fired / eff) * 100) : 0;
   const fillCls = usedPct >= 100 ? "full" : usedPct >= 80 ? "high" : usedPct >= 50 ? "mid" : "low";
+  const currentCap = ladder.max_weight_grams ?? null;
 
   function update(field, value) { setDraft((d) => ({ ...d, [field]: value })); }
   function onWeightChange(v) {
-    if (v !== "" && Number(v) > maxAllowed) update("max_weight_grams", String(maxAllowed));
-    else update("max_weight_grams", v);
+    if (v === "") return update("max_weight_grams", v);
+    let n = Number(v);
+    if (n > maxAllowed) n = maxAllowed;
+    // Cap is one-way only: cannot go below the current saved cap
+    if (currentCap !== null && n < currentCap) n = currentCap;
+    update("max_weight_grams", String(n));
   }
   async function save() {
     if (!dirty || saving) return;
@@ -81,21 +83,10 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
     } catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
   }
-  async function togglePause() {
-    try {
-      await api.updateLadder(ladder.id, {
-        entry: ladder.entry, exit: ladder.exit, max_weight_grams: ladder.max_weight_grams,
-        enabled: !ladder.enabled,
-      });
-      toast.success(ladder.enabled ? "Paused" : "Resumed");
-      onChange?.();
-    } catch (e) { toast.error(e.message); }
-  }
   async function remove() {
-    if (ladder.open_count > 0) { toast.error("Cannot delete — open trades for this ladder"); return; }
     const ok = await confirm({
       title: "Delete this ladder?",
-      message: `Remove ${cap(side)} ladder #${idx + 1} (entry=${ladder.entry ?? "—"})?`,
+      message: `Remove ${cap(side)} ladder #${idx + 1} (entry=${ladder.entry ?? "—"}, cap=${currentCap ?? "default"}g)? Open trades will stay open.`,
       confirmText: "Delete",
       danger: true,
     });
@@ -108,7 +99,7 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
   }
 
   return (
-    <tr className={`ldr-table-row ${!ladder.enabled ? "paused" : ""}`}>
+    <tr className={`ldr-table-row ${ladder.locked ? "locked" : ""}`}>
       <td className="ldr-num">{idx + 1}</td>
       <td>
         <span className={`ladder-status ${status.cls}`}><span className="dot" />{status.label}</span>
@@ -127,23 +118,22 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
       </td>
       <td>
         <input className={`cell ${draft.max_weight_grams !== String(ladder.max_weight_grams ?? "") ? "dirty" : ""}`}
-          type="number" min="0" max={maxAllowed} step="1"
+          type="number" min={currentCap || 0} max={maxAllowed} step="1"
           placeholder={String(defaultMaxWeight)}
           value={draft.max_weight_grams ?? ""}
           onChange={(e) => onWeightChange(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && save()} />
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          title={currentCap ? `Cap can only be increased (current: ${currentCap}g)` : "Set max grams to fire on this ladder"} />
       </td>
       <td className="ldr-used">
         <div className="ldr-used-bar">
           <div className={`fill ${fillCls}`} style={{ width: `${usedPct}%` }} />
         </div>
         <div className="ldr-used-text">
-          <strong>{ladder.open_weight_grams || 0}</strong>/{eff}g
+          <strong>{fired}</strong>/{eff}g
         </div>
-        {ladder.has_pending_cap && (
-          <div className="ldr-pending-mini" title="Cap change pending — applies after square-off">
-            ⏳ {ladder.pending_max_weight_grams ?? "default"}g
-          </div>
+        {ladder.locked && (
+          <div className="ldr-pending-mini" title="Cap reached — raise cap to fire more">🔒 Locked</div>
         )}
       </td>
       <td className="ldr-actions">
@@ -152,10 +142,7 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
             {saving ? "…" : "Save"}
           </button>
         )}
-        <button className="ldr-icon" onClick={togglePause} title={ladder.enabled ? "Pause" : "Resume"}>
-          {ladder.enabled ? "⏸" : "▶"}
-        </button>
-        <button className="ldr-icon danger" onClick={remove} title="Delete">×</button>
+        <button className="ldr-icon danger" onClick={remove} title="Delete ladder">×</button>
       </td>
     </tr>
   );
@@ -403,20 +390,38 @@ function PairPositionsTab({ pairName }) {
 
 // ===== Per-pair History tab =====
 function PairHistoryTab({ pairName }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [data, setData] = useState({ trades: [], summaries: [] });
   const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
   const PER = 5;
 
   useEffect(() => {
     let alive = true;
     async function load() {
-      const r = await api.history(30, pairName).catch(() => null);
+      const r = await api.history(7, pairName).catch(() => null);
       if (alive && r) setData(r);
     }
     load();
     const t = setInterval(load, 5000);
     return () => { alive = false; clearInterval(t); };
-  }, [pairName]);
+  }, [pairName, reloadKey]);
+
+  async function deleteRow(id, pnl) {
+    const ok = await confirm({
+      title: "Delete history record?",
+      message: `Remove this trade record (PnL ${pnl >= 0 ? "+" : ""}${pnl})? This cannot be undone.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteHistory(id);
+      toast.success("Record deleted");
+      setReloadKey((k) => k + 1);
+    } catch (e) { toast.error(e.message); }
+  }
 
   const total = data.trades.length;
   const totalPages = Math.max(1, Math.ceil(total / PER));
@@ -460,7 +465,7 @@ function PairHistoryTab({ pairName }) {
             <table className="info-table">
               <thead>
                 <tr>
-                  <th>Mode</th><th>Entry</th><th>Exit</th><th>Move</th><th>Weight</th><th>Duration</th><th>Closed At</th><th>PnL</th>
+                  <th>Mode</th><th>Entry</th><th>Exit</th><th>Move</th><th>Weight</th><th>Duration</th><th>Closed At</th><th>PnL</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -476,6 +481,9 @@ function PairHistoryTab({ pairName }) {
                       <td className="num">{fmtDuration(r.duration_seconds)}</td>
                       <td className="num time-cell">{fmtDateTime(r.exit_time)}</td>
                       <td className={`num ${r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(r.pnl)}</td>
+                      <td>
+                        <button className="ldr-icon danger" onClick={() => deleteRow(r.id, r.pnl)} title="Delete record">×</button>
+                      </td>
                     </tr>
                   );
                 })}
