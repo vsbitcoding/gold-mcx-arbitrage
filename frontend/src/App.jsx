@@ -35,6 +35,9 @@ function Dashboard() {
   }, [theme]);
 
   // Slow-cadence fetch for things WS doesn't push (positions, history, feed status)
+  const [posSummaries, setPosSummaries] = useState([]);
+  const [histSummaries, setHistSummaries] = useState([]);
+
   const refreshSlow = useCallback(async () => {
     try {
       const [op, h, fs] = await Promise.all([
@@ -42,8 +45,22 @@ function Dashboard() {
         api.history(30),
         api.feedStatus().catch(() => null),
       ]);
-      setPositions(op);
-      setHistory(h);
+      // Positions endpoint now returns { positions, summaries }
+      if (op && Array.isArray(op.positions)) {
+        setPositions(op.positions);
+        setPosSummaries(op.summaries || []);
+      } else {
+        setPositions(op || []);
+        setPosSummaries([]);
+      }
+      // History endpoint now returns { trades, summaries }
+      if (h && Array.isArray(h.trades)) {
+        setHistory(h.trades);
+        setHistSummaries(h.summaries || []);
+      } else {
+        setHistory(h || []);
+        setHistSummaries([]);
+      }
       setFeedStatus(fs);
     } catch (e) {
       console.error(e);
@@ -165,7 +182,7 @@ function Dashboard() {
         title={`Active Positions (${positions.length})`}
         onClose={() => setOpenDrawer(null)}
       >
-        <ActivePositions rows={positions} onChange={refreshSlow} />
+        <ActivePositions rows={positions} summaries={posSummaries} onChange={refreshSlow} />
       </Drawer>
 
       <Drawer
@@ -173,7 +190,7 @@ function Dashboard() {
         title={`Trade History (${history.length})`}
         onClose={() => setOpenDrawer(null)}
       >
-        <TradeHistory rows={history} />
+        <TradeHistory rows={history} summaries={histSummaries} />
       </Drawer>
     </div>
   );

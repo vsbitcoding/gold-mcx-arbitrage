@@ -41,7 +41,48 @@ function LegInline({ action, instrument, lots, entryPx, exitPx }) {
   );
 }
 
-export default function TradeHistory({ rows }) {
+function HistorySummary({ summaries }) {
+  if (!summaries || summaries.length === 0) return null;
+  return (
+    <div className="summary-block">
+      <div className="summary-title">Aggregate per pair-side (weighted by gram)</div>
+      <table className="summary-table">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>Mode</th>
+            <th>Trades</th>
+            <th>Total Weight</th>
+            <th>Avg Entry</th>
+            <th>Avg Exit</th>
+            <th>Total PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summaries.map((s) => (
+            <tr key={`${s.pair_name}:${s.mode}`}>
+              <td className="pair-name">{s.pair_name}</td>
+              <td>
+                <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
+                  {s.mode === "decrease" ? "Decrease" : "Increase"}
+                </span>
+              </td>
+              <td>{s.count}</td>
+              <td>{s.total_weight_grams}g</td>
+              <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
+              <td className="spread-num">{s.avg_exit_spread === null ? "—" : Number(s.avg_exit_spread).toFixed(2)}</td>
+              <td className={s.total_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                {s.total_pnl >= 0 ? "+" : ""}{s.total_pnl}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function TradeHistory({ rows, summaries = [] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -91,6 +132,8 @@ export default function TradeHistory({ rows }) {
           </div>
         </div>
       </div>
+      <HistorySummary summaries={summaries} />
+
       <div className="table-container">
         {filtered.length === 0 ? (
           <div className="empty-state">No trades match the filter.</div>

@@ -1728,6 +1728,55 @@ td.ldr-actions .save-btn {
 }
 
 .ladder-empty.empty-state { padding: 30px; }
+
+/* Summary block (aggregate per pair-side) */
+.summary-block {
+  margin: 0 16px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-bg);
+  padding: 10px 14px;
+}
+.summary-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.summary-table th {
+  background: var(--bg-surface-alt);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.summary-table td {
+  text-align: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.summary-table tr:last-child td { border-bottom: none; }
+.summary-table td.pair-name { font-weight: 700; text-align: center; }
+.summary-table td.spread-num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 700;
+}
 .spread-pair-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);

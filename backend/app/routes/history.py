@@ -15,6 +15,35 @@ def _pair_def(name: str) -> dict | None:
     return pair_registry.get_pair(name)
 
 
+def _build_history_summaries(enriched: list[dict]) -> list[dict]:
+    """Group closed trades by (pair_name, mode); compute weighted averages."""
+    groups: dict[tuple, list[dict]] = {}
+    for p in enriched:
+        key = (p["pair_name"], p["mode"])
+        groups.setdefault(key, []).append(p)
+
+    out = []
+    for (pair_name, mode), rows in groups.items():
+        total_weight = sum(r["weight_grams"] or 0 for r in rows)
+        if total_weight > 0:
+            avg_entry = sum((r["entry_spread"] or 0) * (r["weight_grams"] or 0) for r in rows) / total_weight
+            avg_exit = sum((r["exit_spread"] or 0) * (r["weight_grams"] or 0) for r in rows) / total_weight
+        else:
+            avg_entry = avg_exit = None
+        pnl_total = sum(r["pnl"] or 0 for r in rows)
+        out.append({
+            "pair_name": pair_name,
+            "mode": mode,
+            "count": len(rows),
+            "total_weight_grams": total_weight,
+            "avg_entry_spread": round(avg_entry, 4) if avg_entry is not None else None,
+            "avg_exit_spread": round(avg_exit, 4) if avg_exit is not None else None,
+            "total_pnl": round(pnl_total, 2),
+        })
+    out.sort(key=lambda s: (s["pair_name"], s["mode"]))
+    return out
+
+
 @router.get("")
 def list_history(
     days: int = Query(30, ge=1, le=365),
@@ -35,11 +64,12 @@ def list_history(
         small_inst = pair_def["small"] if pair_def else None
         big_action = "SELL" if r.mode == "decrease" else "BUY"
         small_action = "BUY" if r.mode == "decrease" else "SELL"
-        # Duration in seconds
         duration = (r.exit_time - r.entry_time).total_seconds() if r.entry_time else 0
         out.append({
             "id": r.id,
             "pair_name": r.pair_name,
+            "label": pair_def.get("label") if pair_def else r.pair_name,
+            "expiry_label": pair_def.get("expiry_label") if pair_def else "",
             "mode": r.mode,
             "entry_spread": r.entry_spread,
             "exit_spread": r.exit_spread,
@@ -61,4 +91,7 @@ def list_history(
             "is_paper": r.is_paper,
             "closed_by": r.closed_by,
         })
-    return out
+    return {
+        "trades": out,
+        "summaries": _build_history_summaries(out),
+    }

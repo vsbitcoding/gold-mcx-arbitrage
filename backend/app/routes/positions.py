@@ -37,9 +37,15 @@ def _enrich(p: Position) -> dict:
     big_action = "SELL" if p.mode == "decrease" else "BUY"
     small_action = "BUY" if p.mode == "decrease" else "SELL"
 
+    # Pair label for friendlier display in summary
+    label = pair_def.get("label") if pair_def else p.pair_name
+    expiry = pair_def.get("expiry_label") if pair_def else ""
+
     return {
         "id": p.id,
         "pair_name": p.pair_name,
+        "label": label,
+        "expiry_label": expiry,
         "mode": p.mode,
         "entry_spread": p.entry_spread,
         "cover_spread": cover_spread,
@@ -62,10 +68,45 @@ def _enrich(p: Position) -> dict:
     }
 
 
+def _build_summaries(enriched: list[dict]) -> list[dict]:
+    """Group enriched positions by (pair_name, mode) and compute weighted averages."""
+    groups: dict[tuple, list[dict]] = {}
+    for p in enriched:
+        key = (p["pair_name"], p["mode"])
+        groups.setdefault(key, []).append(p)
+
+    out = []
+    for (pair_name, mode), rows in groups.items():
+        total_weight = sum(r["weight_grams"] or 0 for r in rows)
+        if total_weight > 0:
+            avg_entry = sum((r["entry_spread"] or 0) * (r["weight_grams"] or 0) for r in rows) / total_weight
+        else:
+            avg_entry = None
+        live_pnl_total = sum(r["live_pnl"] or 0 for r in rows)
+        cover = next((r["cover_spread"] for r in rows if r["cover_spread"] is not None), None)
+        out.append({
+            "pair_name": pair_name,
+            "label": rows[0].get("label") or pair_name,
+            "expiry_label": rows[0].get("expiry_label") or "",
+            "mode": mode,
+            "count": len(rows),
+            "total_weight_grams": total_weight,
+            "avg_entry_spread": round(avg_entry, 4) if avg_entry is not None else None,
+            "cover_spread": cover,
+            "live_pnl": round(live_pnl_total, 2),
+        })
+    out.sort(key=lambda s: (s["pair_name"], s["mode"]))
+    return out
+
+
 @router.get("")
 def list_open(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     rows = db.query(Position).filter(Position.status == "open").order_by(Position.id.desc()).all()
-    return [_enrich(p) for p in rows]
+    enriched = [_enrich(p) for p in rows]
+    return {
+        "positions": enriched,
+        "summaries": _build_summaries(enriched),
+    }
 
 
 @router.post("/{position_id}/close")

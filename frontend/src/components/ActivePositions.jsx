@@ -47,7 +47,51 @@ function LegInline({ action, instrument, lots, entryPx, livePx }) {
   );
 }
 
-export default function ActivePositions({ rows, onChange }) {
+function SummaryTable({ summaries }) {
+  if (!summaries || summaries.length === 0) return null;
+  return (
+    <div className="summary-block">
+      <div className="summary-title">Aggregate per pair-side (weighted by gram)</div>
+      <table className="summary-table">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>Mode</th>
+            <th>Trades</th>
+            <th>Total Weight</th>
+            <th>Avg Entry</th>
+            <th>Cover Spread</th>
+            <th>Live PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summaries.map((s) => (
+            <tr key={`${s.pair_name}:${s.mode}`}>
+              <td className="pair-name">
+                <div>{s.label || s.pair_name}</div>
+                {s.expiry_label && <div className="pair-expiry">{s.expiry_label}</div>}
+              </td>
+              <td>
+                <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>
+                  {s.mode === "decrease" ? "Decrease" : "Increase"}
+                </span>
+              </td>
+              <td>{s.count}</td>
+              <td>{s.total_weight_grams}g</td>
+              <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
+              <td className="spread-num">{s.cover_spread === null ? "—" : Number(s.cover_spread).toFixed(2)}</td>
+              <td className={s.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
+                {s.live_pnl >= 0 ? "+" : ""}{s.live_pnl}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function ActivePositions({ rows, summaries = [], onChange }) {
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -89,6 +133,8 @@ export default function ActivePositions({ rows, onChange }) {
           )}
         </h2>
       </div>
+      <SummaryTable summaries={summaries} />
+
       <div className="table-container">
         {rows.length === 0 ? (
           <div className="empty-state">No active positions.</div>
