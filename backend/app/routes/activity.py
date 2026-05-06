@@ -40,7 +40,7 @@ def list_activity(
                 details = None
         out.append({
             "id": r.id,
-            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "timestamp": (r.timestamp.isoformat() + "Z") if r.timestamp else None,
             "action": r.action,
             "pair_name": r.pair_name,
             "side": r.side,

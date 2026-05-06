@@ -49,7 +49,7 @@ def _enrich(p: Position) -> dict:
         "mode": p.mode,
         "entry_spread": p.entry_spread,
         "cover_spread": cover_spread,
-        "entry_time": p.entry_time.isoformat(),
+        "entry_time": p.entry_time.isoformat() + "Z",
         "is_paper": p.is_paper,
         "live_pnl": live_pnl(p),
         "weight_grams": weight_g,
