@@ -21,10 +21,12 @@ def _public_pair_dict(s: dict) -> dict:
     """Trim internal fields for the public API. Mobile-friendly shape."""
     return {
         "id": s["name"],
-        "type": s["type"],
-        "label": s["label"],
+        "type": s["type"],                              # "cross" | "calendar"
+        "label": s["label"],                            # e.g. "PETAL / GUINEA" or "PETAL 30JUN26-29MAY26"
+        "group_label": s.get("group_label", s["label"]),  # Dashboard uses this to group rows
         "expiry": s.get("expiry_label", ""),
         "expiry_short": s.get("expiry_short", ""),
+        "big_expiry": s.get("big_expiry", ""),         # ISO date — sort by this for front-month-first
         "decrease_spread": s["decrease_spread"],
         "increase_spread": s["increase_spread"],
         "big": {
@@ -42,6 +44,29 @@ def _public_pair_dict(s: dict) -> dict:
             "ask": s["small_ask"],
         },
     }
+
+
+def _grouped(snaps: list[dict]) -> list[dict]:
+    """Group pairs by group_label and sort by big_expiry (front month first)."""
+    groups: dict[str, list[dict]] = {}
+    for s in snaps:
+        gl = s.get("group_label") or s["label"]
+        groups.setdefault(gl, []).append(s)
+
+    out = []
+    for label, rows in groups.items():
+        rows_sorted = sorted(rows, key=lambda r: r.get("big_expiry") or "")
+        public = [_public_pair_dict(r) for r in rows_sorted]
+        front = public[0] if public else None
+        out.append({
+            "group_label": label,
+            "type": rows[0]["type"],
+            "count": len(public),
+            "front": front,           # Show this row by default in collapsed state
+            "pairs": public,          # Full list — show on expand
+        })
+    out.sort(key=lambda g: g["group_label"])
+    return out
 
 
 @router.get("/health")
@@ -90,6 +115,38 @@ def get_pair(pair_id: str, _key: str = Depends(require_api_key)):
         raise HTTPException(404, "Pair not found")
     snap = compute_pair(pair)
     return _public_pair_dict(snap)
+
+
+@router.get("/groups")
+def list_groups(
+    type: str | None = Query(None, description="Filter: cross | calendar | all"),
+    _key: str = Depends(require_api_key),
+):
+    """Pairs pre-grouped by symbol (cross: PETAL/GUINEA; calendar: PETAL).
+
+    Each group has:
+      - `front`: the nearest-expiry row (collapsed default view)
+      - `pairs`: full list of expiries (show on expand)
+
+    This matches the dashboard's tabbed/expandable UX.
+    """
+    snaps = compute_all()
+    if type and type != "all":
+        snaps = [s for s in snaps if s["type"] == type]
+
+    groups = _grouped(snaps)
+    cross_count = sum(g["count"] for g in groups if g["type"] == "cross")
+    calendar_count = sum(g["count"] for g in groups if g["type"] == "calendar")
+
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "tabs": {
+            "cross": cross_count,
+            "calendar": calendar_count,
+        },
+        "groups": groups,
+    }
 
 
 @router.websocket("/stream")
