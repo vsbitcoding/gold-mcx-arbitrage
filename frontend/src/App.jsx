@@ -3,9 +3,6 @@ import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
-import ActivePositions from "./components/ActivePositions.jsx";
-import TradeHistory from "./components/TradeHistory.jsx";
-import Drawer from "./components/Drawer.jsx";
 import { ToastProvider, useToast } from "./components/Toast.jsx";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
@@ -26,7 +23,6 @@ function Dashboard() {
   const [wsState, setWsState] = useState("connecting"); // connecting | live | reconnecting
   const [theme, setTheme] = useState(getStoredTheme());
   const [user] = useState("Vivek_Bitcoding");
-  const [openDrawer, setOpenDrawer] = useState(null);
   const fallbackRef = useRef(null);
 
   useEffect(() => {
@@ -35,9 +31,6 @@ function Dashboard() {
   }, [theme]);
 
   // Slow-cadence fetch for things WS doesn't push (positions, history, feed status)
-  const [posSummaries, setPosSummaries] = useState([]);
-  const [histSummaries, setHistSummaries] = useState([]);
-
   const refreshSlow = useCallback(async () => {
     try {
       const [op, h, fs] = await Promise.all([
@@ -45,22 +38,10 @@ function Dashboard() {
         api.history(30),
         api.feedStatus().catch(() => null),
       ]);
-      // Positions endpoint now returns { positions, summaries }
-      if (op && Array.isArray(op.positions)) {
-        setPositions(op.positions);
-        setPosSummaries(op.summaries || []);
-      } else {
-        setPositions(op || []);
-        setPosSummaries([]);
-      }
-      // History endpoint now returns { trades, summaries }
-      if (h && Array.isArray(h.trades)) {
-        setHistory(h.trades);
-        setHistSummaries(h.summaries || []);
-      } else {
-        setHistory(h || []);
-        setHistSummaries([]);
-      }
+      if (op && Array.isArray(op.positions)) setPositions(op.positions);
+      else setPositions(op || []);
+      if (h && Array.isArray(h.trades)) setHistory(h.trades);
+      else setHistory(h || []);
       setFeedStatus(fs);
     } catch (e) {
       console.error(e);
@@ -165,10 +146,6 @@ function Dashboard() {
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
-        positionsCount={positions.length}
-        historyCount={history.length}
-        onOpenPositions={() => setOpenDrawer("positions")}
-        onOpenHistory={() => setOpenDrawer("history")}
         feedStatus={feedStatus}
         wsState={wsState}
       />
@@ -176,22 +153,6 @@ function Dashboard() {
         <StatCards pairs={pairs} positions={positions} history={history} />
         <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
       </div>
-
-      <Drawer
-        open={openDrawer === "positions"}
-        title={`Active Positions (${positions.length})`}
-        onClose={() => setOpenDrawer(null)}
-      >
-        <ActivePositions rows={positions} summaries={posSummaries} onChange={refreshSlow} />
-      </Drawer>
-
-      <Drawer
-        open={openDrawer === "history"}
-        title={`Trade History (${history.length})`}
-        onClose={() => setOpenDrawer(null)}
-      >
-        <TradeHistory rows={history} summaries={histSummaries} />
-      </Drawer>
     </div>
   );
 }

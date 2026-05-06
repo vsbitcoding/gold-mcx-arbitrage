@@ -6,10 +6,6 @@ export default function Header({
   onLogout,
   theme,
   onToggleTheme,
-  positionsCount,
-  historyCount,
-  onOpenPositions,
-  onOpenHistory,
   feedStatus,
   wsState,
 }) {
@@ -66,16 +62,6 @@ export default function Header({
           <span className="accent">Arbi</span>
           <span>Dash</span>
         </div>
-        <nav className="nav-tabs">
-          <button className="nav-tab" onClick={onOpenPositions}>
-            Positions
-            {positionsCount > 0 && <span className="nav-badge live">{positionsCount}</span>}
-          </button>
-          <button className="nav-tab" onClick={onOpenHistory}>
-            History
-            {historyCount > 0 && <span className="nav-badge">{historyCount}</span>}
-          </button>
-        </nav>
       </div>
       <div className="header-right">
         <span className={`health-pill ${cls}`} title={tooltip}>
