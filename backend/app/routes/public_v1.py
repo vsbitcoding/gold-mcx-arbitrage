@@ -1,53 +1,36 @@
-"""Public read-only API for external apps (e.g. mobile dashboard).
+"""Public read-only API for the spread-monitoring app.
 
-Auth: API key via X-API-Key header or ?api_key= query param.
-Versioned at /api/v1/* — write endpoints (ladders, positions, control)
-are NOT exposed here. Safe for third-party app developers.
+Auth: API key via `X-API-Key` header OR `?api_key=` query param.
+Versioned at /api/v1/* — read-only, mobile-friendly, lean.
+No write endpoints. No internal fields exposed.
 """
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import pair_registry
 from app.services.dhan_feed import is_market_open
-from app.services.spread_engine import compute_all, compute_pair
+from app.services.spread_engine import compute_all
 
 router = APIRouter(prefix="/api/v1", tags=["public-v1"])
 
 
-def _public_pair_dict(s: dict) -> dict:
-    """Trim internal fields for the public API. Mobile-friendly shape."""
+def _spread_dict(s: dict) -> dict:
+    """Lean shape — only what a spread-monitoring app actually needs."""
     return {
         "id": s["name"],
-        "type": s["type"],                              # "cross" | "calendar"
-        "label": s["label"],                            # e.g. "PETAL / GUINEA" or "PETAL 30JUN26-29MAY26"
-        "group_label": s.get("group_label", s["label"]),  # Dashboard uses this to group rows
-        "expiry": s.get("expiry_label", ""),
-        "expiry_short": s.get("expiry_short", ""),
-        "big_expiry": s.get("big_expiry", ""),         # ISO date — sort by this for front-month-first
-        "decrease_spread": s["decrease_spread"],
-        "increase_spread": s["increase_spread"],
-        "big": {
-            "instrument": s["big"],
-            "trading_symbol": s.get("big_trading_symbol", ""),
-            "lots": s["big_lots"],
-            "bid": s["big_bid"],
-            "ask": s["big_ask"],
-        },
-        "small": {
-            "instrument": s["small"],
-            "trading_symbol": s.get("small_trading_symbol", ""),
-            "lots": s["small_lots"],
-            "bid": s["small_bid"],
-            "ask": s["small_ask"],
-        },
+        "pair": s["label"],                                  # "PETAL / GUINEA" or "PETAL 30JUN26-29MAY26"
+        "group": s.get("group_label") or s["label"],         # for grouping rows in UI
+        "type": s["type"],                                   # "cross" | "calendar"
+        "expiry": s.get("expiry_label", ""),                 # "29 May 2026" / "Far ... − Near ..."
+        "decrease": s["decrease_spread"],                    # null if no live quote
+        "increase": s["increase_spread"],                    # null if no live quote
     }
 
 
 def _grouped(snaps: list[dict]) -> list[dict]:
-    """Group pairs by group_label and sort by big_expiry (front month first)."""
+    """Group by `group` and sort each group front-month first."""
     groups: dict[str, list[dict]] = {}
     for s in snaps:
         gl = s.get("group_label") or s["label"]
@@ -56,22 +39,31 @@ def _grouped(snaps: list[dict]) -> list[dict]:
     out = []
     for label, rows in groups.items():
         rows_sorted = sorted(rows, key=lambda r: r.get("big_expiry") or "")
-        public = [_public_pair_dict(r) for r in rows_sorted]
-        front = public[0] if public else None
+        items = [_spread_dict(r) for r in rows_sorted]
         out.append({
-            "group_label": label,
+            "group": label,
             "type": rows[0]["type"],
-            "count": len(public),
-            "front": front,           # Show this row by default in collapsed state
-            "pairs": public,          # Full list — show on expand
+            "count": len(items),
+            "front": items[0] if items else None,    # collapsed-default row
+            "expiries": items,                        # full list (front is items[0])
         })
-    out.sort(key=lambda g: g["group_label"])
+    out.sort(key=lambda g: g["group"])
     return out
 
 
+def _filter(snaps: list[dict], type_: str | None) -> list[dict]:
+    if type_ and type_ != "all":
+        return [s for s in snaps if s["type"] == type_]
+    return snaps
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Endpoints
+# ────────────────────────────────────────────────────────────────────────
+
 @router.get("/health")
 def health():
-    """Public uptime check — no auth required."""
+    """Public uptime / market-status check. No auth required."""
     return {
         "status": "ok",
         "server_time": datetime.now(timezone.utc).isoformat(),
@@ -79,89 +71,63 @@ def health():
     }
 
 
-@router.get("/pairs")
-def list_pairs(
-    type: str | None = Query(None, description="Filter: cross | calendar | all"),
-    search: str | None = Query(None, description="Filter by pair label/expiry text"),
+@router.get("/spreads")
+def list_spreads(
+    type: str | None = Query(None, description="cross | calendar | all (default)"),
     _key: str = Depends(require_api_key),
 ):
-    """Returns all active pairs with current decrease/increase spreads.
-    Supports filters: ?type=cross|calendar, ?search=petal"""
-    snaps = compute_all()
-    if type and type != "all":
-        snaps = [s for s in snaps if s["type"] == type]
-    if search:
-        term = search.lower()
-        snaps = [
-            s for s in snaps
-            if term in s["name"].lower()
-            or term in s["label"].lower()
-            or term in s.get("expiry_label", "").lower()
-        ]
-    out = [_public_pair_dict(s) for s in snaps]
+    """Flat list of all pairs with current decrease & increase spread values."""
+    snaps = _filter(compute_all(), type)
+    items = [_spread_dict(s) for s in snaps]
     return {
-        "total": len(out),
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
-        "pairs": out,
+        "count": len(items),
+        "spreads": items,
     }
 
 
-@router.get("/pairs/{pair_id}")
-def get_pair(pair_id: str, _key: str = Depends(require_api_key)):
-    """Single-pair detail with current spread."""
-    pair = pair_registry.get_pair(pair_id)
-    if not pair:
-        raise HTTPException(404, "Pair not found")
-    snap = compute_pair(pair)
-    return _public_pair_dict(snap)
-
-
-@router.get("/groups")
-def list_groups(
-    type: str | None = Query(None, description="Filter: cross | calendar | all"),
+@router.get("/spread-groups")
+def list_spread_groups(
+    type: str | None = Query(None, description="cross | calendar | all (default)"),
     _key: str = Depends(require_api_key),
 ):
-    """Pairs pre-grouped by symbol (cross: PETAL/GUINEA; calendar: PETAL).
+    """Grouped + tabbed view (recommended for UI).
 
-    Each group has:
-      - `front`: the nearest-expiry row (collapsed default view)
-      - `pairs`: full list of expiries (show on expand)
-
-    This matches the dashboard's tabbed/expandable UX.
+    Shape mirrors the dashboard:
+    - Two tabs: cross / calendar
+    - Each group shows `front` row collapsed by default
+    - On expand, render `expiries[]` (front is included as `expiries[0]`)
     """
-    snaps = compute_all()
-    if type and type != "all":
-        snaps = [s for s in snaps if s["type"] == type]
+    all_snaps = compute_all()
+    cross_count = sum(1 for s in all_snaps if s["type"] == "cross")
+    calendar_count = sum(1 for s in all_snaps if s["type"] == "calendar")
 
-    groups = _grouped(snaps)
-    cross_count = sum(g["count"] for g in groups if g["type"] == "cross")
-    calendar_count = sum(g["count"] for g in groups if g["type"] == "calendar")
-
+    snaps = _filter(all_snaps, type)
     return {
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
-        "tabs": {
-            "cross": cross_count,
-            "calendar": calendar_count,
-        },
-        "groups": groups,
+        "tabs": {"cross": cross_count, "calendar": calendar_count},
+        "groups": _grouped(snaps),
     }
 
 
 @router.websocket("/stream")
 async def public_stream(
     websocket: WebSocket,
-    key: str | None = Query(None),
-    interval: float = Query(1.0, ge=0.5, le=5.0, description="Push interval in seconds (0.5-5)"),
+    api_key: str | None = Query(None, alias="api_key"),
+    key: str | None = Query(None),                  # legacy alias
+    interval: float = Query(1.0, ge=0.5, le=5.0),
+    type: str | None = Query(None),
 ):
-    """Live WebSocket stream of pair snapshots.
+    """Live spread stream.
 
-    Connect with: wss://host/api/v1/stream?key=<api_key>&interval=1
-    Pushes a full snapshot every `interval` seconds.
-    Client may send "ping", server replies "pong".
+    Connect: wss://host/api/v1/stream?api_key=<KEY>&interval=1
+    Pushes the same shape as `/spread-groups` every `interval` seconds.
+    Client may send "ping" → server replies "pong".
     """
-    if not verify_api_key_value(key):
+    token = api_key or key
+    if not verify_api_key_value(token):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
@@ -179,12 +145,16 @@ async def public_stream(
     async def pusher():
         try:
             while True:
-                snaps = compute_all()
+                all_snaps = compute_all()
+                cross_count = sum(1 for s in all_snaps if s["type"] == "cross")
+                calendar_count = sum(1 for s in all_snaps if s["type"] == "calendar")
+                snaps = _filter(all_snaps, type)
                 await websocket.send_json({
                     "type": "snapshot",
-                    "pairs": [_public_pair_dict(s) for s in snaps],
                     "server_time": datetime.now(timezone.utc).isoformat(),
                     "market_open": is_market_open(),
+                    "tabs": {"cross": cross_count, "calendar": calendar_count},
+                    "groups": _grouped(snaps),
                 })
                 await asyncio.sleep(interval)
         except WebSocketDisconnect:
