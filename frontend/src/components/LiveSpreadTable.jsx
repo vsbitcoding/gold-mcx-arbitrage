@@ -836,11 +836,11 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     });
   }, [filtered, sort]);
 
-  // Group rows by label (PETAL / GUINEA, PETAL / TEN, etc.)
+  // Group rows by group_label (cross: "PETAL / GUINEA"; calendar: "PETAL")
   const groupedRows = useMemo(() => {
     const map = new Map();
     for (const r of sortedRows) {
-      const k = r.label;
+      const k = r.group_label || r.label;
       if (!map.has(k)) map.set(k, { label: k, rows: [] });
       map.get(k).rows.push(r);
     }

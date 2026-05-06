@@ -45,6 +45,7 @@ def compute_pair(pair: dict) -> dict:
         "name": pair["name"],
         "type": pair["type"],
         "label": pair.get("label", pair["name"]),
+        "group_label": pair.get("group_label", pair.get("label", pair["name"])),
         "mcx_label": pair.get("mcx_label", pair.get("label", pair["name"])),
         "expiry_label": pair.get("expiry_label", ""),
         "expiry_short": pair.get("expiry_short", ""),
