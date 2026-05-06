@@ -1414,8 +1414,9 @@ table.pair-table tr.pair-row.open .caret {
   border-color: var(--red);
   transform: rotate(90deg);
 }
-/* Reserve enough room so spread pills never sit under the close button */
-.ladder-modal-head { padding-right: 56px; }
+/* Reserve enough room so spread pills never sit under the close button.
+   Use !important so responsive overrides at smaller breakpoints don't strip it. */
+.ladder-modal-head { padding-right: 56px !important; }
 .row-toggle.compact {
   padding: 2px 6px;
   border-radius: 5px;
