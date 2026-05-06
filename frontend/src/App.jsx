@@ -4,6 +4,7 @@ import Header from "./components/Header.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Activity from "./components/Activity.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
@@ -181,10 +182,12 @@ export default function App() {
   const [authed, setAuthed] = useState(!!getToken());
   if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
   return (
-    <ToastProvider>
-      <ConfirmProvider>
-        <Dashboard />
-      </ConfirmProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <ConfirmProvider>
+          <Dashboard />
+        </ConfirmProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

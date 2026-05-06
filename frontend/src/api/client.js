@@ -10,21 +10,48 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request(path, opts = {}) {
+async function _doRequest(path, opts) {
   const headers = opts.headers || {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(path, { ...opts, headers });
-  if (res.status === 401) {
-    clearToken();
-    window.location.reload();
-    throw new Error("unauthorized");
+  return fetch(path, { ...opts, headers });
+}
+
+async function request(path, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  // Idempotent reads (GET) get one transparent retry on transient failure.
+  // Writes (POST/PUT/DELETE) are NOT retried automatically — caller decides.
+  const maxAttempts = method === "GET" ? 2 : 1;
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let res;
+    try {
+      res = await _doRequest(path, opts);
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 250 + Math.random() * 250));
+        continue;
+      }
+      throw new Error(e?.message || "Network error");
+    }
+    if (res.status === 401) {
+      clearToken();
+      window.location.reload();
+      throw new Error("unauthorized");
+    }
+    // Retry only for transient 5xx
+    if (res.status >= 500 && res.status < 600 && attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 250 + Math.random() * 250));
+      continue;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return res.status === 204 ? null : res.json();
   }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail || "Request failed");
-  }
-  return res.status === 204 ? null : res.json();
+  throw lastErr || new Error("Request failed");
 }
 
 export async function login(username, password) {

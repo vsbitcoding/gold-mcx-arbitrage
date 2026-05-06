@@ -61,7 +61,9 @@ export function createLiveSocket({ onSnapshot, onState }) {
 
   function schedule() {
     clearTimeout(reconnectTimer);
-    const wait = Math.min(1000 * Math.pow(1.5, attempt++), 15000);
+    // Exponential backoff with jitter (50–150% of computed wait).
+    const base = Math.min(1000 * Math.pow(1.5, attempt++), 15000);
+    const wait = Math.floor(base * (0.5 + Math.random()));
     reconnectTimer = setTimeout(connect, wait);
   }
 

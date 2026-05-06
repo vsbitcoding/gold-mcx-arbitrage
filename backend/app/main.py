@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
@@ -38,6 +40,21 @@ app.include_router(ladders.router)
 app.include_router(activity_route.router)
 app.include_router(ws_route.router)
 app.include_router(public_v1.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all so the client gets a clean JSON instead of HTML 500 page.
+    Logs with a unique trace_id so we can grep it in journalctl."""
+    trace_id = uuid.uuid4().hex[:12]
+    logging.getLogger("api").exception("[%s] Unhandled error on %s %s", trace_id, request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "trace_id": trace_id,
+        },
+    )
 
 
 @app.on_event("startup")

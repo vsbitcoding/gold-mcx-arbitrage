@@ -1122,6 +1122,37 @@ body.density-compact .ladder-count-pill { padding: 2px 6px; font-size: 10px; }
 .quick-stats .qs-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
 .quick-stats .qs-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* ===== Error boundary fallback ===== */
+.error-boundary {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.error-boundary-card {
+  max-width: 560px;
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--red);
+  border-radius: 10px;
+  padding: 24px 28px;
+}
+.error-boundary-title { font-size: 20px; font-weight: 700; color: var(--red); margin-bottom: 8px; }
+.error-boundary-msg   { color: var(--text-primary); margin-bottom: 16px; }
+.error-boundary-actions { display: flex; gap: 10px; margin-bottom: 16px; }
+.error-boundary-stack summary { cursor: pointer; color: var(--text-muted); font-size: 12px; }
+.error-boundary-stack pre {
+  background: var(--bg-primary);
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 /* ===== Keyboard hint chip ===== */
 .kbd {
   display: inline-block;
