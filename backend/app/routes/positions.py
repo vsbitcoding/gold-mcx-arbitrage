@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import GRAMS_PER_LOT
 from app.database import get_db
 from app.models import Position
 from app.security import get_current_user
-from app.services import pair_registry
+from app.services import activity, pair_registry
 from app.services.spread_engine import compute_pair
 from app.services.trade_engine import live_pnl, manual_close
 
@@ -122,3 +123,78 @@ def close(position_id: int, db: Session = Depends(get_db), user: str = Depends(g
     if not closed:
         raise HTTPException(400, "Position not found or quote unavailable")
     return {"ok": True, "history_id": closed.id, "pnl": closed.pnl}
+
+
+class SquareOffRequest(BaseModel):
+    pair_name: str
+    mode: str | None = Field(None, pattern="^(decrease|increase)$")
+    weight_grams: int = Field(..., gt=0)
+
+
+@router.post("/square-off")
+def square_off(
+    body: SquareOffRequest,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """Manual square-off by weight (FIFO — oldest trades close first).
+
+    Closes the oldest open trades for `pair_name` (and optional `mode`)
+    until cumulative weight ≥ `weight_grams`. Returns count + total weight
+    + PnL of trades closed.
+    """
+    pair_def = pair_registry.get_pair(body.pair_name)
+    if not pair_def:
+        raise HTTPException(404, "Unknown pair")
+    big_g = GRAMS_PER_LOT.get(pair_def["big"], 0)
+    if big_g <= 0:
+        raise HTTPException(400, "Pair has no per-lot weight defined")
+
+    q = db.query(Position).filter(
+        Position.status == "open",
+        Position.pair_name == body.pair_name,
+    )
+    if body.mode:
+        q = q.filter(Position.mode == body.mode)
+    rows = q.order_by(Position.entry_time.asc(), Position.id.asc()).all()
+    if not rows:
+        raise HTTPException(400, "No open positions for this pair")
+
+    closed_ids: list[int] = []
+    total_weight = 0
+    total_pnl = 0.0
+    for p in rows:
+        if total_weight >= body.weight_grams:
+            break
+        result = manual_close(db, p.id)
+        if not result:
+            raise HTTPException(400, "Live quote unavailable — try again in a moment")
+        closed_ids.append(result.id)
+        total_weight += p.big_lots * big_g
+        total_pnl += result.pnl or 0.0
+
+    if not closed_ids:
+        raise HTTPException(400, "Nothing closed — invalid request")
+
+    activity.log(
+        db, "square_off",
+        pair_name=body.pair_name, side=body.mode, actor="user",
+        summary=f"Manual square-off: closed {len(closed_ids)} trade(s), {total_weight}g, PnL {total_pnl:+.2f}",
+        details={
+            "requested_weight_grams": body.weight_grams,
+            "closed_count": len(closed_ids),
+            "actual_weight_grams": total_weight,
+            "total_pnl": round(total_pnl, 2),
+            "history_ids": closed_ids,
+            "order": "fifo",
+        },
+        commit=True,
+    )
+
+    return {
+        "ok": True,
+        "closed_count": len(closed_ids),
+        "actual_weight_grams": total_weight,
+        "total_pnl": round(total_pnl, 2),
+        "history_ids": closed_ids,
+    }

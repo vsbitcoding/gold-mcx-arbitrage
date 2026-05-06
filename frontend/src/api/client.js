@@ -78,6 +78,11 @@ export const api = {
     }),
   positions: (pairName) => request(`/api/positions${pairName ? `?pair_name=${encodeURIComponent(pairName)}` : ""}`),
   closePosition: (id) => request(`/api/positions/${id}/close`, { method: "POST" }),
+  squareOff: (body) => request(`/api/positions/square-off`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
   history: (days = 7, pairName) => request(`/api/history?days=${days}${pairName ? `&pair_name=${encodeURIComponent(pairName)}` : ""}`),
   deleteHistory: (id) => request(`/api/history/${id}`, { method: "DELETE" }),
   health: () => request("/api/health"),

@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../api/client.js";
+import { useToast } from "../Toast.jsx";
+import { useConfirm } from "../ConfirmDialog.jsx";
 import { fmtDateTime, fmtNum, fmtPnl } from "../../utils/format.js";
 import { PER_PAGE } from "./constants.js";
 
 export default function PairPositionsTab({ pairName }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [data, setData] = useState({ positions: [], summaries: [] });
   const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [sqMode, setSqMode] = useState("");
+  const [sqWeight, setSqWeight] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -16,7 +24,43 @@ export default function PairPositionsTab({ pairName }) {
     load();
     const t = setInterval(load, 2000);
     return () => { alive = false; clearInterval(t); };
-  }, [pairName]);
+  }, [pairName, reloadKey]);
+
+  // Per-mode totals for the square-off panel
+  const totalsByMode = data.positions.reduce((acc, p) => {
+    const k = p.mode;
+    if (!acc[k]) acc[k] = { count: 0, weight: 0 };
+    acc[k].count += 1;
+    acc[k].weight += p.weight_grams || 0;
+    return acc;
+  }, {});
+  const modeOptions = Object.keys(totalsByMode);
+  const activeTotal = sqMode && totalsByMode[sqMode] ? totalsByMode[sqMode] : null;
+
+  async function squareOff() {
+    if (!sqMode) { toast.error("Select mode (decrease / increase)"); return; }
+    const w = Number(sqWeight);
+    if (!w || w <= 0) { toast.error("Enter weight (g)"); return; }
+    if (activeTotal && w > activeTotal.weight) {
+      toast.error(`Max ${activeTotal.weight}g available`);
+      return;
+    }
+    const ok = await confirm({
+      title: "Square off?",
+      message: `Close oldest trades from ${sqMode.toUpperCase()} until ≥ ${w}g is squared off (FIFO).`,
+      confirmText: "Square Off",
+      danger: true,
+    });
+    if (!ok) return;
+    setSubmitting(true);
+    try {
+      const res = await api.squareOff({ pair_name: pairName, mode: sqMode, weight_grams: w });
+      toast.success(`Closed ${res.closed_count} trade(s) · ${res.actual_weight_grams}g · PnL ${res.total_pnl >= 0 ? "+" : ""}${res.total_pnl}`);
+      setSqWeight("");
+      setReloadKey((k) => k + 1);
+    } catch (e) { toast.error(e.message); }
+    finally { setSubmitting(false); }
+  }
 
   const total = data.positions.length;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
@@ -49,6 +93,51 @@ export default function PairPositionsTab({ pairName }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {modeOptions.length > 0 && (
+        <div className="square-off-panel">
+          <div className="sq-title">Manual Square Off <span className="sq-sub">(FIFO — oldest first)</span></div>
+          <div className="sq-controls">
+            <select
+              value={sqMode}
+              onChange={(e) => setSqMode(e.target.value)}
+              className="sq-mode"
+            >
+              <option value="">Select side…</option>
+              {modeOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m.toUpperCase()} ({totalsByMode[m].count} trades · {totalsByMode[m].weight}g)
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Weight (g)"
+              value={sqWeight}
+              onChange={(e) => setSqWeight(e.target.value)}
+              className="sq-weight"
+              disabled={!sqMode}
+            />
+            {activeTotal && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSqWeight(String(activeTotal.weight))}
+              >
+                All ({activeTotal.weight}g)
+              </button>
+            )}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={squareOff}
+              disabled={submitting || !sqMode || !sqWeight}
+            >
+              {submitting ? "…" : "Square Off"}
+            </button>
           </div>
         </div>
       )}
