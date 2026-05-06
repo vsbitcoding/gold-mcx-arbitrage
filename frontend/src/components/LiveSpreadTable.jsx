@@ -622,13 +622,14 @@ function HistoryModal({ row, onClose }) {
 // ===== Front-month row (default visible) =====
 // Acts as the primary row for each pair — full data + Manage button.
 // Has a "+N more" button to expand the other expiries below.
-const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onToggle, onManage, onPositions, onHistory }) {
+const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, onToggle, onManage, onPositions, onHistory }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
 
   function handleRowClick(e) {
-    // Don't toggle if click came from a button
+    // Don't toggle if click came from a button or hasn't more expiries
     if (e.target.closest("button")) return;
+    if (!hasMore) return;
     onToggle();
   }
 
@@ -636,11 +637,11 @@ const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onTo
     <tr
       className={`pair-row status-${row.status} ${expanded ? "open" : ""}`}
       onClick={handleRowClick}
-      style={{ cursor: "pointer" }}
+      style={{ cursor: hasMore ? "pointer" : "default" }}
     >
       <td className="pair-name gc-identity">
         <div className="front-row-name">
-          <span className="caret">{expanded ? "▾" : "▸"}</span>
+          {hasMore && <span className="caret">{expanded ? "▾" : "▸"}</span>}
           <span className="group-label">{label}</span>
         </div>
       </td>
@@ -659,40 +660,16 @@ const FrontRow = memo(function FrontRow({ row, label, otherCount, expanded, onTo
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
       <td className="gc-status">
         <div className="front-actions">
-          <button
-            className="btn btn-primary btn-xs"
-            onClick={(e) => { e.stopPropagation(); onManage(row.name); }}
-          >
-            Manage
-          </button>
-          <button
-            className="btn btn-secondary btn-xs"
-            onClick={(e) => { e.stopPropagation(); onPositions(row.name); }}
-            title="Active positions for this pair"
-          >
-            Positions
-          </button>
-          <button
-            className="btn btn-secondary btn-xs"
-            onClick={(e) => { e.stopPropagation(); onHistory(row.name); }}
-            title="Trade history for this pair"
-          >
-            History
-          </button>
-          {otherCount > 0 && (
-            <button
-              className="btn btn-ghost btn-xs"
-              onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            >
-              {expanded ? "Hide" : `+${otherCount}`}
-            </button>
-          )}
+          <button className="btn btn-primary btn-xs" onClick={(e) => { e.stopPropagation(); onManage(row.name); }}>Manage</button>
+          <button className="btn btn-secondary btn-xs" onClick={(e) => { e.stopPropagation(); onPositions(row.name); }}>Positions</button>
+          <button className="btn btn-secondary btn-xs" onClick={(e) => { e.stopPropagation(); onHistory(row.name); }}>History</button>
         </div>
       </td>
     </tr>
   );
 }, (prev, next) => (
   prev.expanded === next.expanded &&
+  prev.hasMore === next.hasMore &&
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.status === next.row.status &&
@@ -957,7 +934,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
                   key={`f:${g.label}`}
                   row={front}
                   label={g.label}
-                  otherCount={others.length}
+                  hasMore={others.length > 0}
                   expanded={isOpen}
                   onToggle={() => toggleGroup(g.label)}
                   onManage={(n) => setOpenPair(n)}
