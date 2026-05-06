@@ -23,10 +23,11 @@ log = logging.getLogger("maintenance")
 HISTORY_RETENTION_DAYS = 7
 ACTIVITY_RETENTION_DAYS = 30
 
-# Daily auto-clear runs at 23:35 IST (= 18:05 UTC). MCX non-agri commodities
-# session closes at 23:30 IST.
-CLEAR_HOUR_UTC = 18
-CLEAR_MINUTE_UTC = 5
+# Daily auto-clear runs at 23:35 IST. MCX non-agri commodities
+# session closes at 23:30 IST. Server timezone is Asia/Kolkata so
+# datetime.now() is IST.
+CLEAR_HOUR_IST = 23
+CLEAR_MINUTE_IST = 35
 TICK_SECONDS = 60
 
 
@@ -85,17 +86,17 @@ def _vacuum() -> None:
 
 
 def _loop() -> None:
-    # Track which day we last ran the daily clear (UTC date) to avoid double-fire
+    # Track which day we last ran the daily clear (IST date) to avoid double-fire
     last_clear_date: str | None = None
     time.sleep(15)
     while True:
         try:
-            now = datetime.utcnow()
+            now = datetime.now()  # server runs in Asia/Kolkata → IST
             today_str = now.date().isoformat()
-            # Daily auto-clear window: at or after 18:05 UTC on a fresh date
+            # Daily auto-clear window: at or after 23:35 IST on a fresh date
             if (
                 last_clear_date != today_str
-                and (now.hour, now.minute) >= (CLEAR_HOUR_UTC, CLEAR_MINUTE_UTC)
+                and (now.hour, now.minute) >= (CLEAR_HOUR_IST, CLEAR_MINUTE_IST)
             ):
                 cleared = _daily_clear_ladders()
                 pruned = _prune_history()
