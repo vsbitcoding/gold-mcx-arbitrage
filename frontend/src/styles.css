@@ -1843,10 +1843,89 @@ td.ldr-actions .save-btn {
   font-weight: 700;
 }
 .summary-block.compact { margin: 0 0 12px; }
+.summary-sub {
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
 .modal-tab-pane {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+/* ===== Unified info-table for Positions / History modals ===== */
+.info-table-wrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.info-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.info-table thead th {
+  background: var(--bg-surface-alt);
+  text-align: center;
+  vertical-align: middle;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  padding: 12px 14px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.info-table tbody td {
+  text-align: center;
+  vertical-align: middle;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+.info-table tbody td.num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.info-table tbody td.time-cell {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.info-table tbody tr:nth-child(even) td {
+  background: rgba(127,127,127,0.025);
+}
+.info-table tbody tr:hover td {
+  background: var(--bg-hover);
+}
+.info-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.info-table .badge {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+}
+/* Aggregate block uses the same info-table look */
+.summary-block .info-table-wrap {
+  background: var(--bg-surface);
+  box-shadow: none;
+}
+.summary-block .info-table thead th {
+  background: rgba(99,102,241,0.06);
+  color: var(--accent);
+}
+.summary-block .info-table tbody td {
+  font-weight: 700;
 }
 .spread-pair-card {
   background: var(--bg-surface);

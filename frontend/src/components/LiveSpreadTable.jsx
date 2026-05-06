@@ -279,6 +279,33 @@ function LadderTable({ pairName, side, ladders, defaultMaxWeight, maxAllowed, on
   );
 }
 
+// ===== Helpers =====
+function fmtNum(v, digits = 2) {
+  if (v === null || v === undefined) return "—";
+  return Number(v).toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function fmtPnl(v) {
+  if (v === null || v === undefined) return "—";
+  const n = Number(v);
+  const sign = n >= 0 ? "+" : "−";
+  return sign + Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+}
+function fmtDuration(secs) {
+  if (!secs && secs !== 0) return "—";
+  const s = Math.round(secs);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
 // ===== Per-pair Positions tab =====
 function PairPositionsTab({ pairName }) {
   const [data, setData] = useState({ positions: [], summaries: [] });
@@ -305,61 +332,57 @@ function PairPositionsTab({ pairName }) {
   return (
     <div className="modal-tab-pane">
       {data.summaries.length > 0 && (
-        <div className="summary-block compact">
-          <div className="summary-title">Aggregate (weighted by gram)</div>
-          <table className="summary-table">
-            <thead>
-              <tr>
-                <th>Mode</th><th>Trades</th><th>Total Wt</th><th>Avg Entry</th><th>Cover</th><th>Live PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.summaries.map((s) => (
-                <tr key={s.mode}>
-                  <td>
-                    <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span>
-                  </td>
-                  <td>{s.count}</td>
-                  <td>{s.total_weight_grams}g</td>
-                  <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
-                  <td className="spread-num">{s.cover_spread === null ? "—" : Number(s.cover_spread).toFixed(2)}</td>
-                  <td className={s.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
-                    {s.live_pnl >= 0 ? "+" : ""}{s.live_pnl}
-                  </td>
+        <div className="summary-block">
+          <div className="summary-title">Aggregate <span className="summary-sub">(weighted by gram)</span></div>
+          <div className="info-table-wrap">
+            <table className="info-table">
+              <thead>
+                <tr>
+                  <th>Mode</th><th>Trades</th><th>Total Weight</th><th>Avg Entry</th><th>Cover</th><th>Live PnL</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.summaries.map((s) => (
+                  <tr key={s.mode}>
+                    <td><span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span></td>
+                    <td className="num">{s.count}</td>
+                    <td className="num"><strong>{s.total_weight_grams}</strong> g</td>
+                    <td className="num">{fmtNum(s.avg_entry_spread)}</td>
+                    <td className="num">{fmtNum(s.cover_spread)}</td>
+                    <td className={`num ${s.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(s.live_pnl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       {total === 0 ? (
         <div className="empty-state">No active positions for this pair.</div>
       ) : (
         <>
-          <table className="ladder-table">
-            <thead>
-              <tr>
-                <th>Mode</th><th>Entry</th><th>Cover</th><th>Lots</th><th>Weight</th><th>Time</th><th>Live PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <span className={`badge ${p.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{p.mode}</span>
-                  </td>
-                  <td className="spread-num">{Number(p.entry_spread).toFixed(2)}</td>
-                  <td className="spread-num">{p.cover_spread === null ? "—" : Number(p.cover_spread).toFixed(2)}</td>
-                  <td>{p.big_lots}/{p.small_lots}</td>
-                  <td>{p.weight_grams}g</td>
-                  <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(p.entry_time).toLocaleTimeString()}</td>
-                  <td className={p.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
-                    {p.live_pnl >= 0 ? "+" : ""}{p.live_pnl}
-                  </td>
+          <div className="info-table-wrap">
+            <table className="info-table">
+              <thead>
+                <tr>
+                  <th>Mode</th><th>Entry</th><th>Cover</th><th>Lots (B/S)</th><th>Weight</th><th>Opened At</th><th>Live PnL</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {slice.map((p) => (
+                  <tr key={p.id}>
+                    <td><span className={`badge ${p.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{p.mode}</span></td>
+                    <td className="num">{fmtNum(p.entry_spread)}</td>
+                    <td className="num">{fmtNum(p.cover_spread)}</td>
+                    <td className="num">{p.big_lots}/{p.small_lots}</td>
+                    <td className="num"><strong>{p.weight_grams}</strong> g</td>
+                    <td className="num time-cell">{fmtDateTime(p.entry_time)}</td>
+                    <td className={`num ${p.live_pnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(p.live_pnl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {totalPages > 1 && (
             <div className="ladder-pager">
               <span>Page {safePage} / {totalPages} · {total} total</span>
@@ -404,68 +427,61 @@ function PairHistoryTab({ pairName }) {
   return (
     <div className="modal-tab-pane">
       {data.summaries.length > 0 && (
-        <div className="summary-block compact">
-          <div className="summary-title">Aggregate (weighted by gram)</div>
-          <table className="summary-table">
-            <thead>
-              <tr>
-                <th>Mode</th><th>Trades</th><th>Total Wt</th><th>Avg Entry</th><th>Avg Exit</th><th>Total PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.summaries.map((s) => (
-                <tr key={s.mode}>
-                  <td>
-                    <span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span>
-                  </td>
-                  <td>{s.count}</td>
-                  <td>{s.total_weight_grams}g</td>
-                  <td className="spread-num">{s.avg_entry_spread === null ? "—" : Number(s.avg_entry_spread).toFixed(2)}</td>
-                  <td className="spread-num">{s.avg_exit_spread === null ? "—" : Number(s.avg_exit_spread).toFixed(2)}</td>
-                  <td className={s.total_pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
-                    {s.total_pnl >= 0 ? "+" : ""}{s.total_pnl}
-                  </td>
+        <div className="summary-block">
+          <div className="summary-title">Aggregate <span className="summary-sub">(weighted by gram)</span></div>
+          <div className="info-table-wrap">
+            <table className="info-table">
+              <thead>
+                <tr>
+                  <th>Mode</th><th>Trades</th><th>Total Weight</th><th>Avg Entry</th><th>Avg Exit</th><th>Total PnL</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.summaries.map((s) => (
+                  <tr key={s.mode}>
+                    <td><span className={`badge ${s.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{s.mode}</span></td>
+                    <td className="num">{s.count}</td>
+                    <td className="num"><strong>{s.total_weight_grams}</strong> g</td>
+                    <td className="num">{fmtNum(s.avg_entry_spread)}</td>
+                    <td className="num">{fmtNum(s.avg_exit_spread)}</td>
+                    <td className={`num ${s.total_pnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(s.total_pnl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       {total === 0 ? (
         <div className="empty-state">No history for this pair.</div>
       ) : (
         <>
-          <table className="ladder-table">
-            <thead>
-              <tr>
-                <th>Mode</th><th>Entry</th><th>Exit</th><th>Move</th><th>Weight</th><th>Closed</th><th>PnL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((r) => {
-                const move = r.exit_spread - r.entry_spread;
-                return (
-                  <tr key={r.id}>
-                    <td>
-                      <span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{r.mode}</span>
-                    </td>
-                    <td className="spread-num">{Number(r.entry_spread).toFixed(2)}</td>
-                    <td className="spread-num">{Number(r.exit_spread).toFixed(2)}</td>
-                    <td className={`spread-num ${move >= 0 ? "pnl-positive" : "pnl-negative"}`}>
-                      {move >= 0 ? "+" : ""}{move.toFixed(2)}
-                    </td>
-                    <td>{r.weight_grams}g</td>
-                    <td style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                      {new Date(r.exit_time).toLocaleString("en-IN", { hour12: false })}
-                    </td>
-                    <td className={r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}>
-                      {r.pnl >= 0 ? "+" : ""}{r.pnl}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="info-table-wrap">
+            <table className="info-table">
+              <thead>
+                <tr>
+                  <th>Mode</th><th>Entry</th><th>Exit</th><th>Move</th><th>Weight</th><th>Duration</th><th>Closed At</th><th>PnL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slice.map((r) => {
+                  const move = r.exit_spread - r.entry_spread;
+                  return (
+                    <tr key={r.id}>
+                      <td><span className={`badge ${r.mode === "decrease" ? "badge-decrease" : "badge-increase"}`}>{r.mode}</span></td>
+                      <td className="num">{fmtNum(r.entry_spread)}</td>
+                      <td className="num">{fmtNum(r.exit_spread)}</td>
+                      <td className={`num ${move >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(move)}</td>
+                      <td className="num"><strong>{r.weight_grams}</strong> g</td>
+                      <td className="num">{fmtDuration(r.duration_seconds)}</td>
+                      <td className="num time-cell">{fmtDateTime(r.exit_time)}</td>
+                      <td className={`num ${r.pnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>{fmtPnl(r.pnl)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           {totalPages > 1 && (
             <div className="ladder-pager">
               <span>Page {safePage} / {totalPages} · {total} total</span>
