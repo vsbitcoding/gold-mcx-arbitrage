@@ -3,6 +3,16 @@ import { FrontRow, OtherMonthRow, SortableTh } from "./spread/SpreadRows.jsx";
 import { LadderModal, PositionsModal, HistoryModal } from "./spread/Modals.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
 
+function SkeletonRows({ count = 6 }) {
+  return Array.from({ length: count }).map((_, i) => (
+    <tr key={`skel:${i}`} className="skel-row">
+      {Array.from({ length: 8 }).map((__, j) => (
+        <td key={j}><div className="skel-bar" /></td>
+      ))}
+    </tr>
+  ));
+}
+
 export default function LiveSpreadTable({ rows, onSaved }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -182,7 +192,9 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             </tr>
           </thead>
           <tbody>
-            {groupedRows.length === 0 ? (
+            {rows.length === 0 ? (
+              <SkeletonRows />
+            ) : groupedRows.length === 0 ? (
               <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
             ) : sliceGroups.flatMap((g) => {
               const isOpen = !!expandedGroups[g.label];

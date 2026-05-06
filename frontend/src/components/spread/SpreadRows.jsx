@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { fmtSpread } from "../../utils/format.js";
+import SpreadCell from "./SpreadCell.jsx";
 import { STATUS_CLASS, STATUS_LABEL } from "./constants.js";
 
 export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, onToggle, onManage, onPositions, onHistory }) {
@@ -27,8 +27,8 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
       <td className="gc-identity col-end-group">
         <div className="pair-expiry">{row.expiry_label || "—"}</div>
       </td>
-      <td className="spread-num dec-tone gc-decrease">{fmtSpread(row.decrease_spread)}</td>
-      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(row.increase_spread)}</td>
+      <SpreadCell value={row.decrease_spread} tone="dec" className="gc-decrease" />
+      <SpreadCell value={row.increase_spread} tone="inc" className="gc-increase col-end-group" />
       <td className="gc-status">
         <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
           <span className="blip" />
@@ -67,8 +67,8 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
           <span className="sub-expiry-text">{row.expiry_label || "—"}</span>
         </div>
       </td>
-      <td className="spread-num dec-tone gc-decrease">{fmtSpread(row.decrease_spread)}</td>
-      <td className="spread-num inc-tone gc-increase col-end-group">{fmtSpread(row.increase_spread)}</td>
+      <SpreadCell value={row.decrease_spread} tone="dec" className="gc-decrease" />
+      <SpreadCell value={row.increase_spread} tone="inc" className="gc-increase col-end-group" />
       <td className="gc-status">
         <span className={`badge ${STATUS_CLASS[row.status] || "badge-idle"}`}>
           <span className="blip" />

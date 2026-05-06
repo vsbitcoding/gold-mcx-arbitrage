@@ -12,14 +12,18 @@ import { createLiveSocket } from "./api/livesocket.js";
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
 }
+function getStoredDensity() {
+  return localStorage.getItem("arbi_density") || "comfortable";
+}
 
 function Dashboard() {
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
   const [feedStatus, setFeedStatus] = useState(null);
-  const [wsState, setWsState] = useState("connecting"); // connecting | live | reconnecting
+  const [wsState, setWsState] = useState("connecting");
   const [theme, setTheme] = useState(getStoredTheme());
+  const [density, setDensity] = useState(getStoredDensity());
   const [user] = useState("Vivek_Bitcoding");
   const [page, setPage] = useState("dashboard");
   const fallbackRef = useRef(null);
@@ -28,6 +32,33 @@ function Dashboard() {
     document.body.classList.toggle("dark", theme === "dark");
     localStorage.setItem("arbi_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.body.classList.toggle("density-compact", density === "compact");
+    localStorage.setItem("arbi_density", density);
+  }, [density]);
+
+  // Global keyboard shortcuts: '/' focus search, ← → flip tabs (dashboard only)
+  useEffect(() => {
+    function onKey(e) {
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) return;
+      if (e.key === "/") {
+        const el = document.querySelector('.search-container input');
+        if (el) { e.preventDefault(); el.focus(); }
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const tabs = Array.from(document.querySelectorAll(".pair-tabs .pair-tab"));
+        const activeIdx = tabs.findIndex((t) => t.classList.contains("active"));
+        if (activeIdx === -1) return;
+        const nextIdx = e.key === "ArrowRight" ? (activeIdx + 1) % tabs.length : (activeIdx - 1 + tabs.length) % tabs.length;
+        tabs[nextIdx]?.click();
+      } else if (e.key.toLowerCase() === "d" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        e.preventDefault();
+        setDensity((d) => (d === "compact" ? "comfortable" : "compact"));
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   // Slow-cadence fetch for things WS doesn't push (positions, history, feed status)
   const refreshSlow = useCallback(async () => {
@@ -110,6 +141,9 @@ function Dashboard() {
   function toggleTheme() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
+  function toggleDensity() {
+    setDensity((d) => (d === "compact" ? "comfortable" : "compact"));
+  }
 
   const onLocalSaved = () => {
     refreshSlow();
@@ -122,6 +156,8 @@ function Dashboard() {
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        density={density}
+        onToggleDensity={toggleDensity}
         feedStatus={feedStatus}
         wsState={wsState}
         page={page}
