@@ -182,12 +182,12 @@ def _close_trade(db: Session, pos: Position, snap: dict, closed_by: str) -> None
         exit_spread = snap["increase_spread"]
         big_exit = snap["big_ask"]
         small_exit = snap["small_bid"]
-        pnl = (pos.entry_spread - exit_spread) * pos.big_lots
+        pnl = (pos.entry_spread - exit_spread) * pos.big_lots / 10
     else:
         exit_spread = snap["decrease_spread"]
         big_exit = snap["big_bid"]
         small_exit = snap["small_ask"]
-        pnl = (exit_spread - pos.entry_spread) * pos.big_lots
+        pnl = (exit_spread - pos.entry_spread) * pos.big_lots / 10
 
     pair_def = _pair_def(pos.pair_name)
     weight = pos.big_lots * GRAMS_PER_LOT.get(pair_def["big"], 0) if pair_def else 0
@@ -251,8 +251,8 @@ def live_pnl(pos: Position) -> float:
         cover = snap["increase_spread"]
         if cover is None:
             return 0.0
-        return round((pos.entry_spread - cover) * pos.big_lots, 2)
+        return round((pos.entry_spread - cover) * pos.big_lots / 10, 2)
     cover = snap["decrease_spread"]
     if cover is None:
         return 0.0
-    return round((cover - pos.entry_spread) * pos.big_lots, 2)
+    return round((cover - pos.entry_spread) * pos.big_lots / 10, 2)
