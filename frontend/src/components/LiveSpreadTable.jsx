@@ -678,11 +678,11 @@ const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, onToggl
 ));
 
 // ===== Other-month sub-row (shown when expanded) =====
-const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPositions, onHistory }) {
+const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPositions, onHistory, isLast }) {
   const decCount = row.decrease_ladders.length;
   const incCount = row.increase_ladders.length;
   return (
-    <tr className={`pair-row sub-row status-${row.status}`}>
+    <tr className={`pair-row sub-row status-${row.status} ${isLast ? "last-sub" : ""}`}>
       <td className="gc-identity sub-name" colSpan={2}>
         <div className="sub-row-label">
           <span className="sub-indent">└</span>
@@ -709,6 +709,7 @@ const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPositions, 
     </tr>
   );
 }, (prev, next) => (
+  prev.isLast === next.isLast &&
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.status === next.row.status &&
@@ -941,10 +942,11 @@ export default function LiveSpreadTable({ rows, onSaved }) {
                   onPositions={(n) => setOpenPositionsPair(n)}
                   onHistory={(n) => setOpenHistoryPair(n)}
                 />,
-                ...(isOpen ? others.map((r) => (
+                ...(isOpen ? others.map((r, idx) => (
                   <OtherMonthRow
                     key={r.name}
                     row={r}
+                    isLast={idx === others.length - 1}
                     onManage={(n) => setOpenPair(n)}
                     onPositions={(n) => setOpenPositionsPair(n)}
                     onHistory={(n) => setOpenHistoryPair(n)}

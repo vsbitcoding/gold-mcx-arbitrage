@@ -1320,8 +1320,27 @@ table.pair-table td.spread-num {
 .ladder-count-pill.inc { background: rgba(22,163,74,0.1); color: var(--green); }
 
 /* Front row (default visible — shows current/front month) */
+/* When a group is expanded — the front row becomes the "section header" */
+table.pair-table tr.pair-row.open {
+  background: linear-gradient(90deg, rgba(99,102,241,0.10) 0%, rgba(99,102,241,0.04) 100%);
+}
 table.pair-table tr.pair-row.open td {
-  border-bottom-color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-top: 1px solid var(--accent);
+}
+table.pair-table tr.pair-row.open td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent);
+  font-weight: 800;
+}
+table.pair-table tr.pair-row.open td:last-child {
+  box-shadow: inset -4px 0 0 var(--accent);
+}
+table.pair-table tr.pair-row.open .group-label {
+  color: var(--accent);
+}
+table.pair-table tr.pair-row.open .caret {
+  color: var(--accent);
+  font-weight: 800;
 }
 .front-row-name {
   display: flex;
@@ -1401,11 +1420,22 @@ table.pair-table tr.pair-row.open td {
 }
 .group-collapsed-cell { background: var(--bg-surface-alt) !important; }
 
-/* Sub row (expiry inside a group) */
-table.pair-table tr.sub-row { background: var(--bg-surface-alt); }
-table.pair-table tr.sub-row td { font-size: 12px; }
+/* Sub row (expiry inside a group) — visually contained under the open front row */
+table.pair-table tr.sub-row {
+  background: linear-gradient(90deg, rgba(99,102,241,0.04) 0%, rgba(99,102,241,0.015) 100%);
+}
+table.pair-table tr.sub-row td {
+  font-size: 12px;
+  border-bottom: 1px dashed var(--border-light);
+}
+table.pair-table tr.sub-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+table.pair-table tr.sub-row td:last-child {
+  box-shadow: inset -4px 0 0 var(--accent);
+}
 table.pair-table tr.sub-row td.sub-name {
-  padding-left: 28px;
+  padding-left: 36px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -1416,10 +1446,16 @@ table.pair-table tr.sub-row td.sub-name {
   font-weight: 600;
   font-size: 13px;
 }
-.sub-indent { color: var(--text-muted); font-weight: 400; }
+.sub-indent { color: var(--accent); font-weight: 700; }
 .sub-expiry-text { color: var(--text-primary); }
-table.pair-table tr.sub-row:last-child td:first-child {
-  border-bottom-left-radius: 8px;
+/* Last sub-row of a group seals the section */
+table.pair-table tr.sub-row.last-sub td {
+  border-bottom: 3px solid var(--accent);
+}
+/* Visible gap between groups so adjacent pair groups don't touch */
+table.pair-table tr.sub-row.last-sub + tr.pair-row td,
+table.pair-table tr.pair-row + tr.pair-row:not(.sub-row) td {
+  border-top: 4px solid var(--bg-primary);
 }
 
 /* Expiry filter dropdown */
