@@ -15,7 +15,9 @@ const ACTION_META = {
 function fmtTime(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    timeZone: "Asia/Kolkata",
+    day: "2-digit", month: "short",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
   });
 }
 
