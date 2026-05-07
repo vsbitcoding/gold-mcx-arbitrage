@@ -5,6 +5,9 @@ Versioned at /api/v1/* — read-only, mobile-friendly, lean.
 No write endpoints. No internal fields exposed.
 """
 import asyncio
+import hashlib
+import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
@@ -12,6 +15,8 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, s
 from app.security import require_api_key, verify_api_key_value
 from app.services.dhan_feed import is_market_open
 from app.services.spread_engine import compute_all
+
+log = logging.getLogger("public_v1")
 
 router = APIRouter(prefix="/api/v1", tags=["public-v1"])
 
@@ -112,6 +117,38 @@ def list_spread_groups(
     }
 
 
+def _build_groups_payload(type_: str | None) -> tuple[dict, str]:
+    """Compute the spread-groups payload and a digest of the spread values.
+
+    Digest covers only the *data* (groups), not server_time, so successive
+    snapshots with identical spreads can be skipped from being re-pushed.
+    """
+    all_snaps = compute_all()
+    cross_count = sum(1 for s in all_snaps if s["type"] == "cross")
+    calendar_count = sum(1 for s in all_snaps if s["type"] == "calendar")
+    snaps = _filter(all_snaps, type_)
+    groups = _grouped(snaps)
+
+    digest_input = json.dumps(
+        [
+            (g["group"], [(p["id"], p["decrease"], p["increase"]) for p in g["expiries"]])
+            for g in groups
+        ],
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    digest = hashlib.md5(digest_input.encode("utf-8")).hexdigest()
+
+    payload = {
+        "type": "snapshot",
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "tabs": {"cross": cross_count, "calendar": calendar_count},
+        "groups": groups,
+    }
+    return payload, digest
+
+
 @router.websocket("/stream")
 async def public_stream(
     websocket: WebSocket,
@@ -119,11 +156,15 @@ async def public_stream(
     key: str | None = Query(None),                  # legacy alias
     interval: float = Query(1.0, ge=0.5, le=5.0),
     type: str | None = Query(None),
+    keepalive: int = Query(15, ge=5, le=60, description="Heartbeat interval (s) when no data change"),
 ):
     """Live spread stream.
 
     Connect: wss://host/api/v1/stream?api_key=<KEY>&interval=1
-    Pushes the same shape as `/spread-groups` every `interval` seconds.
+    Pushes a snapshot every `interval` seconds **only when spread values change**.
+    A heartbeat frame {"type":"heartbeat"} is sent every `keepalive` seconds
+    so idle clients can confirm the connection is alive.
+
     Client may send "ping" → server replies "pong".
     """
     token = api_key or key
@@ -133,38 +174,78 @@ async def public_stream(
 
     await websocket.accept()
 
+    stop = asyncio.Event()
+
     async def receiver():
         try:
-            while True:
+            while not stop.is_set():
                 msg = await websocket.receive_text()
                 if msg == "ping":
                     await websocket.send_text("pong")
         except WebSocketDisconnect:
-            return
+            pass
+        except Exception as e:
+            log.exception("WS receiver error: %s", e)
+        finally:
+            stop.set()
 
     async def pusher():
+        last_digest = None
+        last_send_at = 0.0
         try:
-            while True:
-                all_snaps = compute_all()
-                cross_count = sum(1 for s in all_snaps if s["type"] == "cross")
-                calendar_count = sum(1 for s in all_snaps if s["type"] == "calendar")
-                snaps = _filter(all_snaps, type)
-                await websocket.send_json({
-                    "type": "snapshot",
-                    "server_time": datetime.now(timezone.utc).isoformat(),
-                    "market_open": is_market_open(),
-                    "tabs": {"cross": cross_count, "calendar": calendar_count},
-                    "groups": _grouped(snaps),
-                })
-                await asyncio.sleep(interval)
-        except WebSocketDisconnect:
-            return
-        except Exception:
-            return
+            # Always send the first snapshot so the client has initial state.
+            payload, digest = _build_groups_payload(type)
+            await websocket.send_json(payload)
+            last_digest = digest
+            last_send_at = asyncio.get_event_loop().time()
 
+            while not stop.is_set():
+                # Yield to receiver / cancellation between ticks.
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=interval)
+                except asyncio.TimeoutError:
+                    pass
+                if stop.is_set():
+                    break
+
+                payload, digest = _build_groups_payload(type)
+                now = asyncio.get_event_loop().time()
+                changed = digest != last_digest
+                stale_keepalive = (now - last_send_at) >= keepalive
+
+                if changed:
+                    await websocket.send_json(payload)
+                    last_digest = digest
+                    last_send_at = now
+                elif stale_keepalive:
+                    # Idle heartbeat — no data change, but tell the client we're alive.
+                    await websocket.send_json({
+                        "type": "heartbeat",
+                        "server_time": payload["server_time"],
+                        "market_open": payload["market_open"],
+                    })
+                    last_send_at = now
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            log.exception("WS pusher error: %s", e)
+            try:
+                await websocket.send_json({"type": "error", "detail": "stream error, please reconnect"})
+            except Exception:
+                pass
+        finally:
+            stop.set()
+
+    recv_task = asyncio.create_task(receiver())
+    push_task = asyncio.create_task(pusher())
     try:
-        await asyncio.gather(receiver(), pusher())
+        await stop.wait()
     finally:
+        for t in (recv_task, push_task):
+            if not t.done():
+                t.cancel()
+        # Drain any cancellations cleanly.
+        await asyncio.gather(recv_task, push_task, return_exceptions=True)
         try:
             await websocket.close()
         except Exception:
