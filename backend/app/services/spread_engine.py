@@ -28,8 +28,6 @@ def compute_pair(pair: dict) -> dict:
 
     big_bid = _bid(big_q); big_ask = _ask(big_q)
     small_bid = _bid(small_q); small_ask = _ask(small_q)
-    big_ltp = big_q.ltp or None
-    small_ltp = small_q.ltp or None
 
     decrease_spread = None
     increase_spread = None
@@ -63,10 +61,8 @@ def compute_pair(pair: dict) -> dict:
         "small_expiry": pair.get("small_expiry", ""),
         "big_bid": big_bid,
         "big_ask": big_ask,
-        "big_ltp": big_ltp,
         "small_bid": small_bid,
         "small_ask": small_ask,
-        "small_ltp": small_ltp,
         "decrease_spread": decrease_spread,
         "increase_spread": increase_spread,
     }

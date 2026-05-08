@@ -6,7 +6,7 @@ import { PAIR_PAGE_SIZE } from "./spread/constants.js";
 function SkeletonRows({ count = 6 }) {
   return Array.from({ length: count }).map((_, i) => (
     <tr key={`skel:${i}`} className="skel-row">
-      {Array.from({ length: 10 }).map((__, j) => (
+      {Array.from({ length: 8 }).map((__, j) => (
         <td key={j}><div className="skel-bar" /></td>
       ))}
     </tr>
@@ -164,44 +164,38 @@ export default function LiveSpreadTable({ rows, onSaved }) {
       <div className="table-container">
         <table className="pair-table fixed">
           <colgroup>
-            <col style={{ width: "13%" }} />
-            <col style={{ width: "10%" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "12%" }} />
             <col style={{ width: "9%" }} />
             <col style={{ width: "9%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "15%" }} />
+            <col style={{ width: "18%" }} />
           </colgroup>
           <thead>
             <tr className="group-row">
               <th colSpan={2} className="cg-identity col-end-group">Identity</th>
-              <th colSpan={2} className="cg-ltp col-end-group">LTP</th>
               <th className="cg-decrease">▼ Decrease</th>
               <th className="cg-increase col-end-group">▲ Increase</th>
-              <th colSpan={3} className="cg-status col-end-group">Status</th>
-              <th className="cg-action">Action</th>
+              <th colSpan={4} className="cg-status">Status &amp; Ladders</th>
             </tr>
             <tr>
               <SortableTh label={tab === "cross" ? "Pair" : "Spread"} field="label" sort={sort} setSort={setSort} className="gc-identity" />
               <SortableTh label="Expiry" field="expiry" sort={sort} setSort={setSort} className="gc-identity col-end-group" />
-              <th className="gc-ltp">Big</th>
-              <th className="gc-ltp col-end-group">Small</th>
               <SortableTh label="Spread" field="decrease_spread" sort={sort} setSort={setSort} className="gc-decrease" />
               <SortableTh label="Spread" field="increase_spread" sort={sort} setSort={setSort} className="gc-increase col-end-group" />
               <SortableTh label="Status" field="status" sort={sort} setSort={setSort} className="gc-status" />
               <SortableTh label="Dec ▼" field="decrease_count" sort={sort} setSort={setSort} className="gc-status" />
-              <SortableTh label="Inc ▲" field="increase_count" sort={sort} setSort={setSort} className="gc-status col-end-group" />
-              <th className="gc-action">&nbsp;</th>
+              <SortableTh label="Inc ▲" field="increase_count" sort={sort} setSort={setSort} className="gc-status" />
+              <th className="gc-status">Action</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <SkeletonRows />
             ) : groupedRows.length === 0 ? (
-              <tr><td colSpan={10} className="empty-state">No pairs match the filter.</td></tr>
+              <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
             ) : sliceGroups.flatMap((g) => {
               const isOpen = !!expandedGroups[g.label];
               const sortedByExpiry = [...g.rows].sort((a, b) =>
