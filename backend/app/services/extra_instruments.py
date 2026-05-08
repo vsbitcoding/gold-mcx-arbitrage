@@ -18,9 +18,12 @@ from app.services.instrument_resolver import _download_csv, _parse_expiry
 
 log = logging.getLogger("extra_instruments")
 
-# Well-known NSE security IDs (Dhan / NSE master lists agree on these)
-GOLDBEES_NSE_SECURITY_ID = "1660"
+# NSE security IDs (verified against Dhan scrip master — NIP IND ETF GOLD BEES / NETF SILVER)
+GOLDBEES_NSE_SECURITY_ID = "14428"
 GOLDBEES_TRADING_SYMBOL = "GOLDBEES"
+
+SILVERBEES_NSE_SECURITY_ID = "8080"
+SILVERBEES_TRADING_SYMBOL = "SILVERBEES"
 
 # Cached resolution of the Full Gold front-month (refreshed via refresh()).
 _state: dict = {
@@ -92,6 +95,16 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     meta[GOLDBEES_NSE_SECURITY_ID] = {
         "short": "goldbees",
         "trading_symbol": GOLDBEES_TRADING_SYMBOL,
+        "kind": "etf",
+    }
+
+    # SILVERBEES — NSE equity (pre-subscribe for the upcoming silver calculator)
+    instruments.append(
+        (marketfeed.MarketFeed.NSE, SILVERBEES_NSE_SECURITY_ID, marketfeed.MarketFeed.Full)
+    )
+    meta[SILVERBEES_NSE_SECURITY_ID] = {
+        "short": "silverbees",
+        "trading_symbol": SILVERBEES_TRADING_SYMBOL,
         "kind": "etf",
     }
 
