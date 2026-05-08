@@ -99,6 +99,8 @@ export const api = {
     body: JSON.stringify(body),
   }),
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
+  // Calculator
+  calcQuotes: () => request("/api/calculator/quotes"),
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();

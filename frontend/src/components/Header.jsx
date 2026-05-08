@@ -78,6 +78,12 @@ export default function Header({
           >
             Activity
           </button>
+          <button
+            className={`nav-tab ${page === "calculator" ? "active" : ""}`}
+            onClick={() => onNavigate("calculator")}
+          >
+            Calculator
+          </button>
         </nav>
       </div>
       <div className="header-right">

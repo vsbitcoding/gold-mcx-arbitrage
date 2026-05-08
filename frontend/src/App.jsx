@@ -4,6 +4,7 @@ import Header from "./components/Header.jsx";
 import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Activity from "./components/Activity.jsx";
+import Calculator from "./components/Calculator.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
@@ -165,14 +166,14 @@ function Dashboard() {
         onNavigate={setPage}
       />
       <div className="container">
-        {page === "dashboard" ? (
+        {page === "dashboard" && (
           <>
             <StatCards pairs={pairs} positions={positions} history={history} />
             <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
           </>
-        ) : (
-          <Activity />
         )}
+        {page === "activity" && <Activity />}
+        {page === "calculator" && <Calculator />}
       </div>
     </div>
   );

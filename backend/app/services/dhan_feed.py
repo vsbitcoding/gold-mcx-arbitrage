@@ -167,16 +167,26 @@ def _run_real_feed_thread() -> None:
                 raise RuntimeError("Pair registry empty — no active MCX gold contracts resolved.")
 
             subs = pair_registry.get_subscriptions()
+
+            # Resolve + add extra calculator instruments (GOLDBEES + Full Gold).
+            # Side-channel feed; lives in the same quote_store keyed by security_id.
+            from app.services import extra_instruments
+            extra_instruments.refresh()
+            extra_tuples, extra_meta = extra_instruments.get_extra_subscriptions()
+            for sid, m in extra_meta.items():
+                subs[sid] = m
+
             _set_state(instruments=subs)
 
             # Build instrument tuples: (exchange, security_id, request_code)
             instruments = [
                 (marketfeed.MarketFeed.MCX, str(sid), marketfeed.MarketFeed.Full)
-                for sid in subs.keys()
+                for sid in subs.keys() if sid not in extra_meta
             ]
+            instruments.extend(extra_tuples)  # add NSE / MCX-Full extras with their own exchange const
             log.info(
-                "Subscribing to %d unique contracts for %d pairs",
-                len(instruments), n,
+                "Subscribing to %d unique contracts for %d pairs (+%d calculator extras)",
+                len(instruments), n, len(extra_tuples),
             )
 
             ctx = DhanContext(settings.DHAN_CLIENT_ID, token.access_token)
