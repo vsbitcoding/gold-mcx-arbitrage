@@ -39,9 +39,9 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
   const value1 = etfPrice !== null ? etfPrice * mult : null;
   const value2 = value1 !== null ? value1 + manual : null;
   const finalVal = value2 !== null && div !== 0 ? value2 / div : null;
-  // diff = MCX − Calculator (per client spec). Positive = MCX above synthetic.
+  // diff = Calculator − MCX (per client spec). Positive = synthetic above MCX.
   const diff = finalVal !== null && mcxLive !== null && mcxLive !== undefined
-    ? mcxLive - finalVal
+    ? finalVal - mcxLive
     : null;
 
   function patch(field, value) {
@@ -158,9 +158,9 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
         {diff !== null && (
           <div className="calc-hint">
             {diff > 0
-              ? "MCX higher → opportunity to buy ETF, sell MCX"
+              ? "Calculator higher → opportunity to sell ETF, buy MCX"
               : diff < 0
-              ? "MCX lower → opportunity to sell ETF, buy MCX"
+              ? "Calculator lower → opportunity to buy ETF, sell MCX"
               : "Aligned — no edge right now"}
           </div>
         )}
