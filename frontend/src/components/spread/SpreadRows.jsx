@@ -1,6 +1,16 @@
 import React, { memo } from "react";
 import SpreadCell from "./SpreadCell.jsx";
+import { fmtNum } from "../../utils/format.js";
 import { STATUS_CLASS, STATUS_LABEL } from "./constants.js";
+
+function LtpCell({ value, instrument, className = "" }) {
+  return (
+    <td className={`ltp-cell num ${className}`.trim()}>
+      <div className="ltp-instrument">{instrument || "—"}</div>
+      <div className="ltp-value">{value === null || value === undefined ? "—" : fmtNum(value, 2)}</div>
+    </td>
+  );
+}
 
 export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, onToggle, onManage, onPositions, onHistory }) {
   const decCount = row.decrease_ladders.length;
@@ -27,6 +37,8 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
       <td className="gc-identity col-end-group">
         <div className="pair-expiry">{row.expiry_label || "—"}</div>
       </td>
+      <LtpCell value={row.big_ltp} instrument={(row.big || "").toUpperCase()} className="gc-ltp" />
+      <LtpCell value={row.small_ltp} instrument={(row.small || "").toUpperCase()} className="gc-ltp col-end-group" />
       <SpreadCell value={row.decrease_spread} tone="dec" className="gc-decrease" />
       <SpreadCell value={row.increase_spread} tone="inc" className="gc-increase col-end-group" />
       <td className="gc-status">
@@ -36,8 +48,8 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
         </span>
       </td>
       <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
-      <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
-      <td className="gc-status">
+      <td className="gc-status col-end-group"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
+      <td className="gc-action">
         <div className="front-actions">
           <button className="btn btn-primary btn-xs" onClick={(e) => { e.stopPropagation(); onManage(row.name); }}>Manage</button>
           <button className="btn btn-secondary btn-xs" onClick={(e) => { e.stopPropagation(); onPositions(row.name); }}>Positions</button>
@@ -51,6 +63,8 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
   prev.hasMore === next.hasMore &&
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
+  prev.row.big_ltp === next.row.big_ltp &&
+  prev.row.small_ltp === next.row.small_ltp &&
   prev.row.status === next.row.status &&
   prev.row.decrease_ladders === next.row.decrease_ladders &&
   prev.row.increase_ladders === next.row.increase_ladders
@@ -67,6 +81,8 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
           <span className="sub-expiry-text">{row.expiry_label || "—"}</span>
         </div>
       </td>
+      <LtpCell value={row.big_ltp} instrument={(row.big || "").toUpperCase()} className="gc-ltp" />
+      <LtpCell value={row.small_ltp} instrument={(row.small || "").toUpperCase()} className="gc-ltp col-end-group" />
       <SpreadCell value={row.decrease_spread} tone="dec" className="gc-decrease" />
       <SpreadCell value={row.increase_spread} tone="inc" className="gc-increase col-end-group" />
       <td className="gc-status">
@@ -76,8 +92,8 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
         </span>
       </td>
       <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
-      <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
-      <td className="gc-status">
+      <td className="gc-status col-end-group"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
+      <td className="gc-action">
         <div className="front-actions">
           <button className="btn btn-primary btn-xs" onClick={() => onManage(row.name)}>Manage</button>
           <button className="btn btn-secondary btn-xs" onClick={() => onPositions(row.name)}>Positions</button>
@@ -90,6 +106,8 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
   prev.isLast === next.isLast &&
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
+  prev.row.big_ltp === next.row.big_ltp &&
+  prev.row.small_ltp === next.row.small_ltp &&
   prev.row.status === next.row.status &&
   prev.row.decrease_ladders === next.row.decrease_ladders &&
   prev.row.increase_ladders === next.row.increase_ladders &&

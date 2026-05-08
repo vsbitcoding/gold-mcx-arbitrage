@@ -22,9 +22,11 @@
   --modal-overlay: rgba(0, 0, 0, 0.4);
 
   --cg-identity-bg: rgba(100,116,139,0.12);  --cg-identity-tint: rgba(100,116,139,0.04);  --cg-identity-text: #475569;
+  --cg-ltp-bg: rgba(168,85,247,0.12);        --cg-ltp-tint: rgba(168,85,247,0.04);        --cg-ltp-text: #7e22ce;
   --cg-decrease-bg: rgba(220,38,38,0.12);    --cg-decrease-tint: rgba(220,38,38,0.04);    --cg-decrease-text: #b91c1c;
   --cg-increase-bg: rgba(5,150,105,0.12);    --cg-increase-tint: rgba(5,150,105,0.04);    --cg-increase-text: #047857;
   --cg-status-bg: rgba(37,99,235,0.12);      --cg-status-tint: rgba(37,99,235,0.04);      --cg-status-text: #1d4ed8;
+  --cg-action-bg: rgba(245,158,11,0.12);     --cg-action-tint: rgba(245,158,11,0.04);     --cg-action-text: #b45309;
 
   --th-bg: #e2e8f0;
   --th-color: #334155;
@@ -53,9 +55,11 @@ body.dark {
   --modal-overlay: rgba(0, 0, 0, 0.6);
 
   --cg-identity-bg: rgba(148,163,184,0.20);  --cg-identity-tint: rgba(148,163,184,0.06);  --cg-identity-text: #cbd5e1;
+  --cg-ltp-bg: rgba(196,141,255,0.22);       --cg-ltp-tint: rgba(196,141,255,0.06);       --cg-ltp-text: #d8b4fe;
   --cg-decrease-bg: rgba(248,113,113,0.22);  --cg-decrease-tint: rgba(248,113,113,0.06);  --cg-decrease-text: #fca5a5;
   --cg-increase-bg: rgba(52,211,153,0.22);   --cg-increase-tint: rgba(52,211,153,0.06);   --cg-increase-text: #6ee7b7;
   --cg-status-bg: rgba(96,165,250,0.22);     --cg-status-tint: rgba(96,165,250,0.06);     --cg-status-text: #93c5fd;
+  --cg-action-bg: rgba(251,191,36,0.22);     --cg-action-tint: rgba(251,191,36,0.06);     --cg-action-text: #fcd34d;
 
   --th-bg: rgba(148,163,184,0.18);
   --th-color: #e2e8f0;
@@ -471,14 +475,37 @@ th.col-group {
 th.col-group:last-child { border-right: none; }
 
 th.cg-identity  { background: var(--cg-identity-bg);  color: var(--cg-identity-text);  font-weight: 800; }
+th.cg-ltp       { background: var(--cg-ltp-bg);       color: var(--cg-ltp-text);       font-weight: 800; }
 th.cg-decrease  { background: var(--cg-decrease-bg);  color: var(--cg-decrease-text);  font-weight: 800; }
 th.cg-increase  { background: var(--cg-increase-bg);  color: var(--cg-increase-text);  font-weight: 800; }
 th.cg-status    { background: var(--cg-status-bg);    color: var(--cg-status-text);    font-weight: 800; }
+th.cg-action    { background: var(--cg-action-bg);    color: var(--cg-action-text);    font-weight: 800; }
 
 th.gc-identity, td.gc-identity { background: var(--cg-identity-tint); }
+th.gc-ltp,      td.gc-ltp      { background: var(--cg-ltp-tint); }
 th.gc-decrease, td.gc-decrease { background: var(--cg-decrease-tint); }
 th.gc-increase, td.gc-increase { background: var(--cg-increase-tint); }
 th.gc-status,   td.gc-status   { background: var(--cg-status-tint); }
+th.gc-action,   td.gc-action   { background: var(--cg-action-tint); }
+
+/* LTP cell: small instrument label above, value below */
+.ltp-cell { text-align: center; }
+.ltp-cell .ltp-instrument {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--cg-ltp-text);
+  margin-bottom: 2px;
+  opacity: 0.85;
+}
+.ltp-cell .ltp-value {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
 th.gc-weight,   td.gc-weight   { background: var(--cg-status-tint); }
 
 td.gc-weight .weight-meta {
@@ -1376,15 +1403,19 @@ table.pair-table thead tr.group-row th {
   border-bottom: 2px solid var(--border);
 }
 table.pair-table thead tr.group-row th.cg-identity { background: var(--cg-identity-bg); color: var(--cg-identity-text); }
+table.pair-table thead tr.group-row th.cg-ltp      { background: var(--cg-ltp-bg);      color: var(--cg-ltp-text); }
 table.pair-table thead tr.group-row th.cg-decrease { background: var(--cg-decrease-bg); color: var(--cg-decrease-text); }
 table.pair-table thead tr.group-row th.cg-increase { background: var(--cg-increase-bg); color: var(--cg-increase-text); }
 table.pair-table thead tr.group-row th.cg-status   { background: var(--cg-status-bg);   color: var(--cg-status-text); }
+table.pair-table thead tr.group-row th.cg-action   { background: var(--cg-action-bg);   color: var(--cg-action-text); }
 
 /* Sub-cell tinting */
 table.pair-table th.gc-identity, table.pair-table td.gc-identity { background: var(--cg-identity-tint); }
+table.pair-table th.gc-ltp,      table.pair-table td.gc-ltp      { background: var(--cg-ltp-tint); }
 table.pair-table th.gc-decrease, table.pair-table td.gc-decrease { background: var(--cg-decrease-tint); }
 table.pair-table th.gc-increase, table.pair-table td.gc-increase { background: var(--cg-increase-tint); }
 table.pair-table th.gc-status,   table.pair-table td.gc-status   { background: var(--cg-status-tint); }
+table.pair-table th.gc-action,   table.pair-table td.gc-action   { background: var(--cg-action-tint); }
 
 table.pair-table th.col-end-group, table.pair-table td.col-end-group {
   border-right: 2px solid var(--border);
