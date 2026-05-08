@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, LadderRule, TradeHistory
-from app.services import activity
+from app.services import activity, extra_instruments
 
 log = logging.getLogger("maintenance")
 
@@ -85,9 +85,60 @@ def _vacuum() -> None:
         conn.execute(text("VACUUM"))
 
 
+def _check_calculator_rollover(active: dict) -> None:
+    """Re-resolve Full Gold + Full Silver. If 7-day-rollover would pick a new
+    contract, log a clear warning so we know to restart the backend.
+    Stores active per-day to avoid duplicate logs."""
+    try:
+        prev_gold = extra_instruments.get_full_gold()
+        prev_silver = extra_instruments.get_full_silver()
+        extra_instruments.refresh()
+        new_gold = extra_instruments.get_full_gold()
+        new_silver = extra_instruments.get_full_silver()
+
+        for label, prev, new in (
+            ("Full Gold", prev_gold, new_gold),
+            ("Full Silver", prev_silver, new_silver),
+        ):
+            if not prev or not new:
+                continue
+            if prev["security_id"] != new["security_id"]:
+                key = f"{label}:{new['security_id']}"
+                if active.get(key):
+                    continue
+                active[key] = True
+                log.warning(
+                    "Calculator rollover due: %s should switch from %s → %s. "
+                    "Restart backend to pick up the new subscription.",
+                    label, prev["trading_symbol"], new["trading_symbol"],
+                )
+                # Persist a system activity row so the user sees it on the Activity tab
+                db = SessionLocal()
+                try:
+                    activity.log(
+                        db, "rollover_due",
+                        actor="system",
+                        summary=f"{label} rollover due: {prev['trading_symbol']} → {new['trading_symbol']} (restart backend)",
+                        details={
+                            "metal": label,
+                            "from_symbol": prev["trading_symbol"],
+                            "to_symbol": new["trading_symbol"],
+                            "from_security_id": prev["security_id"],
+                            "to_security_id": new["security_id"],
+                        },
+                        commit=True,
+                    )
+                finally:
+                    db.close()
+    except Exception as e:
+        log.warning("Rollover check failed: %s", e)
+
+
 def _loop() -> None:
     # Track which day we last ran the daily clear (IST date) to avoid double-fire
     last_clear_date: str | None = None
+    last_rollover_check: str | None = None
+    rollover_logged: dict[str, bool] = {}
     time.sleep(15)
     while True:
         try:
@@ -108,6 +159,11 @@ def _loop() -> None:
                 if pruned > 0 or cleared > 0:
                     _vacuum()
                 last_clear_date = today_str
+
+            # Daily rollover check (calculator MCX contracts) — once per IST day at 09:00 IST.
+            if last_rollover_check != today_str and now.hour >= 9:
+                _check_calculator_rollover(rollover_logged)
+                last_rollover_check = today_str
         except Exception as e:
             log.exception("Maintenance error: %s", e)
         time.sleep(TICK_SECONDS)

@@ -31,9 +31,17 @@ _state: dict = {
     "silver_full": None,
 }
 
+# Per client spec: roll the contract one week BEFORE expiry. Anything closer
+# than 7 days to expiry is skipped and the next month is picked instead.
+ROLLOVER_DAYS_BEFORE_EXPIRY = 7
 
-def _resolve_front_month(symbol: str, min_days_ahead: int = 1) -> Optional[dict]:
-    """Find the nearest active MCX FUTCOM contract whose base symbol matches."""
+
+def _resolve_front_month(symbol: str, min_days_ahead: int = ROLLOVER_DAYS_BEFORE_EXPIRY) -> Optional[dict]:
+    """Find the nearest active MCX FUTCOM contract whose base symbol matches.
+
+    `min_days_ahead` is the rollover buffer — contracts with less than this many
+    days to expiry are skipped so we move to the next month early.
+    """
     csv_text = _download_csv()
     cutoff = datetime.now() + timedelta(days=min_days_ahead)
     candidates: list[dict] = []
