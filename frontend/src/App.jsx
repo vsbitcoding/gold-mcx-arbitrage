@@ -20,7 +20,6 @@ function getStoredDensity() {
 function Dashboard() {
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [orphanInfo, setOrphanInfo] = useState({ count: 0, weight: 0 });
   const [history, setHistory] = useState([]);
   const [feedStatus, setFeedStatus] = useState(null);
   const [wsState, setWsState] = useState("connecting");
@@ -70,13 +69,8 @@ function Dashboard() {
         api.history(7),
         api.feedStatus().catch(() => null),
       ]);
-      if (op && Array.isArray(op.positions)) {
-        setPositions(op.positions);
-        setOrphanInfo({ count: op.orphaned_count || 0, weight: op.orphaned_weight_grams || 0 });
-      } else {
-        setPositions(op || []);
-        setOrphanInfo({ count: 0, weight: 0 });
-      }
+      if (op && Array.isArray(op.positions)) setPositions(op.positions);
+      else setPositions(op || []);
       if (h && Array.isArray(h.trades)) setHistory(h.trades);
       else setHistory(h || []);
       setFeedStatus(fs);
@@ -173,7 +167,7 @@ function Dashboard() {
       <div className="container">
         {page === "dashboard" ? (
           <>
-            <StatCards pairs={pairs} positions={positions} history={history} orphanInfo={orphanInfo} />
+            <StatCards pairs={pairs} positions={positions} history={history} />
             <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
           </>
         ) : (

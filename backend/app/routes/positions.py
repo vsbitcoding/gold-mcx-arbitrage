@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import GRAMS_PER_LOT
 from app.database import get_db
-from app.models import LadderRule, Position
+from app.models import Position
 from app.security import get_current_user
 from app.services import activity, pair_registry
 from app.services.spread_engine import compute_pair
@@ -13,7 +13,7 @@ from app.services.trade_engine import live_pnl, manual_close
 router = APIRouter(prefix="/api/positions", tags=["positions"])
 
 
-def _enrich(p: Position, live_ladder_ids: set[int]) -> dict:
+def _enrich(p: Position) -> dict:
     pair_def = pair_registry.get_pair(p.pair_name)
     snap = compute_pair(pair_def) if pair_def else None
     big_inst = pair_def["big"] if pair_def else None
@@ -42,13 +42,8 @@ def _enrich(p: Position, live_ladder_ids: set[int]) -> dict:
     label = pair_def.get("label") if pair_def else p.pair_name
     expiry = pair_def.get("expiry_label") if pair_def else ""
 
-    # Orphaned = parent ladder no longer exists (e.g. after daily auto-clear or manual delete).
-    # Such positions cannot auto-exit — user must square off manually.
-    orphaned = p.ladder_rule_id is None or p.ladder_rule_id not in live_ladder_ids
-
     return {
         "id": p.id,
-        "orphaned": orphaned,
         "pair_name": p.pair_name,
         "label": label,
         "expiry_label": expiry,
@@ -115,15 +110,10 @@ def list_open(
     if pair_name:
         q = q.filter(Position.pair_name == pair_name)
     rows = q.order_by(Position.id.desc()).all()
-    live_ladder_ids = {lid for (lid,) in db.query(LadderRule.id).all()}
-    enriched = [_enrich(p, live_ladder_ids) for p in rows]
-    orphaned_count = sum(1 for r in enriched if r["orphaned"])
-    orphaned_weight = sum((r["weight_grams"] or 0) for r in enriched if r["orphaned"])
+    enriched = [_enrich(p) for p in rows]
     return {
         "positions": enriched,
         "summaries": _build_summaries(enriched),
-        "orphaned_count": orphaned_count,
-        "orphaned_weight_grams": orphaned_weight,
     }
 
 
