@@ -23,25 +23,34 @@ def _quote_dict(security_id: str | None):
     }
 
 
+def _build_metal(etf_symbol: str, etf_id: str, mcx_rec: dict | None) -> dict:
+    return {
+        "etf": {
+            "trading_symbol": etf_symbol,
+            "security_id": etf_id,
+            **(_quote_dict(etf_id) or {"ltp": None, "bid": None, "ask": None}),
+        },
+        "mcx_full": {
+            "trading_symbol": mcx_rec["trading_symbol"] if mcx_rec else None,
+            "security_id": mcx_rec["security_id"] if mcx_rec else None,
+            "expiry": mcx_rec["expiry"].isoformat() if mcx_rec else None,
+            **(_quote_dict(mcx_rec["security_id"] if mcx_rec else None) or {"ltp": None, "bid": None, "ask": None}),
+        },
+    }
+
+
 @router.get("/quotes")
 def quotes(user: str = Depends(get_current_user)):
     """Return live LTP for the Calculator's reference instruments."""
-    full_gold = extra_instruments.get_full_gold()
-
     return {
-        "gold": {
-            "etf": {
-                "trading_symbol": extra_instruments.GOLDBEES_TRADING_SYMBOL,
-                "security_id": extra_instruments.GOLDBEES_NSE_SECURITY_ID,
-                **(_quote_dict(extra_instruments.GOLDBEES_NSE_SECURITY_ID) or {"ltp": None, "bid": None, "ask": None}),
-            },
-            "mcx_full": {
-                "trading_symbol": full_gold["trading_symbol"] if full_gold else None,
-                "security_id": full_gold["security_id"] if full_gold else None,
-                "expiry": full_gold["expiry"].isoformat() if full_gold else None,
-                **(_quote_dict(full_gold["security_id"] if full_gold else None) or {"ltp": None, "bid": None, "ask": None}),
-            },
-        },
-        # Silver coming once the client shares the formula
-        "silver": None,
+        "gold": _build_metal(
+            extra_instruments.GOLDBEES_TRADING_SYMBOL,
+            extra_instruments.GOLDBEES_NSE_SECURITY_ID,
+            extra_instruments.get_full_gold(),
+        ),
+        "silver": _build_metal(
+            extra_instruments.SILVERBEES_TRADING_SYMBOL,
+            extra_instruments.SILVERBEES_NSE_SECURITY_ID,
+            extra_instruments.get_full_silver(),
+        ),
     }

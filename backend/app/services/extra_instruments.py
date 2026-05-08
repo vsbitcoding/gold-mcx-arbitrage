@@ -25,14 +25,15 @@ GOLDBEES_TRADING_SYMBOL = "GOLDBEES"
 SILVERBEES_NSE_SECURITY_ID = "8080"
 SILVERBEES_TRADING_SYMBOL = "SILVERBEES"
 
-# Cached resolution of the Full Gold front-month (refreshed via refresh()).
+# Cached resolution of MCX front-months (refreshed via refresh()).
 _state: dict = {
     "gold_full": None,    # {security_id, trading_symbol, expiry, lot_units}
+    "silver_full": None,
 }
 
 
-def _resolve_full_gold_front_month(min_days_ahead: int = 1) -> Optional[dict]:
-    """Find the nearest active 'GOLD' (1 kg full) MCX contract."""
+def _resolve_front_month(symbol: str, min_days_ahead: int = 1) -> Optional[dict]:
+    """Find the nearest active MCX FUTCOM contract whose base symbol matches."""
     csv_text = _download_csv()
     cutoff = datetime.now() + timedelta(days=min_days_ahead)
     candidates: list[dict] = []
@@ -43,9 +44,8 @@ def _resolve_full_gold_front_month(min_days_ahead: int = 1) -> Optional[dict]:
         if row.get("SEM_INSTRUMENT_NAME") != "FUTCOM":
             continue
         ts = row.get("SEM_TRADING_SYMBOL", "")
-        # Filter the bare "GOLD" symbol — exclude GOLDM, GOLDPETAL, GOLDGUINEA, GOLDTEN.
-        symbol = ts.split("-", 1)[0]
-        if symbol != "GOLD":
+        base = ts.split("-", 1)[0]
+        if base != symbol:
             continue
         expiry = _parse_expiry(row.get("SEM_EXPIRY_DATE", ""))
         if not expiry or expiry < cutoff:
@@ -61,20 +61,26 @@ def _resolve_full_gold_front_month(min_days_ahead: int = 1) -> Optional[dict]:
 
 
 def refresh() -> None:
-    """Resolve front-month Full Gold once and cache. Called at feed startup."""
-    full = _resolve_full_gold_front_month()
-    _state["gold_full"] = full
-    if full:
-        log.info(
-            "Full Gold front-month: %s (id=%s, expiry=%s)",
-            full["trading_symbol"], full["security_id"], full["expiry"].date(),
-        )
-    else:
-        log.warning("Could not resolve Full Gold front-month contract.")
+    """Resolve front-month Full Gold + Full Silver once and cache."""
+    _state["gold_full"] = _resolve_front_month("GOLD")
+    _state["silver_full"] = _resolve_front_month("SILVER")
+    for key, name in (("gold_full", "Full Gold"), ("silver_full", "Full Silver")):
+        rec = _state.get(key)
+        if rec:
+            log.info(
+                "%s front-month: %s (id=%s, expiry=%s)",
+                name, rec["trading_symbol"], rec["security_id"], rec["expiry"].date(),
+            )
+        else:
+            log.warning("Could not resolve %s front-month contract.", name)
 
 
 def get_full_gold() -> Optional[dict]:
     return _state.get("gold_full")
+
+
+def get_full_silver() -> Optional[dict]:
+    return _state.get("silver_full")
 
 
 def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
@@ -109,15 +115,28 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     }
 
     # Full Gold MCX
-    full = get_full_gold()
-    if full:
+    gold_full = get_full_gold()
+    if gold_full:
         instruments.append(
-            (marketfeed.MarketFeed.MCX, full["security_id"], marketfeed.MarketFeed.Full)
+            (marketfeed.MarketFeed.MCX, gold_full["security_id"], marketfeed.MarketFeed.Full)
         )
-        meta[full["security_id"]] = {
+        meta[gold_full["security_id"]] = {
             "short": "gold_full",
-            "trading_symbol": full["trading_symbol"],
-            "expiry": full["expiry"].isoformat(),
+            "trading_symbol": gold_full["trading_symbol"],
+            "expiry": gold_full["expiry"].isoformat(),
+            "kind": "mcx_future",
+        }
+
+    # Full Silver MCX
+    silver_full = get_full_silver()
+    if silver_full:
+        instruments.append(
+            (marketfeed.MarketFeed.MCX, silver_full["security_id"], marketfeed.MarketFeed.Full)
+        )
+        meta[silver_full["security_id"]] = {
+            "short": "silver_full",
+            "trading_symbol": silver_full["trading_symbol"],
+            "expiry": silver_full["expiry"].isoformat(),
             "kind": "mcx_future",
         }
 

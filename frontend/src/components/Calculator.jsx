@@ -25,9 +25,26 @@ const DEFAULTS = {
     overrideEtfPrice: false,
     manualEtfPrice: "",
   },
+  silver: {
+    multiplier: 31000,
+    manual: 0,
+    divisor: 30.9,
+    overrideEtfPrice: false,
+    manualEtfPrice: "",
+  },
 };
 
-function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) {
+function MetalCard({
+  metal,            // "gold" | "silver"
+  etfSymbol,        // "GOLDBEES" | "SILVERBEES"
+  mcxLabel,         // "Full Gold MCX" | "Full Silver MCX"
+  etfLive,
+  mcxLive,
+  mcxExpiry,
+  mcxSymbol,
+  cfg,
+  onCfgChange,
+}) {
   const etfPrice = cfg.overrideEtfPrice && cfg.manualEtfPrice !== ""
     ? Number(cfg.manualEtfPrice)
     : etfLive ?? null;
@@ -48,12 +65,13 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
     onCfgChange({ ...cfg, [field]: value });
   }
 
+  const metalCls = metal === "silver" ? "silver" : "";
   return (
     <div className="calc-card">
       <div className="calc-head">
         <div className="calc-title">
-          <span className="calc-metal">GOLD</span>
-          <span className="calc-sub">GOLDBEES → Full Gold MCX</span>
+          <span className={`calc-metal ${metalCls}`}>{metal.toUpperCase()}</span>
+          <span className="calc-sub">{etfSymbol} → {mcxLabel}</span>
         </div>
         <button
           type="button"
@@ -67,7 +85,7 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
 
       <div className="calc-rows">
         <div className="calc-row">
-          <label className="calc-label">GOLDBEES Price</label>
+          <label className="calc-label">{etfSymbol} Price</label>
           {cfg.overrideEtfPrice ? (
             <input
               type="number"
@@ -136,7 +154,7 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
         </div>
         <div className="calc-result-row">
           <span className="calc-result-label">
-            MCX Full Gold {mcxSymbol ? `(${mcxSymbol})` : ""}
+            {mcxLabel} {mcxSymbol ? `(${mcxSymbol})` : ""}
             {mcxExpiry && (
               <span className="calc-mcx-expiry">
                 {" · "}{new Date(mcxExpiry).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "2-digit" })}
@@ -169,28 +187,15 @@ function GoldCard({ etfLive, mcxLive, mcxExpiry, mcxSymbol, cfg, onCfgChange }) 
   );
 }
 
-function SilverCard() {
-  return (
-    <div className="calc-card calc-card-placeholder">
-      <div className="calc-head">
-        <div className="calc-title">
-          <span className="calc-metal silver">SILVER</span>
-          <span className="calc-sub">SILVERBEES → MCX Silver</span>
-        </div>
-        <span className="calc-pending-chip">⌛ Awaiting client formula</span>
-      </div>
-      <div className="calc-placeholder-body">
-        Silver calculator will appear here once the client shares the
-        <strong> multiplier</strong>, <strong>divisor</strong> and target
-        <strong> MCX Silver contract</strong>. The structure mirrors the Gold card.
-      </div>
-    </div>
-  );
-}
-
 export default function Calculator() {
   const [data, setData] = useState({ gold: null, silver: null });
-  const [cfg, setCfg] = useState(() => ({ ...DEFAULTS, ...(loadConfig() || {}) }));
+  const [cfg, setCfg] = useState(() => {
+    const stored = loadConfig() || {};
+    return {
+      gold: { ...DEFAULTS.gold, ...(stored.gold || {}) },
+      silver: { ...DEFAULTS.silver, ...(stored.silver || {}) },
+    };
+  });
 
   useEffect(() => { saveConfig(cfg); }, [cfg]);
 
@@ -207,11 +212,6 @@ export default function Calculator() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  const goldEtfLive = data.gold?.etf?.ltp ?? null;
-  const goldMcxLive = data.gold?.mcx_full?.ltp ?? null;
-  const goldMcxExpiry = data.gold?.mcx_full?.expiry ?? null;
-  const goldMcxSymbol = data.gold?.mcx_full?.trading_symbol ?? null;
-
   return (
     <div className="calc-page">
       <div className="calc-page-head">
@@ -223,15 +223,28 @@ export default function Calculator() {
       </div>
 
       <div className="calc-grid">
-        <GoldCard
-          etfLive={goldEtfLive}
-          mcxLive={goldMcxLive}
-          mcxExpiry={goldMcxExpiry}
-          mcxSymbol={goldMcxSymbol}
+        <MetalCard
+          metal="gold"
+          etfSymbol="GOLDBEES"
+          mcxLabel="MCX Full Gold"
+          etfLive={data.gold?.etf?.ltp ?? null}
+          mcxLive={data.gold?.mcx_full?.ltp ?? null}
+          mcxExpiry={data.gold?.mcx_full?.expiry ?? null}
+          mcxSymbol={data.gold?.mcx_full?.trading_symbol ?? null}
           cfg={cfg.gold}
           onCfgChange={(g) => setCfg((c) => ({ ...c, gold: g }))}
         />
-        <SilverCard />
+        <MetalCard
+          metal="silver"
+          etfSymbol="SILVERBEES"
+          mcxLabel="MCX Full Silver"
+          etfLive={data.silver?.etf?.ltp ?? null}
+          mcxLive={data.silver?.mcx_full?.ltp ?? null}
+          mcxExpiry={data.silver?.mcx_full?.expiry ?? null}
+          mcxSymbol={data.silver?.mcx_full?.trading_symbol ?? null}
+          cfg={cfg.silver}
+          onCfgChange={(s) => setCfg((c) => ({ ...c, silver: s }))}
+        />
       </div>
     </div>
   );
