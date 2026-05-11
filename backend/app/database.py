@@ -60,25 +60,30 @@ def run_simple_migrations() -> None:
                     log.warning("Auto-migrate: ALTER TABLE %s ADD COLUMN %s %s", table, name, sql_type)
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
 
-        # One-shot cleanup: NULL ladder_rule_id on positions/history that reference
-        # a ladder that no longer exists. Prevents SQLite ID-reuse from inflating
-        # the lifetime-fired counter of newly-created ladders.
+        # Cleanup: NULL ladder_rule_id on positions/history that either
+        # (a) reference a ladder that no longer exists, OR
+        # (b) were opened BEFORE that ladder's created_at (= SQLite recycled the id).
+        # Prevents the lifetime-fired counter of new ladders from inheriting stale rows.
         if insp.has_table("ladder_rules") and insp.has_table("positions"):
             r = conn.execute(text(
                 "UPDATE positions SET ladder_rule_id = NULL "
-                "WHERE ladder_rule_id IS NOT NULL "
-                "AND ladder_rule_id NOT IN (SELECT id FROM ladder_rules)"
+                "WHERE ladder_rule_id IS NOT NULL AND ("
+                "  ladder_rule_id NOT IN (SELECT id FROM ladder_rules) "
+                "  OR entry_time < (SELECT created_at FROM ladder_rules WHERE id = positions.ladder_rule_id)"
+                ")"
             ))
             if r.rowcount:
-                log.warning("Auto-migrate: nulled ladder_rule_id on %d orphaned positions", r.rowcount)
+                log.warning("Auto-migrate: nulled ladder_rule_id on %d positions (orphan or pre-creation)", r.rowcount)
         if insp.has_table("ladder_rules") and insp.has_table("trade_history"):
             r = conn.execute(text(
                 "UPDATE trade_history SET ladder_rule_id = NULL "
-                "WHERE ladder_rule_id IS NOT NULL "
-                "AND ladder_rule_id NOT IN (SELECT id FROM ladder_rules)"
+                "WHERE ladder_rule_id IS NOT NULL AND ("
+                "  ladder_rule_id NOT IN (SELECT id FROM ladder_rules) "
+                "  OR entry_time < (SELECT created_at FROM ladder_rules WHERE id = trade_history.ladder_rule_id)"
+                ")"
             ))
             if r.rowcount:
-                log.warning("Auto-migrate: nulled ladder_rule_id on %d orphaned history rows", r.rowcount)
+                log.warning("Auto-migrate: nulled ladder_rule_id on %d history rows (orphan or pre-creation)", r.rowcount)
 
 
 def get_db():
