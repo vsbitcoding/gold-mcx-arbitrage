@@ -101,6 +101,13 @@ export const api = {
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
   // Calculator
   calcQuotes: () => request("/api/calculator/quotes"),
+  // Account config
+  getAccount: () => request("/api/config/account"),
+  updateAccount: (body) => request("/api/config/account", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();

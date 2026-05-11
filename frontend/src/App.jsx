@@ -5,6 +5,7 @@ import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Activity from "./components/Activity.jsx";
 import Calculator from "./components/Calculator.jsx";
+import Settings from "./components/Settings.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
@@ -22,6 +23,7 @@ function Dashboard() {
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
+  const [account, setAccount] = useState(null);
   const [feedStatus, setFeedStatus] = useState(null);
   const [wsState, setWsState] = useState("connecting");
   const [theme, setTheme] = useState(getStoredTheme());
@@ -65,16 +67,18 @@ function Dashboard() {
   // Slow-cadence fetch for things WS doesn't push (positions, history, feed status)
   const refreshSlow = useCallback(async () => {
     try {
-      const [op, h, fs] = await Promise.all([
+      const [op, h, fs, acc] = await Promise.all([
         api.positions(),
         api.history(7),
         api.feedStatus().catch(() => null),
+        api.getAccount().catch(() => null),
       ]);
       if (op && Array.isArray(op.positions)) setPositions(op.positions);
       else setPositions(op || []);
       if (h && Array.isArray(h.trades)) setHistory(h.trades);
       else setHistory(h || []);
       setFeedStatus(fs);
+      setAccount(acc);
     } catch (e) {
       console.error(e);
     }
@@ -168,12 +172,13 @@ function Dashboard() {
       <div className="container">
         {page === "dashboard" && (
           <>
-            <StatCards pairs={pairs} positions={positions} history={history} />
+            <StatCards pairs={pairs} positions={positions} history={history} account={account} />
             <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
           </>
         )}
         {page === "activity" && <Activity />}
         {page === "calculator" && <Calculator />}
+        {page === "settings" && <Settings />}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, cycle_grams
-from app.models import LadderRule, Position, TradeHistory
+from app.models import AccountConfig, LadderRule, Position, TradeHistory
 from app.services import activity, pair_registry
 from app.services.spread_engine import compute_pair
 
@@ -81,6 +81,44 @@ def can_open_new_cycle_for_ladder(
     return (fired + new_cycle) <= cap
 
 
+# In-memory flag so we don't log "fire blocked: account cap" every tick.
+_account_cap_blocked_logged: set[int] = set()
+
+
+def _account_cap_allows_new_fire(db: Session) -> tuple[bool, dict | None]:
+    """Check the global account-margin cap. Returns (allowed, snapshot)."""
+    cfg = db.query(AccountConfig).first()
+    if not cfg or not cfg.margin_per_fire or not cfg.balance or not cfg.max_usage_percent:
+        return True, None  # cap not configured → no enforcement
+    open_count = db.query(Position).filter(Position.status == "open").count()
+    used = open_count * cfg.margin_per_fire
+    cap_rupees = cfg.balance * cfg.max_usage_percent / 100.0
+    snap = {
+        "open_count": open_count,
+        "margin_per_fire": cfg.margin_per_fire,
+        "used": round(used, 2),
+        "cap": round(cap_rupees, 2),
+        "balance": cfg.balance,
+        "max_usage_percent": cfg.max_usage_percent,
+    }
+    return (used + cfg.margin_per_fire) <= cap_rupees, snap
+
+
+def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str, snap: dict) -> None:
+    if rule_id in _account_cap_blocked_logged:
+        return
+    _account_cap_blocked_logged.add(rule_id)
+    activity.log(
+        db, "fire_blocked",
+        pair_name=pair_name, side=side, ladder_id=rule_id, actor="system",
+        summary=(
+            f"Fire blocked: account cap reached "
+            f"(used ₹{snap['used']:.0f} of ₹{snap['cap']:.0f}, margin/fire ₹{snap['margin_per_fire']:.0f})"
+        ),
+        details=snap,
+    )
+
+
 def evaluate(db: Session) -> None:
     # Group ladder rules by pair to avoid recomputing snapshots
     rules = db.query(LadderRule).filter(LadderRule.enabled == True).all()
@@ -111,9 +149,14 @@ def _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread):
         if dec_spread < rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
-            if can_open_new_cycle_for_ladder(db, pair, rule):
+            allowed_acct, acct_snap = _account_cap_allows_new_fire(db)
+            if not allowed_acct:
+                _log_account_cap_block(db, rule.id, pair["name"], "decrease", acct_snap)
+                _armed[rule.id] = False
+            elif can_open_new_cycle_for_ladder(db, pair, rule):
                 _open_trade(db, pair, "decrease", snap, rule.id)
                 db.flush()
+                _account_cap_blocked_logged.discard(rule.id)
                 if not can_open_new_cycle_for_ladder(db, pair, rule):
                     _armed[rule.id] = False
             else:
@@ -131,9 +174,14 @@ def _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread):
         if inc_spread > rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
-            if can_open_new_cycle_for_ladder(db, pair, rule):
+            allowed_acct, acct_snap = _account_cap_allows_new_fire(db)
+            if not allowed_acct:
+                _log_account_cap_block(db, rule.id, pair["name"], "increase", acct_snap)
+                _armed[rule.id] = False
+            elif can_open_new_cycle_for_ladder(db, pair, rule):
                 _open_trade(db, pair, "increase", snap, rule.id)
                 db.flush()
+                _account_cap_blocked_logged.discard(rule.id)
                 if not can_open_new_cycle_for_ladder(db, pair, rule):
                     _armed[rule.id] = False
             else:

@@ -125,6 +125,18 @@ class LadderRule(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AccountConfig(Base):
+    """Singleton row: account balance, max usage %, single margin value
+    used by the trade engine to block fires that would exceed the cap."""
+    __tablename__ = "account_config"
+
+    id = Column(Integer, primary_key=True)
+    balance = Column(Float, default=0.0, nullable=False)            # ₹ total account
+    max_usage_percent = Column(Float, default=80.0, nullable=False)
+    margin_per_fire = Column(Float, default=0.0, nullable=False)    # ₹ deducted per fire
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ActivityLog(Base):
     """Audit trail of every meaningful action: ladder lifecycle, fires, exits,
     deletions, daily auto-clear, history purge."""

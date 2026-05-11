@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import activity as activity_route, auth, calculator, control, feed, history, ladders, pairs, positions, public_v1, ws as ws_route
+from app.routes import activity as activity_route, auth, calculator, config as config_route, control, feed, history, ladders, pairs, positions, public_v1, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
@@ -39,6 +39,7 @@ app.include_router(feed.router)
 app.include_router(ladders.router)
 app.include_router(activity_route.router)
 app.include_router(calculator.router)
+app.include_router(config_route.router)
 app.include_router(ws_route.router)
 app.include_router(public_v1.router)
 
