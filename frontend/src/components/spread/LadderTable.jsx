@@ -99,13 +99,15 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
         <input className={`cell ${draft.entry !== String(ladder.entry ?? "") ? "dirty" : ""}`}
           type="number" step="0.01" placeholder="Entry"
           value={draft.entry ?? ""} onChange={(e) => update("entry", e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && save()} />
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          title="Live spread must CROSS this value (against you) before a fire is allowed." />
       </td>
       <td>
         <input className={`cell ${draft.exit !== String(ladder.exit ?? "") ? "dirty" : ""}`}
           type="number" step="0.01" placeholder="Exit"
           value={draft.exit ?? ""} onChange={(e) => update("exit", e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && save()} />
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          title="When the cover spread reaches this, every open trade on this ladder is closed automatically." />
       </td>
       <td>
         <input className={`cell ${draft.max_weight_grams !== String(ladder.max_weight_grams ?? "") ? "dirty" : ""}`}
@@ -124,7 +126,9 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
           <strong>{fired}</strong>/{eff}g
         </div>
         {ladder.locked && (
-          <div className="ldr-pending-mini" title="Cap reached — raise cap to fire more">🔒 Locked</div>
+          <div className="ldr-lock-note" title="This ladder hit its lifetime cap. Trades stay open; raise Max(g) to allow more fires.">
+            🔒 Cap full · raise <strong>Max (g)</strong> to allow more
+          </div>
         )}
       </td>
       <td className="ldr-actions">
@@ -201,6 +205,10 @@ export default function LadderTable({ pairName, side, ladders, defaultMaxWeight,
         <span className="side-count">{ladders.length}</span>
       </div>
 
+      <div className="ladder-help-banner">
+        <strong>How it works:</strong> Set <em>Entry</em> (when to fire), <em>Exit</em> (when to close), and <em>Max (g)</em> (how much gold this ladder may ever fire). Each ladder fires automatically when the live spread crosses Entry. Cap is one-way — you can only raise it, never reduce.
+      </div>
+
       <div className="add-ladder-section">
         <AddLadderInline
           pairName={pairName} side={side}
@@ -211,7 +219,9 @@ export default function LadderTable({ pairName, side, ladders, defaultMaxWeight,
       </div>
 
       {ladders.length === 0 ? (
-        <div className="empty-state ladder-empty">No ladders yet — add one above.</div>
+        <div className="empty-state ladder-empty">
+          <strong>No ladders yet.</strong> Add one above — Entry value is required, Exit and Max (g) are optional (defaults will be used).
+        </div>
       ) : (
         <>
           <div className="ladder-table-wrap">

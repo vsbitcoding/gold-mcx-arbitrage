@@ -1275,6 +1275,35 @@ body.dark .margin-chip.danger { color: #fc8181; background: rgba(248,113,113,0.1
 .quick-stats .qs-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
 .quick-stats .qs-value { font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* Ladder help banner (top of each side's table) */
+.ladder-help-banner {
+  background: rgba(99,102,241,0.06);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.ladder-help-banner strong { color: var(--text-primary); }
+.ladder-help-banner em { font-style: normal; font-weight: 700; color: var(--accent); }
+
+/* Inline lock note shown under the weight bar when ladder cap is reached */
+.ldr-lock-note {
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(245,158,11,0.15);
+  color: #b45309;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
+
 /* ===== Calculator page ===== */
 .calc-page { padding: 0; }
 .calc-page-head h2 { margin: 0 0 4px; font-size: 22px; }
