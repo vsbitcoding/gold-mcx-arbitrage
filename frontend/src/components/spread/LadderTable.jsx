@@ -224,7 +224,7 @@ export default function LadderTable({ pairName, side, ladders, defaultMaxWeight,
                   <th>Exit</th>
                   <th>Max (g)</th>
                   <th>Weight Used</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
