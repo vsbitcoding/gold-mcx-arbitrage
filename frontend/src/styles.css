@@ -1219,6 +1219,41 @@ body.dark .margin-chip.danger { color: #fc8181; background: rgba(248,113,113,0.1
   border: 1px solid rgba(220,38,38,0.3);
 }
 
+/* Settings: tablet & phone responsiveness */
+@media (max-width: 768px) {
+  .settings-head h2 { font-size: 18px; }
+  .settings-sub { font-size: 12px; margin-bottom: 14px; }
+  .settings-card { padding: 14px 16px; gap: 12px; }
+  .settings-card-title { font-size: 11px; }
+  .settings-status-row { font-size: 12px; }
+}
+@media (max-width: 480px) {
+  .settings-grid { gap: 12px; }
+  .settings-card { padding: 12px 14px; border-radius: 10px; }
+  .settings-input { font-size: 16px; padding: 10px 12px; }  /* iOS-safe (no zoom) */
+  .settings-actions { justify-content: stretch; }
+  .settings-actions .btn { flex: 1; }
+  .settings-status-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 0;
+  }
+  .ss-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
+  .ss-value { font-size: 14px; }
+}
+
+/* Dashboard margin chip: avoid overflow on narrow screens */
+@media (max-width: 480px) {
+  .stat-label { white-space: normal; line-height: 1.4; }
+  .margin-chip {
+    margin-left: 0;
+    margin-top: 4px;
+    display: inline-flex;
+  }
+  .margin-bar { margin-top: 8px; }
+}
+
 /* ===== Quick-stats bar ===== */
 .quick-stats {
   display: flex;
@@ -2850,8 +2885,17 @@ td.ldr-actions .save-btn {
   }
   .header-left { flex: 1; gap: 8px; flex-wrap: wrap; }
   .header-right { flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
-  .nav-tabs { border-left: none; padding-left: 0; margin-left: 0; }
-  .nav-tab { padding: 5px 8px; font-size: 11px; }
+  .nav-tabs {
+    border-left: none;
+    padding-left: 0;
+    margin-left: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    max-width: 100%;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { padding: 5px 8px; font-size: 11px; flex-shrink: 0; }
   .nav-badge { padding: 0 6px; font-size: 10px; }
   .health-pill { font-size: 9px; padding: 3px 8px; }
   .theme-toggle { width: 30px; height: 30px; font-size: 13px; }
