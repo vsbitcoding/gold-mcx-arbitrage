@@ -2263,19 +2263,40 @@ td.ldr-actions .save-btn {
   animation: dirty-pulse 1.5s infinite;
 }
 .ldr-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-surface);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 16px;
+  line-height: 1;
   color: var(--text-secondary);
   margin-left: 4px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
-.ldr-icon:hover { background: var(--bg-primary); color: var(--text-primary); }
-.ldr-icon.danger:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.ldr-icon:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.ldr-icon.danger {
+  color: var(--red);
+  border-color: rgba(220,38,38,0.3);
+  background: rgba(220,38,38,0.06);
+}
+.ldr-icon.danger:hover {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+  transform: translateY(-1px) rotate(8deg);
+  box-shadow: 0 3px 10px rgba(220,38,38,0.35);
+}
 
 /* Status badge in row */
 .ladder-status {
