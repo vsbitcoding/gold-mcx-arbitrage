@@ -126,8 +126,8 @@ function LadderTableRow({ ladder, idx, defaultMaxWeight, maxAllowed, side, onCha
           <strong>{fired}</strong>/{eff}g
         </div>
         {ladder.locked && (
-          <div className="ldr-lock-note" title="This ladder hit its lifetime cap. Trades stay open; raise Max(g) to allow more fires.">
-            🔒 Cap full · raise <strong>Max (g)</strong> to allow more
+          <div className="ldr-lock-note" title="Lifetime cap reached. Open trades stay open. To fire more, delete this ladder and create a new one.">
+            🔒 Locked · cap reached
           </div>
         )}
       </td>
