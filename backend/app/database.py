@@ -60,6 +60,26 @@ def run_simple_migrations() -> None:
                     log.warning("Auto-migrate: ALTER TABLE %s ADD COLUMN %s %s", table, name, sql_type)
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
 
+        # One-shot cleanup: NULL ladder_rule_id on positions/history that reference
+        # a ladder that no longer exists. Prevents SQLite ID-reuse from inflating
+        # the lifetime-fired counter of newly-created ladders.
+        if insp.has_table("ladder_rules") and insp.has_table("positions"):
+            r = conn.execute(text(
+                "UPDATE positions SET ladder_rule_id = NULL "
+                "WHERE ladder_rule_id IS NOT NULL "
+                "AND ladder_rule_id NOT IN (SELECT id FROM ladder_rules)"
+            ))
+            if r.rowcount:
+                log.warning("Auto-migrate: nulled ladder_rule_id on %d orphaned positions", r.rowcount)
+        if insp.has_table("ladder_rules") and insp.has_table("trade_history"):
+            r = conn.execute(text(
+                "UPDATE trade_history SET ladder_rule_id = NULL "
+                "WHERE ladder_rule_id IS NOT NULL "
+                "AND ladder_rule_id NOT IN (SELECT id FROM ladder_rules)"
+            ))
+            if r.rowcount:
+                log.warning("Auto-migrate: nulled ladder_rule_id on %d orphaned history rows", r.rowcount)
+
 
 def get_db():
     db = SessionLocal()

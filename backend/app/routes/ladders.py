@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from sqlalchemy import update
+
 from app.config import MAX_ALLOWED_WEIGHT_GRAMS
 from app.database import get_db
-from app.models import LadderRule
+from app.models import LadderRule, Position, TradeHistory
 from app.security import get_current_user
 from app.services import activity, pair_registry
 from app.services.trade_engine import prime_armed_state
@@ -151,6 +153,10 @@ def delete_ladder(
         raise HTTPException(404, "Ladder not found")
     pair_name, side = rule.pair_name, rule.side
     cap = rule.max_weight_grams
+    # Null out FK on positions + history first — otherwise SQLite can recycle
+    # this id and the new ladder would inherit the old lifetime-fired counter.
+    db.execute(update(Position).where(Position.ladder_rule_id == rule_id).values(ladder_rule_id=None))
+    db.execute(update(TradeHistory).where(TradeHistory.ladder_rule_id == rule_id).values(ladder_rule_id=None))
     db.delete(rule)
     activity.log(
         db, "ladder_deleted",

@@ -11,11 +11,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from app.config import settings
 from app.database import SessionLocal, engine
-from app.models import ActivityLog, LadderRule, TradeHistory
+from app.models import ActivityLog, LadderRule, Position, TradeHistory
 from app.services import activity, extra_instruments
 
 log = logging.getLogger("maintenance")
@@ -61,9 +61,13 @@ def _prune_activity() -> int:
 
 
 def _daily_clear_ladders() -> int:
-    """Delete all ladder rules. Open positions are left as-is (per client spec)."""
+    """Delete all ladder rules. Open positions are left as-is (per client spec).
+    Nulls FKs on positions/history first so SQLite cannot recycle ladder IDs
+    and inherit a stale lifetime-fired counter."""
     db = SessionLocal()
     try:
+        db.execute(update(Position).where(Position.ladder_rule_id.isnot(None)).values(ladder_rule_id=None))
+        db.execute(update(TradeHistory).where(TradeHistory.ladder_rule_id.isnot(None)).values(ladder_rule_id=None))
         n = db.query(LadderRule).delete()
         if n > 0:
             activity.log(
