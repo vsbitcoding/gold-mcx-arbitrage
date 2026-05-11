@@ -13,7 +13,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
+from app.services import extra_instruments
 from app.services.dhan_feed import is_market_open
+from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
 
 log = logging.getLogger("public_v1")
@@ -147,6 +149,65 @@ def _build_groups_payload(type_: str | None) -> tuple[dict, str]:
         "groups": groups,
     }
     return payload, digest
+
+
+def _quote_ltp(security_id: str | None):
+    if not security_id:
+        return None
+    q = quote_store.get(security_id)
+    return q.ltp or None
+
+
+def _build_metal_block(etf_symbol: str, etf_id: str, mcx_rec: dict | None, defaults: dict) -> dict:
+    return {
+        "etf": {
+            "symbol": etf_symbol,
+            "security_id": etf_id,
+            "ltp": _quote_ltp(etf_id),
+        },
+        "mcx_full": {
+            "symbol": mcx_rec["trading_symbol"] if mcx_rec else None,
+            "security_id": mcx_rec["security_id"] if mcx_rec else None,
+            "expiry": mcx_rec["expiry"].isoformat() if mcx_rec else None,
+            "ltp": _quote_ltp(mcx_rec["security_id"] if mcx_rec else None),
+        },
+        "defaults": defaults,
+        "formula": "(etf_ltp × multiplier + manual) ÷ divisor",
+        "diff_definition": "calculator − mcx_full.ltp",
+    }
+
+
+@router.get("/calculator")
+def public_calculator(_key: str = Depends(require_api_key)):
+    """Live data for the Spot-vs-MCX Calculator (both metals).
+
+    Returns raw LTPs + the per-metal default formula constants.
+    The app does the math client-side:
+
+        value  = (etf_ltp × multiplier + manual) / divisor
+        diff   = value − mcx_full.ltp
+
+    Multiplier, manual_value, and divisor are user-editable. Defaults shown
+    are the ones the web dashboard ships with (Gold: ×120000 ÷103,
+    Silver: ×31000 ÷30.9). Compare result vs `mcx_full.ltp` to surface the
+    arbitrage gap.
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "gold": _build_metal_block(
+            etf_symbol=extra_instruments.GOLDBEES_TRADING_SYMBOL,
+            etf_id=extra_instruments.GOLDBEES_NSE_SECURITY_ID,
+            mcx_rec=extra_instruments.get_full_gold(),
+            defaults={"multiplier": 120000, "manual": 0, "divisor": 103},
+        ),
+        "silver": _build_metal_block(
+            etf_symbol=extra_instruments.SILVERBEES_TRADING_SYMBOL,
+            etf_id=extra_instruments.SILVERBEES_NSE_SECURITY_ID,
+            mcx_rec=extra_instruments.get_full_silver(),
+            defaults={"multiplier": 31000, "manual": 0, "divisor": 30.9},
+        ),
+    }
 
 
 @router.websocket("/stream")
