@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { useToast } from "./Toast.jsx";
 import { fmtNum } from "../utils/format.js";
@@ -6,33 +6,42 @@ import { fmtNum } from "../utils/format.js";
 export default function Settings() {
   const toast = useToast();
   const [data, setData] = useState(null);
+  // Draft is initialized once on first load. The periodic refresh keeps `data`
+  // up to date (for the Live Status panel) but NEVER overwrites `draft` while
+  // the user is typing.
   const [draft, setDraft] = useState({ balance: "", max_usage_percent: "", margin_per_fire: "" });
   const [saving, setSaving] = useState(false);
+  const initialisedRef = useRef(false);
 
-  async function load() {
+  async function loadStatusOnly() {
     try {
       const r = await api.getAccount();
       setData(r);
-      setDraft({
-        balance: String(r.balance ?? ""),
-        max_usage_percent: String(r.max_usage_percent ?? ""),
-        margin_per_fire: String(r.margin_per_fire ?? ""),
-      });
+      if (!initialisedRef.current) {
+        // Treat server 0 as "unset" so placeholder shows instead of leading "0"
+        setDraft({
+          balance: r.balance ? String(r.balance) : "",
+          max_usage_percent: r.max_usage_percent ? String(r.max_usage_percent) : "",
+          margin_per_fire: r.margin_per_fire ? String(r.margin_per_fire) : "",
+        });
+        initialisedRef.current = true;
+      }
     } catch (e) { toast.error(e.message); }
   }
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 3000);
+    loadStatusOnly();
+    const t = setInterval(loadStatusOnly, 3000);
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, []);
 
+  // Compare as numbers (empty draft = 0) so "" vs 0 isn't a false-positive
   const dirty =
     data !== null && (
-      String(data.balance) !== draft.balance ||
-      String(data.max_usage_percent) !== draft.max_usage_percent ||
-      String(data.margin_per_fire) !== draft.margin_per_fire
+      Number(draft.balance || 0) !== (data.balance || 0) ||
+      Number(draft.max_usage_percent || 0) !== (data.max_usage_percent || 0) ||
+      Number(draft.margin_per_fire || 0) !== (data.margin_per_fire || 0)
     );
 
   async function save() {
@@ -46,6 +55,12 @@ export default function Settings() {
       };
       const r = await api.updateAccount(body);
       setData(r);
+      // Sync draft to confirmed saved values (0 → empty so placeholder shows)
+      setDraft({
+        balance: r.balance ? String(r.balance) : "",
+        max_usage_percent: r.max_usage_percent ? String(r.max_usage_percent) : "",
+        margin_per_fire: r.margin_per_fire ? String(r.margin_per_fire) : "",
+      });
       toast.success("Settings saved");
     } catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
