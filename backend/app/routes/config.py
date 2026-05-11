@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AccountConfig, Position
 from app.security import get_current_user
-from app.services import activity, margin_service
+from app.services import activity, margin_service, span_service
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -38,6 +38,7 @@ def _to_dict(c: AccountConfig, db: Session) -> dict:
         "usage_percent": round((used / cap * 100), 2) if cap > 0 else None,
         "open_positions": len(open_positions),
         "margin_reference": margin_service.reference_table(),
+        "span_status": span_service.status(),
     }
 
 

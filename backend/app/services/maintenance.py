@@ -16,7 +16,7 @@ from sqlalchemy import text, update
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, LadderRule, Position, TradeHistory
-from app.services import activity, extra_instruments
+from app.services import activity, extra_instruments, span_service
 
 log = logging.getLogger("maintenance")
 
@@ -142,7 +142,13 @@ def _loop() -> None:
     # Track which day we last ran the daily clear (IST date) to avoid double-fire
     last_clear_date: str | None = None
     last_rollover_check: str | None = None
+    last_span_refresh: str | None = None
     rollover_logged: dict[str, bool] = {}
+    # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
+    try:
+        span_service.refresh()
+    except Exception as e:
+        log.warning("Initial SPAN refresh raised: %s", e)
     time.sleep(15)
     while True:
         try:
@@ -168,6 +174,13 @@ def _loop() -> None:
             if last_rollover_check != today_str and now.hour >= 9:
                 _check_calculator_rollover(rollover_logged)
                 last_rollover_check = today_str
+
+            # Daily SPAN margin refresh — once per IST day at 08:30 IST (before market open).
+            if last_span_refresh != today_str and (now.hour, now.minute) >= (8, 30):
+                ok = span_service.refresh()
+                last_span_refresh = today_str
+                if ok:
+                    log.info("SPAN margin feed refreshed for %s", today_str)
         except Exception as e:
             log.exception("Maintenance error: %s", e)
         time.sleep(TICK_SECONDS)

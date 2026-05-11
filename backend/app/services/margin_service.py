@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Optional
 
 from app.models import Position
-from app.services import pair_registry
+from app.services import pair_registry, span_service
 from app.services.market_data import quote_store
 
 # Margin percentage applied to (lots × price) for each MCX instrument leg.
@@ -44,20 +44,30 @@ def _leg_value(lots: int, price: float | None) -> float:
     return lots * price
 
 
+def _leg_margin(security_id: str | None, instrument: str | None, lots: int, price: float | None) -> float:
+    """Resolve one leg's margin. SPAN cache first, fallback to % × LTP."""
+    if not lots:
+        return 0.0
+    span = span_service.get_margin_for_security_id(security_id)
+    if span is not None:
+        return lots * span
+    pct = get_margin_percent(instrument) / 100.0
+    return _leg_value(lots, price) * pct
+
+
 def margin_for_position(p: Position) -> float:
     """Margin locked by a single open paper position.
 
-    Uses the entry-time prices that are already stored on the row, so the
-    value is stable across the day and matches what was charged at fire time.
+    Prefers SPAN value per leg (security_id keyed). Falls back to
+    `lots × entry_price × instrument %` only if SPAN cache has no entry
+    for that contract.
     """
     pair = pair_registry.get_pair(p.pair_name)
     if not pair:
         return 0.0
-    big_pct = get_margin_percent(pair["big"]) / 100.0
-    small_pct = get_margin_percent(pair["small"]) / 100.0
     return (
-        _leg_value(p.big_lots, p.big_price) * big_pct
-        + _leg_value(p.small_lots, p.small_price) * small_pct
+        _leg_margin(pair.get("big_security_id"), pair.get("big"), p.big_lots, p.big_price)
+        + _leg_margin(pair.get("small_security_id"), pair.get("small"), p.small_lots, p.small_price)
     )
 
 
@@ -71,15 +81,13 @@ def _live_price_for_leg(security_id: str | None) -> float | None:
 def estimated_margin_for_fire(pair: dict) -> float:
     """Estimate margin a NEW fire of this pair would consume right now.
 
-    Uses live LTP from quote_store for each leg.
+    SPAN cache first per leg; falls back to live LTP × instrument %.
     """
-    big_pct = get_margin_percent(pair.get("big")) / 100.0
-    small_pct = get_margin_percent(pair.get("small")) / 100.0
     big_price = _live_price_for_leg(pair.get("big_security_id"))
     small_price = _live_price_for_leg(pair.get("small_security_id"))
     return (
-        _leg_value(pair.get("big_lots", 0), big_price) * big_pct
-        + _leg_value(pair.get("small_lots", 0), small_price) * small_pct
+        _leg_margin(pair.get("big_security_id"), pair.get("big"), pair.get("big_lots", 0), big_price)
+        + _leg_margin(pair.get("small_security_id"), pair.get("small"), pair.get("small_lots", 0), small_price)
     )
 
 

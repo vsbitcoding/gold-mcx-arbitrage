@@ -31,6 +31,11 @@ class Settings(BaseSettings):
 
     EXCHANGE_SEGMENT: str = "MCX_COMM"
 
+    # Optional: URL to a daily-refreshed JSON feed of MCX SPAN margins per contract.
+    # Format expected: [{"security_id":"459277","margin_per_lot":146000}, ...]
+    # If unset OR fetch fails, the engine falls back to calibrated margin %.
+    SPAN_MARGIN_FEED_URL: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

@@ -150,14 +150,30 @@ export default function Settings() {
         </div>
 
         <div className="settings-card">
-          <div className="settings-card-title">Margin Reference</div>
+          <div className="settings-card-title">Margin Source</div>
+          {data?.span_status && (
+            <div style={{ marginBottom: 10 }}>
+              <span className={`margin-chip ${data.span_status.source === "live_span" ? "" : "warn"}`}>
+                {data.span_status.source === "live_span"
+                  ? `● Live SPAN · ${data.span_status.contracts_with_live_margin} contracts`
+                  : "● Fallback % (SPAN feed not configured)"}
+              </span>
+              {data.span_status.last_refresh_at && (
+                <div className="settings-help" style={{ marginTop: 6 }}>
+                  Last refresh: {new Date(data.span_status.last_refresh_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: true })}
+                  <br />
+                  Status: {data.span_status.last_refresh_msg}
+                </div>
+              )}
+            </div>
+          )}
           <p className="settings-help" style={{ marginBottom: 8 }}>
-            Margin % applied to <code>(lots × live LTP)</code> for each leg of every fire.
-            Calibrated against real broker SPAN+ELM ratios.
+            Engine prefers <strong>live SPAN ₹/lot</strong> per contract (when feed configured). Falls back to <code>(lots × live LTP × instrument %)</code> when SPAN value missing.
+            All calibrated against real broker SPAN+ELM ratios.
           </p>
           <table className="info-table" style={{ fontSize: 12 }}>
             <thead>
-              <tr><th>Instrument</th><th>Margin %</th></tr>
+              <tr><th>Instrument</th><th>Fallback %</th></tr>
             </thead>
             <tbody>
               {(data?.margin_reference || []).map((m) => (
