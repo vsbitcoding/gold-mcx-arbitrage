@@ -6,10 +6,9 @@ import { fmtNum } from "../utils/format.js";
 export default function Settings() {
   const toast = useToast();
   const [data, setData] = useState(null);
-  // Draft is initialized once on first load. The periodic refresh keeps `data`
-  // up to date (for the Live Status panel) but NEVER overwrites `draft` while
-  // the user is typing.
-  const [draft, setDraft] = useState({ balance: "", max_usage_percent: "", margin_per_fire: "" });
+  // Draft initialised ONCE on first load. Periodic refresh keeps `data` fresh
+  // (for the Live Status panel) but never touches the input fields while typing.
+  const [draft, setDraft] = useState({ balance: "", max_usage_percent: "" });
   const [saving, setSaving] = useState(false);
   const initialisedRef = useRef(false);
 
@@ -18,11 +17,9 @@ export default function Settings() {
       const r = await api.getAccount();
       setData(r);
       if (!initialisedRef.current) {
-        // Treat server 0 as "unset" so placeholder shows instead of leading "0"
         setDraft({
           balance: r.balance ? String(r.balance) : "",
           max_usage_percent: r.max_usage_percent ? String(r.max_usage_percent) : "",
-          margin_per_fire: r.margin_per_fire ? String(r.margin_per_fire) : "",
         });
         initialisedRef.current = true;
       }
@@ -36,12 +33,10 @@ export default function Settings() {
     // eslint-disable-next-line
   }, []);
 
-  // Compare as numbers (empty draft = 0) so "" vs 0 isn't a false-positive
   const dirty =
     data !== null && (
       Number(draft.balance || 0) !== (data.balance || 0) ||
-      Number(draft.max_usage_percent || 0) !== (data.max_usage_percent || 0) ||
-      Number(draft.margin_per_fire || 0) !== (data.margin_per_fire || 0)
+      Number(draft.max_usage_percent || 0) !== (data.max_usage_percent || 0)
     );
 
   async function save() {
@@ -51,15 +46,12 @@ export default function Settings() {
       const body = {
         balance: draft.balance === "" ? 0 : Number(draft.balance),
         max_usage_percent: draft.max_usage_percent === "" ? 0 : Number(draft.max_usage_percent),
-        margin_per_fire: draft.margin_per_fire === "" ? 0 : Number(draft.margin_per_fire),
       };
       const r = await api.updateAccount(body);
       setData(r);
-      // Sync draft to confirmed saved values (0 → empty so placeholder shows)
       setDraft({
         balance: r.balance ? String(r.balance) : "",
         max_usage_percent: r.max_usage_percent ? String(r.max_usage_percent) : "",
-        margin_per_fire: r.margin_per_fire ? String(r.margin_per_fire) : "",
       });
       toast.success("Settings saved");
     } catch (e) { toast.error(e.message); }
@@ -74,8 +66,9 @@ export default function Settings() {
       <div className="settings-head">
         <h2>Account Settings</h2>
         <p className="settings-sub">
-          Trade engine uses this to block new fires once the margin cap is hit.
-          Settings persist on the server and apply to all ladders.
+          Set your trading account balance and the percentage you're willing to deploy.
+          Margin per trade is auto-calculated from live MCX prices using SEBI-aligned
+          margin percentages (no manual margin entry needed).
         </p>
       </div>
 
@@ -103,26 +96,11 @@ export default function Settings() {
               onChange={(e) => setDraft((d) => ({ ...d, max_usage_percent: e.target.value }))}
               placeholder="e.g. 80"
             />
-          </div>
-
-          <div className="settings-row">
-            <label className="settings-label">Margin per Fire (₹)</label>
-            <input
-              type="number" min="0" step="1"
-              className="settings-input"
-              value={draft.margin_per_fire}
-              onChange={(e) => setDraft((d) => ({ ...d, margin_per_fire: e.target.value }))}
-              placeholder="e.g. 11,000"
-            />
-            <span className="settings-help">Deducted from cap for every single fire (across all pairs).</span>
+            <span className="settings-help">Cap = Balance × this %. Engine blocks fires that would exceed it.</span>
           </div>
 
           <div className="settings-actions">
-            <button
-              className="btn btn-primary"
-              onClick={save}
-              disabled={!dirty || saving}
-            >
+            <button className="btn btn-primary" onClick={save} disabled={!dirty || saving}>
               {saving ? "Saving…" : dirty ? "Save" : "Saved"}
             </button>
           </div>
@@ -143,7 +121,7 @@ export default function Settings() {
                 <span className="ss-value">₹ {fmtNum(data.cap)}</span>
               </div>
               <div className="settings-status-row">
-                <span className="ss-label">Used (open × margin)</span>
+                <span className="ss-label">Used (auto-margin)</span>
                 <span className="ss-value">₹ {fmtNum(data.used)}</span>
               </div>
               <div className="settings-status-row">
@@ -155,13 +133,10 @@ export default function Settings() {
 
               <div className="settings-progress">
                 <div className="settings-progress-bar">
-                  <div
-                    className={`fill ${pctFillCls}`}
-                    style={{ width: `${Math.min(100, usagePct ?? 0)}%` }}
-                  />
+                  <div className={`fill ${pctFillCls}`} style={{ width: `${Math.min(100, usagePct ?? 0)}%` }} />
                 </div>
                 <div className="settings-progress-text">
-                  {usagePct == null ? "Configure balance + margin to enable cap" : `${fmtNum(usagePct)} % used`}
+                  {usagePct == null ? "Configure balance to enable cap" : `${fmtNum(usagePct)} % used`}
                 </div>
               </div>
 
@@ -172,6 +147,27 @@ export default function Settings() {
               )}
             </>
           )}
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card-title">Margin Reference</div>
+          <p className="settings-help" style={{ marginBottom: 8 }}>
+            Margin % applied to <code>(lots × live LTP)</code> for each leg of every fire.
+            Calibrated against real broker SPAN+ELM ratios.
+          </p>
+          <table className="info-table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr><th>Instrument</th><th>Margin %</th></tr>
+            </thead>
+            <tbody>
+              {(data?.margin_reference || []).map((m) => (
+                <tr key={m.instrument}>
+                  <td>{m.instrument}</td>
+                  <td className="num">{fmtNum(m.margin_percent)} %</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

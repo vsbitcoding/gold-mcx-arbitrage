@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import DEFAULT_MAX_WEIGHT_GRAMS, GRAMS_PER_LOT, cycle_grams
 from app.models import AccountConfig, LadderRule, Position, TradeHistory
-from app.services import activity, pair_registry
+from app.services import activity, margin_service, pair_registry
 from app.services.spread_engine import compute_pair
 
 
@@ -85,23 +85,32 @@ def can_open_new_cycle_for_ladder(
 _account_cap_blocked_logged: set[int] = set()
 
 
-def _account_cap_allows_new_fire(db: Session) -> tuple[bool, dict | None]:
-    """Check the global account-margin cap. Returns (allowed, snapshot)."""
+def _account_cap_allows_new_fire(db: Session, pair: dict) -> tuple[bool, dict | None]:
+    """Check the global account-margin cap for a candidate fire of `pair`.
+
+    Margin is computed per pair via margin_service (live LTPs × instrument %).
+    Returns (allowed, snapshot).
+    """
     cfg = db.query(AccountConfig).first()
-    if not cfg or not cfg.margin_per_fire or not cfg.balance or not cfg.max_usage_percent:
+    if not cfg or not cfg.balance or not cfg.max_usage_percent:
         return True, None  # cap not configured → no enforcement
-    open_count = db.query(Position).filter(Position.status == "open").count()
-    used = open_count * cfg.margin_per_fire
+
+    # Used = sum of margin across ALL currently-open positions (any pair).
+    open_positions = db.query(Position).filter(Position.status == "open").all()
+    used = sum(margin_service.margin_for_position(p) for p in open_positions)
+    this_fire = margin_service.estimated_margin_for_fire(pair)
     cap_rupees = cfg.balance * cfg.max_usage_percent / 100.0
+
     snap = {
-        "open_count": open_count,
-        "margin_per_fire": cfg.margin_per_fire,
+        "open_count": len(open_positions),
+        "this_fire": round(this_fire, 2),
         "used": round(used, 2),
         "cap": round(cap_rupees, 2),
         "balance": cfg.balance,
         "max_usage_percent": cfg.max_usage_percent,
+        "pair_name": pair.get("name"),
     }
-    return (used + cfg.margin_per_fire) <= cap_rupees, snap
+    return (used + this_fire) <= cap_rupees, snap
 
 
 def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str, snap: dict) -> None:
@@ -113,7 +122,7 @@ def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str,
         pair_name=pair_name, side=side, ladder_id=rule_id, actor="system",
         summary=(
             f"Fire blocked: account cap reached "
-            f"(used ₹{snap['used']:.0f} of ₹{snap['cap']:.0f}, margin/fire ₹{snap['margin_per_fire']:.0f})"
+            f"(used ₹{snap['used']:.0f} + this fire ₹{snap['this_fire']:.0f} > cap ₹{snap['cap']:.0f})"
         ),
         details=snap,
     )
@@ -149,7 +158,7 @@ def _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread):
         if dec_spread < rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
-            allowed_acct, acct_snap = _account_cap_allows_new_fire(db)
+            allowed_acct, acct_snap = _account_cap_allows_new_fire(db, pair)
             if not allowed_acct:
                 _log_account_cap_block(db, rule.id, pair["name"], "decrease", acct_snap)
                 _armed[rule.id] = False
@@ -174,7 +183,7 @@ def _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread):
         if inc_spread > rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
-            allowed_acct, acct_snap = _account_cap_allows_new_fire(db)
+            allowed_acct, acct_snap = _account_cap_allows_new_fire(db, pair)
             if not allowed_acct:
                 _log_account_cap_block(db, rule.id, pair["name"], "increase", acct_snap)
                 _armed[rule.id] = False

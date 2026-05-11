@@ -1,15 +1,16 @@
-"""Account-wide configuration: balance, max-usage %, margin per fire.
+"""Account-wide configuration: balance and max-usage %.
 
-Singleton row in `account_config`. Auto-created on first GET.
+Margin per pair is auto-calculated by margin_service (live LTP × instrument %).
+Settings is a singleton row in `account_config`; auto-created on first GET.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import AccountConfig, Position
 from app.security import get_current_user
-from app.services import activity
+from app.services import activity, margin_service
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -25,25 +26,24 @@ def _get_or_create(db: Session) -> AccountConfig:
 
 
 def _to_dict(c: AccountConfig, db: Session) -> dict:
-    open_count = db.query(Position).filter(Position.status == "open").count()
-    used = open_count * (c.margin_per_fire or 0)
+    open_positions = db.query(Position).filter(Position.status == "open").all()
+    used = sum(margin_service.margin_for_position(p) for p in open_positions)
     cap = (c.balance or 0) * (c.max_usage_percent or 0) / 100.0
     return {
         "balance": c.balance,
         "max_usage_percent": c.max_usage_percent,
-        "margin_per_fire": c.margin_per_fire,
         "cap": round(cap, 2),
         "used": round(used, 2),
         "available": round(cap - used, 2),
         "usage_percent": round((used / cap * 100), 2) if cap > 0 else None,
-        "open_positions": open_count,
+        "open_positions": len(open_positions),
+        "margin_reference": margin_service.reference_table(),
     }
 
 
 class AccountUpdate(BaseModel):
     balance: float | None = Field(None, ge=0)
     max_usage_percent: float | None = Field(None, ge=0, le=100)
-    margin_per_fire: float | None = Field(None, ge=0)
 
 
 @router.get("/account")
@@ -65,16 +65,13 @@ def update_account(
     if body.max_usage_percent is not None and body.max_usage_percent != row.max_usage_percent:
         changes.append(f"max-usage {row.max_usage_percent:.0f}% → {body.max_usage_percent:.0f}%")
         row.max_usage_percent = body.max_usage_percent
-    if body.margin_per_fire is not None and body.margin_per_fire != row.margin_per_fire:
-        changes.append(f"margin/fire ₹{row.margin_per_fire:.0f} → ₹{body.margin_per_fire:.0f}")
-        row.margin_per_fire = body.margin_per_fire
     db.commit()
     if changes:
         activity.log(
             db, "account_config_updated",
             actor="user",
             summary="Account config: " + ", ".join(changes),
-            details={"balance": row.balance, "max_usage_percent": row.max_usage_percent, "margin_per_fire": row.margin_per_fire},
+            details={"balance": row.balance, "max_usage_percent": row.max_usage_percent},
             commit=True,
         )
     return _to_dict(row, db)
