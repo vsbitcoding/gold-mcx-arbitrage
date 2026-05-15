@@ -250,10 +250,9 @@ def _run_real_feed_thread() -> None:
                 # break out so the OUTER backoff loop can apply a real cool-down.
                 if "429" in msg or "rate" in msg.lower():
                     rate_limited_flag["hit"] = True
-                    try:
-                        _instance.disconnect()
-                    except Exception:
-                        pass
+                    # Don't try to call _instance.disconnect() — it's async and
+                    # we're in a sync callback. The error will bubble up to the
+                    # outer except where 5-min cool-down kicks in.
 
             def on_close(_instance):
                 log.info("MarketFeed connection closed.")
