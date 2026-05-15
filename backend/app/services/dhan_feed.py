@@ -279,11 +279,20 @@ def _run_real_feed_thread() -> None:
             else:
                 backoff = 5
         except Exception as e:
-            log.exception("Feed loop error: %s — retrying in %ds", e, backoff)
-            _set_state(last_error=str(e)[:200])
-            dhan_auth.invalidate()
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 120)
+            err_str = str(e)
+            # Dhan rate-limit: cool down 5 min instead of fast retry
+            if "429" in err_str or "rate" in err_str.lower():
+                cool = 300
+                log.warning("Feed loop hit rate-limit — cooling down for %ds: %s", cool, err_str[:120])
+                _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
+                time.sleep(cool)
+                backoff = 5
+            else:
+                log.exception("Feed loop error: %s — retrying in %ds", e, backoff)
+                _set_state(last_error=err_str[:200])
+                dhan_auth.invalidate()
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 120)
         finally:
             _active_feed = None
             with _state_lock:
