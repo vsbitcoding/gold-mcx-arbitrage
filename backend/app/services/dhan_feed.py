@@ -238,9 +238,22 @@ def _run_real_feed_thread() -> None:
                     _eval_and_broadcast()
                     last_eval[0] = now
 
+            # Track error type so we can break out on Dhan rate-limit (429).
+            rate_limited_flag = {"hit": False}
+
             def on_error(_instance, err):
-                log.warning("MarketFeed error: %s", err)
-                _set_state(last_error=str(err)[:200])
+                msg = str(err)
+                log.warning("MarketFeed error: %s", msg)
+                _set_state(last_error=msg[:200])
+                # Dhan rate-limits aggressive reconnects (HTTP 429).
+                # The SDK keeps trying every ~2 s internally → we have to forcefully
+                # break out so the OUTER backoff loop can apply a real cool-down.
+                if "429" in msg or "rate" in msg.lower():
+                    rate_limited_flag["hit"] = True
+                    try:
+                        _instance.disconnect()
+                    except Exception:
+                        pass
 
             def on_close(_instance):
                 log.info("MarketFeed connection closed.")
@@ -255,7 +268,16 @@ def _run_real_feed_thread() -> None:
             log.info("Starting MarketFeed.run() — real ticks incoming.")
             feed.run()
             log.info("MarketFeed.run() exited normally.")
-            backoff = 5
+            # If we exited because of rate-limit, use long cool-down (5 min).
+            # Otherwise reset to fast backoff for benign disconnects.
+            if rate_limited_flag["hit"]:
+                cool = 300
+                log.warning("Rate-limited by Dhan — cooling down for %ds before reconnect.", cool)
+                _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
+                time.sleep(cool)
+                backoff = 5
+            else:
+                backoff = 5
         except Exception as e:
             log.exception("Feed loop error: %s — retrying in %ds", e, backoff)
             _set_state(last_error=str(e)[:200])
