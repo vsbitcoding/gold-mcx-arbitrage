@@ -32,7 +32,10 @@ CROSS_TEMPLATES = [
     ("silvermic", "silverm", 5, 1, "sonext"),   # SILVER MIC × SILVER MINI
 ]
 
-CALENDAR_INSTRUMENTS = ["petal", "guinea", "ten", "mini"]
+CALENDAR_INSTRUMENTS = [
+    "petal", "guinea", "ten", "mini",
+    "gold", "silver", "silverm", "silvermic",
+]
 
 # Display names (GOLD prefix dropped — common knowledge it's gold trading)
 MCX_SYMBOL = {
