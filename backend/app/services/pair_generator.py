@@ -15,14 +15,21 @@ from typing import Optional
 
 log = logging.getLogger("pair_generator")
 
-# Cross-pair config: short_big, short_small, big_lots, small_lots
+# Cross-pair config: (short_big, short_small, big_lots, small_lots, match_mode)
+#   match_mode: "same"  → small leg same calendar month as big
+#               "next"  → small leg = next month AFTER big expiry (gold Mini logic)
+#               "sonext"→ small leg = same month if it exists, else next after
 CROSS_TEMPLATES = [
-    ("petal", "guinea", 8, 1),
-    ("petal", "ten", 10, 1),
-    ("petal", "mini", 100, 1),
-    ("guinea", "ten", 5, 4),
-    ("guinea", "mini", 25, 2),
-    ("ten", "mini", 10, 1),
+    ("petal", "guinea", 8, 1, "same"),
+    ("petal", "ten", 10, 1, "same"),
+    ("petal", "mini", 100, 1, "next"),
+    ("guinea", "ten", 5, 4, "same"),
+    ("guinea", "mini", 25, 2, "next"),
+    ("ten", "mini", 10, 1, "next"),
+    # Mini → Full families (client-requested, lot ratios per client note)
+    ("mini", "gold", 10, 1, "sonext"),          # GOLD MINI × GOLD full
+    ("silverm", "silver", 5, 1, "sonext"),      # SILVER MINI × SILVER full
+    ("silvermic", "silverm", 5, 1, "sonext"),   # SILVER MIC × SILVER MINI
 ]
 
 CALENDAR_INSTRUMENTS = ["petal", "guinea", "ten", "mini"]
@@ -33,6 +40,10 @@ MCX_SYMBOL = {
     "guinea": "GUINEA",
     "ten": "TEN",
     "mini": "MINI",
+    "gold": "GOLD",
+    "silver": "SILVER",
+    "silverm": "SILVER MINI",
+    "silvermic": "SILVER MIC",
 }
 
 
@@ -62,16 +73,18 @@ def generate_cross_pairs(active: dict[str, list[dict]]) -> list[dict]:
         e.g. Petal 29 May → Mini 5 Jun.
     """
     pairs: list[dict] = []
-    for big, small, big_lots, small_lots in CROSS_TEMPLATES:
+    for big, small, big_lots, small_lots, match_mode in CROSS_TEMPLATES:
         big_contracts = active.get(big, [])
         small_contracts = active.get(small, [])
         if not big_contracts or not small_contracts:
             continue
 
         for bc in big_contracts:
-            if small == "mini":
+            if match_mode == "next":
                 sc = _match_next_month_after(small_contracts, bc["expiry"])
-            else:
+            elif match_mode == "sonext":
+                sc = _match_same_or_next(small_contracts, bc["expiry"])
+            else:  # "same"
                 sc = _match_contract_for_month(small_contracts, bc["expiry"])
             if not sc:
                 continue
@@ -163,6 +176,22 @@ def _match_next_month_after(contracts: list[dict], target_expiry: datetime) -> O
     if not after:
         return None
     return min(after, key=lambda c: c["expiry"])
+
+
+def _match_same_or_next(contracts: list[dict], target_expiry: datetime) -> Optional[dict]:
+    """Same calendar month if a contract exists there, else the next one after.
+
+    Used for Mini→Full families: the smaller leg trades monthly while the
+    full contract only has a few months a year (per client's note).
+    """
+    same = [
+        c for c in contracts
+        if c["expiry"].year == target_expiry.year
+        and c["expiry"].month == target_expiry.month
+    ]
+    if same:
+        return same[0]
+    return _match_next_month_after(contracts, target_expiry)
 
 
 def generate_all(active: dict[str, list[dict]]) -> list[dict]:

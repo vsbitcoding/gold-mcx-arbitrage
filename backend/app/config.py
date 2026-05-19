@@ -48,10 +48,23 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-MULTIPLIERS = {"petal": 10.0, "guinea": 1.25, "ten": 1.0, "mini": 1.0}
+# Price normalisation to a common per-unit basis so spreads are comparable.
+# Gold legs → ₹ per 10 g.  Silver legs → ₹ per kg (each silver pair is
+# intra-silver so 1.0 keeps both legs on the same quote basis).
+MULTIPLIERS = {
+    "petal": 10.0, "guinea": 1.25, "ten": 1.0, "mini": 1.0,
+    "gold": 1.0,                       # GOLD full (1 kg) quoted per 10 g, like ten/mini
+    "silver": 1.0, "silverm": 1.0, "silvermic": 1.0,  # all silver quoted per kg
+}
 
-# Gold weight (grams) per single lot of each MCX contract
-GRAMS_PER_LOT = {"petal": 1, "guinea": 8, "ten": 10, "mini": 100}
+# Weight (grams) per single lot of each MCX contract
+GRAMS_PER_LOT = {
+    "petal": 1, "guinea": 8, "ten": 10, "mini": 100,
+    "gold": 1000,        # GOLD full = 1 kg
+    "silver": 30000,     # SILVER full = 30 kg
+    "silverm": 5000,     # SILVER MINI = 5 kg
+    "silvermic": 1000,   # SILVER MIC = 1 kg
+}
 
 # Default max weight cap per pair if user leaves it blank
 DEFAULT_MAX_WEIGHT_GRAMS = 1000

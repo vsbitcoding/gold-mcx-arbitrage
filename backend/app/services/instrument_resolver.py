@@ -22,6 +22,11 @@ SYMBOL_MAP = {
     "guinea": "GOLDGUINEA",
     "ten": "GOLDTEN",
     "mini": "GOLDM",
+    # Mini→Full families (client-requested)
+    "gold": "GOLD",          # GOLD full (1 kg)
+    "silver": "SILVER",      # SILVER full (30 kg)
+    "silverm": "SILVERM",    # SILVER MINI (5 kg)
+    "silvermic": "SILVERMIC",  # SILVER MIC (1 kg)
 }
 
 
