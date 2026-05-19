@@ -34,6 +34,18 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
           <span className="blip" />
           {STATUS_LABEL[row.status] || row.status}
         </span>
+        {row.open_positions_count > 0 && (
+          <span
+            className={`open-pos-pill ${row.orphan_open_count > 0 ? "orphan" : ""}`}
+            title={
+              row.orphan_open_count > 0
+                ? `${row.open_positions_count} open trade(s) with NO ladder (orphaned) — click "Positions" to square off`
+                : `${row.open_positions_count} open trade(s) on this pair`
+            }
+          >
+            {row.open_positions_count} open
+          </span>
+        )}
       </td>
       <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
@@ -52,6 +64,8 @@ export const FrontRow = memo(function FrontRow({ row, label, hasMore, expanded, 
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.status === next.row.status &&
+  prev.row.open_positions_count === next.row.open_positions_count &&
+  prev.row.orphan_open_count === next.row.orphan_open_count &&
   prev.row.decrease_ladders === next.row.decrease_ladders &&
   prev.row.increase_ladders === next.row.increase_ladders
 ));
@@ -74,6 +88,18 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
           <span className="blip" />
           {STATUS_LABEL[row.status] || row.status}
         </span>
+        {row.open_positions_count > 0 && (
+          <span
+            className={`open-pos-pill ${row.orphan_open_count > 0 ? "orphan" : ""}`}
+            title={
+              row.orphan_open_count > 0
+                ? `${row.open_positions_count} open trade(s) with NO ladder (orphaned) — click "Positions" to square off`
+                : `${row.open_positions_count} open trade(s) on this pair`
+            }
+          >
+            {row.open_positions_count} open
+          </span>
+        )}
       </td>
       <td className="gc-status"><span className="ladder-count-pill dec">▼ {decCount}</span></td>
       <td className="gc-status"><span className="ladder-count-pill inc">▲ {incCount}</span></td>
@@ -91,6 +117,8 @@ export const OtherMonthRow = memo(function OtherMonthRow({ row, onManage, onPosi
   prev.row.decrease_spread === next.row.decrease_spread &&
   prev.row.increase_spread === next.row.increase_spread &&
   prev.row.status === next.row.status &&
+  prev.row.open_positions_count === next.row.open_positions_count &&
+  prev.row.orphan_open_count === next.row.orphan_open_count &&
   prev.row.decrease_ladders === next.row.decrease_ladders &&
   prev.row.increase_ladders === next.row.increase_ladders &&
   prev.row.expiry_label === next.row.expiry_label

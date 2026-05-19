@@ -30,10 +30,13 @@ def _ladder_dict(r: LadderRule, open_weight: int, fired_weight: int, open_count:
 def build_live_payload(db: Session) -> list[dict]:
     ladders = db.query(LadderRule).order_by(LadderRule.sort_order, LadderRule.id).all()
 
-    # Open positions by ladder
+    # Open positions by ladder AND by pair-name (the latter also captures
+    # orphaned positions whose ladder was deleted by the daily auto-clear).
     open_positions = db.query(Position).filter(Position.status == "open").all()
     open_by_ladder: dict[int, list[Position]] = {}
+    open_by_pair: dict[str, list[Position]] = {}
     for p in open_positions:
+        open_by_pair.setdefault(p.pair_name, []).append(p)
         if p.ladder_rule_id is not None:
             open_by_ladder.setdefault(p.ladder_rule_id, []).append(p)
 
@@ -73,7 +76,18 @@ def build_live_payload(db: Session) -> list[dict]:
                 if opens:
                     any_increase_open = True
 
-        if any_decrease_open or any_increase_open:
+        # Every open trade for this pair — including orphans (no live ladder).
+        pair_opens = open_by_pair.get(s["name"], [])
+        pair_open_count = len(pair_opens)
+        pair_open_weight = sum(p.big_lots for p in pair_opens) * big_g
+        # An open trade is "orphaned" if its ladder no longer exists.
+        live_ladder_ids = {r.id for r in ladders if r.pair_name == s["name"]}
+        orphan_open_count = sum(
+            1 for p in pair_opens
+            if p.ladder_rule_id is None or p.ladder_rule_id not in live_ladder_ids
+        )
+
+        if any_decrease_open or any_increase_open or pair_open_count > 0:
             status = "in_position"
         elif decrease_ladders or increase_ladders:
             status = "armed"
@@ -86,6 +100,9 @@ def build_live_payload(db: Session) -> list[dict]:
             "increase_ladders": increase_ladders,
             "decrease_open": any_decrease_open,
             "increase_open": any_increase_open,
+            "open_positions_count": pair_open_count,
+            "open_positions_weight": pair_open_weight,
+            "orphan_open_count": orphan_open_count,
             "cycle_grams": cycle_g,
             "default_max_weight": DEFAULT_MAX_WEIGHT_GRAMS,
             "max_allowed_weight": MAX_ALLOWED_WEIGHT_GRAMS,
