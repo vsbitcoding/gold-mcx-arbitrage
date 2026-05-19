@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AccountConfig, Position
+from app.models import AccountConfig, LadderRule, Position
 from app.security import get_current_user
 from app.services import activity, margin_service, span_service
 
@@ -27,7 +27,18 @@ def _get_or_create(db: Session) -> AccountConfig:
 
 def _to_dict(c: AccountConfig, db: Session) -> dict:
     open_positions = db.query(Position).filter(Position.status == "open").all()
-    used = sum(margin_service.margin_for_position(p) for p in open_positions)
+    live_ladder_ids = {lid for (lid,) in db.query(LadderRule.id).all()}
+    active_positions = [
+        p for p in open_positions
+        if p.ladder_rule_id is not None and p.ladder_rule_id in live_ladder_ids
+    ]
+    active_ids = {p.id for p in active_positions}
+    orphan_positions = [p for p in open_positions if p.id not in active_ids]
+
+    # `used` (enforced) = active-ladder positions only.
+    used = sum(margin_service.margin_for_position(p) for p in active_positions)
+    # `orphan_used` = exposure from positions whose ladder was removed (info only).
+    orphan_used = sum(margin_service.margin_for_position(p) for p in orphan_positions)
     cap = (c.balance or 0) * (c.max_usage_percent or 0) / 100.0
     return {
         "balance": c.balance,
@@ -36,7 +47,10 @@ def _to_dict(c: AccountConfig, db: Session) -> dict:
         "used": round(used, 2),
         "available": round(cap - used, 2),
         "usage_percent": round((used / cap * 100), 2) if cap > 0 else None,
-        "open_positions": len(open_positions),
+        "open_positions": len(active_positions),
+        "orphan_positions": len(orphan_positions),
+        "orphan_used": round(orphan_used, 2),
+        "total_open_positions": len(open_positions),
         "margin_reference": margin_service.reference_table(),
         "span_status": span_service.status(),
     }

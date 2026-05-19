@@ -43,6 +43,8 @@ fi
 
 if [ "$BACKEND_CHANGED" -gt 0 ]; then
     echo "==> Backend changed → restarting service (brief feed downtime)"
+    # Pick up any change to the unit file too (silences the daemon-reload warning)
+    sudo systemctl daemon-reload
     sudo systemctl restart arbi-backend.service
     sleep 4
     sudo systemctl is-active arbi-backend.service

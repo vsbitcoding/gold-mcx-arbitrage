@@ -95,14 +95,23 @@ def _account_cap_allows_new_fire(db: Session, pair: dict) -> tuple[bool, dict | 
     if not cfg or not cfg.balance or not cfg.max_usage_percent:
         return True, None  # cap not configured → no enforcement
 
-    # Used = sum of margin across ALL currently-open positions (any pair).
+    # Enforcement counts ONLY positions that belong to a currently-live ladder.
+    # Orphan positions (their ladder was removed by the daily auto-clear) must
+    # NOT permanently consume the cap — otherwise the next day's fresh ladders
+    # could never fire. Orphan exposure is still shown in Settings as info.
+    live_ladder_ids = {lid for (lid,) in db.query(LadderRule.id).all()}
     open_positions = db.query(Position).filter(Position.status == "open").all()
-    used = sum(margin_service.margin_for_position(p) for p in open_positions)
+    active_positions = [
+        p for p in open_positions
+        if p.ladder_rule_id is not None and p.ladder_rule_id in live_ladder_ids
+    ]
+    used = sum(margin_service.margin_for_position(p) for p in active_positions)
     this_fire = margin_service.estimated_margin_for_fire(pair)
     cap_rupees = cfg.balance * cfg.max_usage_percent / 100.0
 
     snap = {
-        "open_count": len(open_positions),
+        "open_count": len(active_positions),
+        "total_open_count": len(open_positions),
         "this_fire": round(this_fire, 2),
         "used": round(used, 2),
         "cap": round(cap_rupees, 2),

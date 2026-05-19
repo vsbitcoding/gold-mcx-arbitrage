@@ -113,7 +113,7 @@ export default function Settings() {
           ) : (
             <>
               <div className="settings-status-row">
-                <span className="ss-label">Open positions</span>
+                <span className="ss-label">Active positions (live ladders)</span>
                 <span className="ss-value">{data.open_positions}</span>
               </div>
               <div className="settings-status-row">
@@ -121,7 +121,7 @@ export default function Settings() {
                 <span className="ss-value">₹ {fmtNum(data.cap)}</span>
               </div>
               <div className="settings-status-row">
-                <span className="ss-label">Used (auto-margin)</span>
+                <span className="ss-label">Used (counts toward cap)</span>
                 <span className="ss-value">₹ {fmtNum(data.used)}</span>
               </div>
               <div className="settings-status-row">
@@ -130,6 +130,14 @@ export default function Settings() {
                   ₹ {fmtNum(data.available)}
                 </span>
               </div>
+              {data.orphan_positions > 0 && (
+                <div className="settings-status-row" title="Trades whose ladder was removed by the daily auto-clear. They stay open and show their own exposure, but do NOT block new ladders from firing. Square them off from each pair's Positions popup.">
+                  <span className="ss-label">⚠ Orphan trades (info only, not capped)</span>
+                  <span className="ss-value" style={{ color: "#b45309" }}>
+                    {data.orphan_positions} · ₹ {fmtNum(data.orphan_used)}
+                  </span>
+                </div>
+              )}
 
               <div className="settings-progress">
                 <div className="settings-progress-bar">
