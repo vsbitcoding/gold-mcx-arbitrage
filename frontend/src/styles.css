@@ -1504,6 +1504,93 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
 .opt-pe-sep { color: var(--border); }
 .opt-matrix tr.atm-row .opt-pe-inline { color: var(--text-secondary); font-weight: 700; }
 
+/* ───── Pro tabular layout (Strike | ITM | per-week: N ask | S bid | Spread) ───── */
+table.opt-matrix-pro {
+  min-width: 980px;
+}
+table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
+  background: var(--bg-surface-alt);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+  border-left: 1px solid var(--border-light);
+  text-align: center;
+  vertical-align: middle;
+}
+table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
+  background: var(--bg-surface-alt);
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask    { color: var(--text-secondary); }
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid    { color: var(--text-secondary); }
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread { color: var(--accent); font-weight: 800; }
+
+/* Vertical separator between week groups */
+.opt-matrix-pro tbody td.opt-subcol-ask,
+.opt-matrix-pro thead th.opt-subcol-ask {
+  border-left: 1px solid var(--border-light);
+}
+
+.opt-matrix-pro tbody td.opt-subcol {
+  padding: 8px 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.opt-leg-num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+.opt-matrix-pro tr.atm-row .opt-leg-num { font-size: 13.5px; font-weight: 700; }
+
+/* Strike inline (single line: 23900 / 76000) */
+.opt-strike-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.opt-strike-inline .opt-strike-n { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.opt-strike-inline .opt-strike-s { font-size: 13.5px; font-weight: 700; color: var(--text-secondary); }
+.opt-strike-slash { color: var(--border); font-weight: 400; font-size: 13px; }
+.opt-matrix-pro tr.atm-row .opt-strike-inline .opt-strike-n { color: var(--accent); }
+
+/* ITM pair (Nifty_ITM / Sensex_ITM in one cell) */
+.opt-itm-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.opt-itm-pair .opt-itm-num { padding: 2px 6px; font-size: 11.5px; }
+.opt-itm-slash { color: var(--border); font-weight: 400; font-size: 12px; }
+.opt-matrix-pro tr.atm-row .opt-itm-pair .opt-itm-num { font-size: 12.5px; padding: 3px 8px; }
+
+/* Tighten media queries for new layout */
+@media (max-width: 900px) {
+  table.opt-matrix-pro { min-width: 880px; }
+  .opt-matrix-pro tbody td.opt-subcol { padding: 7px 6px; }
+  .opt-leg-num { font-size: 11.5px; }
+  .opt-strike-inline .opt-strike-n,
+  .opt-strike-inline .opt-strike-s { font-size: 12px; }
+  .opt-itm-pair .opt-itm-num { font-size: 10.5px; padding: 2px 5px; }
+}
+@media (max-width: 600px) {
+  table.opt-matrix-pro { min-width: 820px; }
+  .opt-matrix-pro tbody td.opt-subcol { padding: 6px 4px; }
+  .opt-leg-num { font-size: 11px; }
+  .opt-strike-inline .opt-strike-n,
+  .opt-strike-inline .opt-strike-s { font-size: 11.5px; }
+  .opt-itm-pair .opt-itm-num { font-size: 10px; padding: 1px 4px; }
+}
+
 .opt-spot-bar {
   display: flex;
   flex-wrap: wrap;
