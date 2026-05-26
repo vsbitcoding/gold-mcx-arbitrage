@@ -170,23 +170,35 @@ def _run_real_feed_thread() -> None:
 
             # Resolve + add extra calculator instruments (GOLDBEES + Full Gold).
             # Side-channel feed; lives in the same quote_store keyed by security_id.
-            from app.services import extra_instruments
+            from app.services import extra_instruments, options_service
             extra_instruments.refresh()
             extra_tuples, extra_meta = extra_instruments.get_extra_subscriptions()
             for sid, m in extra_meta.items():
                 subs[sid] = m
 
+            # Resolve + add Nifty/Sensex weekly PE options (spot indices + 3 weeks × 21 strikes × 2 indices).
+            try:
+                options_service.refresh()
+            except Exception as e:
+                log.warning("options_service.refresh() failed: %s", e)
+            options_tuples, options_meta = options_service.get_extra_subscriptions()
+            for sid, m in options_meta.items():
+                subs[sid] = m
+
             _set_state(instruments=subs)
 
-            # Build instrument tuples: (exchange, security_id, request_code)
+            # Build instrument tuples: (exchange, security_id, request_code).
+            # Default MCX for pair-registry contracts; extras + options bring their own exchange.
+            non_mcx_meta = {**extra_meta, **options_meta}
             instruments = [
                 (marketfeed.MarketFeed.MCX, str(sid), marketfeed.MarketFeed.Full)
-                for sid in subs.keys() if sid not in extra_meta
+                for sid in subs.keys() if sid not in non_mcx_meta
             ]
-            instruments.extend(extra_tuples)  # add NSE / MCX-Full extras with their own exchange const
+            instruments.extend(extra_tuples)
+            instruments.extend(options_tuples)
             log.info(
-                "Subscribing to %d unique contracts for %d pairs (+%d calculator extras)",
-                len(instruments), n, len(extra_tuples),
+                "Subscribing to %d unique contracts for %d pairs (+%d calculator +%d options/indices)",
+                len(instruments), n, len(extra_tuples), len(options_tuples),
             )
 
             ctx = DhanContext(settings.DHAN_CLIENT_ID, token.access_token)
