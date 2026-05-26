@@ -80,12 +80,6 @@ export default function OptionsSpread() {
     <div className="opt-page">
       <div className="opt-head">
         <h2>Nifty / Sensex — PE Options Spread</h2>
-        <p className="opt-sub">
-          Live ATM + 9 OTM puts per weekly expiry.{" "}
-          <strong>Spread</strong> = (Nifty PE <em>bid</em> × 325) − (Sensex PE <em>ask</em> × 100).{" "}
-          Sensex strike = <code>round(Sensex_spot − (Nifty_spot − Strike) × 3.2, 100)</code>.
-          ITM = <code>Strike − Spot</code> per leg.
-        </p>
       </div>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
