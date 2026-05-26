@@ -126,7 +126,7 @@ export default function OptionsSpread() {
                   ITM <span className="opt-th-sub">N / S (strike − spot)</span>
                 </th>
                 {weeks.map((w) => (
-                  <th key={w.week_index} colSpan={3} className="opt-week-group">
+                  <th key={w.week_index} colSpan={3} className={`opt-week-group opt-wk-${w.week_index + 1}`}>
                     <div className="opt-week-num">Week {w.week_index + 1}</div>
                     <div className="opt-week-dates">
                       <span>N {fmtExpiry(w.nifty_expiry)}</span>
