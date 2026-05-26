@@ -1527,9 +1527,52 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   color: var(--text-muted);
   text-align: center;
 }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask    { color: var(--text-secondary); }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid    { color: var(--text-secondary); }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread { color: var(--accent); font-weight: 800; }
+/* N bid column = SELL side (we receive at bid) → blue family */
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
+  color: #1d4ed8;
+  background: rgba(59,130,246,0.10);
+  font-weight: 800;
+}
+/* S ask column = BUY side (we pay at ask) → amber/orange family */
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
+  color: #b45309;
+  background: rgba(245,158,11,0.12);
+  font-weight: 800;
+}
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
+  color: var(--accent);
+  font-weight: 800;
+  background: rgba(99,102,241,0.10);
+}
+
+/* Body cells inherit a soft tint matching their header */
+.opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(59,130,246,0.04); }
+.opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(245,158,11,0.04); }
+.opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: #1d4ed8; }
+.opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #b45309; }
+.opt-matrix-pro tbody tr:hover td.opt-subcol-ask { background: rgba(59,130,246,0.10); }
+.opt-matrix-pro tbody tr:hover td.opt-subcol-bid { background: rgba(245,158,11,0.10); }
+
+/* ATM row keeps its purple banner, override the tints so the row still pops */
+.opt-matrix-pro tr.atm-row td.opt-subcol-ask,
+.opt-matrix-pro tr.atm-row td.opt-subcol-bid,
+.opt-matrix-pro tr.atm-row td.opt-subcol-spread {
+  background: linear-gradient(90deg, rgba(99,102,241,0.18) 0%, rgba(99,102,241,0.08) 100%) !important;
+}
+
+/* Dark theme — keep the same hues but increase the alpha so they read */
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
+  color: #93c5fd;
+  background: rgba(59,130,246,0.20);
+}
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
+  color: #fcd34d;
+  background: rgba(245,158,11,0.22);
+}
+body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(59,130,246,0.10); }
+body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(245,158,11,0.10); }
+body.dark .opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: #93c5fd; }
+body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #fcd34d; }
 
 /* Vertical separators framing each week group (left + right) */
 .opt-matrix-pro tbody td.opt-subcol-ask,
