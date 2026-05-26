@@ -6,6 +6,7 @@ import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Activity from "./components/Activity.jsx";
 import Calculator from "./components/Calculator.jsx";
 import Settings from "./components/Settings.jsx";
+import OptionsSpread from "./components/OptionsSpread.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
@@ -178,6 +179,7 @@ function Dashboard() {
         )}
         {page === "activity" && <Activity />}
         {page === "calculator" && <Calculator />}
+        {page === "options" && <OptionsSpread />}
         {page === "settings" && <Settings />}
       </div>
     </div>

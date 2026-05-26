@@ -1322,6 +1322,75 @@ body.dark .open-pos-pill.orphan { color: #fcd34d; background: rgba(251,191,36,0.
 }
 body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
 
+/* ===== Options Spread page (Nifty / Sensex) ===== */
+.opt-page { padding: 0; }
+.opt-head h2 { margin: 0 0 4px; font-size: 22px; }
+.opt-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 13px; max-width: 920px; }
+.opt-sub code { background: var(--bg-surface-alt); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }
+
+.opt-spot-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.opt-spot-chip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+.opt-spot-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.4px; }
+.opt-spot-value { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.opt-spot-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.opt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 14px;
+}
+.opt-week-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.opt-week-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.opt-week-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); }
+.opt-week-expiries { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); }
+.opt-week-expiries strong { color: var(--text-primary); }
+
+.opt-table { font-size: 12px; }
+.opt-table thead th { font-size: 10px; padding: 8px 8px; }
+.opt-table tbody td { padding: 7px 8px; }
+.opt-table tr.atm-row td { background: rgba(99,102,241,0.10); font-weight: 700; }
+.atm-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 480px) {
+  .opt-grid { gap: 10px; }
+  .opt-week-card { padding: 10px 12px; }
+  .opt-week-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .opt-week-expiries { flex-direction: column; gap: 2px; }
+  .opt-table thead th, .opt-table tbody td { padding: 6px 5px; font-size: 11px; }
+}
+
 /* ===== Calculator page ===== */
 .calc-page { padding: 0; }
 .calc-page-head h2 { margin: 0 0 4px; font-size: 22px; }

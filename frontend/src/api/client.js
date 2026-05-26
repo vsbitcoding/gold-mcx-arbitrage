@@ -101,6 +101,8 @@ export const api = {
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
   // Calculator
   calcQuotes: () => request("/api/calculator/quotes"),
+  // Options spread (Nifty / Sensex PE)
+  optionsSpread: () => request("/api/options/spread"),
   // Account config
   getAccount: () => request("/api/config/account"),
   updateAccount: (body) => request("/api/config/account", {

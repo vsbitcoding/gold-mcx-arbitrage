@@ -85,6 +85,12 @@ export default function Header({
             Calculator
           </button>
           <button
+            className={`nav-tab ${page === "options" ? "active" : ""}`}
+            onClick={() => onNavigate("options")}
+          >
+            Nifty / Sensex
+          </button>
+          <button
             className={`nav-tab ${page === "settings" ? "active" : ""}`}
             onClick={() => onNavigate("settings")}
           >
