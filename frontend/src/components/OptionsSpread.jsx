@@ -54,8 +54,8 @@ export default function OptionsSpread() {
         const r = wk.rows[idx];
         return r ? {
           spread: r.spread,
-          niftyAsk: r.nifty_ask ?? r.nifty_pe,
-          sensexBid: r.sensex_bid ?? r.sensex_pe,
+          niftyBid: r.nifty_bid ?? r.nifty_pe,
+          sensexAsk: r.sensex_ask ?? r.sensex_pe,
         } : null;
       });
       const niftyItm = (baseRow.nifty_strike != null && niftySpot != null)
@@ -82,7 +82,7 @@ export default function OptionsSpread() {
         <h2>Nifty / Sensex — PE Options Spread</h2>
         <p className="opt-sub">
           Live ATM + 9 OTM puts per weekly expiry.{" "}
-          <strong>Spread</strong> = (Nifty PE <em>ask</em> × 325) − (Sensex PE <em>bid</em> × 100).{" "}
+          <strong>Spread</strong> = (Nifty PE <em>bid</em> × 325) − (Sensex PE <em>ask</em> × 100).{" "}
           Sensex strike = <code>round(Sensex_spot − (Nifty_spot − Strike) × 3.2, 100)</code>.
           ITM = <code>Strike − Spot</code> per leg.
         </p>
@@ -145,8 +145,8 @@ export default function OptionsSpread() {
               <tr className="opt-matrix-head2">
                 {weeks.map((w) => (
                   <React.Fragment key={w.week_index}>
-                    <th className="opt-subcol opt-subcol-ask">N ask</th>
-                    <th className="opt-subcol opt-subcol-bid">S bid</th>
+                    <th className="opt-subcol opt-subcol-ask">N bid</th>
+                    <th className="opt-subcol opt-subcol-bid">S ask</th>
                     <th className="opt-subcol opt-subcol-spread">Spread</th>
                   </React.Fragment>
                 ))}
@@ -178,12 +178,12 @@ export default function OptionsSpread() {
                     <React.Fragment key={i}>
                       <td className="opt-subcol opt-subcol-ask">
                         <span className="opt-leg-num">
-                          {c && c.niftyAsk != null ? fmtNum(c.niftyAsk, 2) : "—"}
+                          {c && c.niftyBid != null ? fmtNum(c.niftyBid, 2) : "—"}
                         </span>
                       </td>
                       <td className="opt-subcol opt-subcol-bid">
                         <span className="opt-leg-num">
-                          {c && c.sensexBid != null ? fmtNum(c.sensexBid, 2) : "—"}
+                          {c && c.sensexAsk != null ? fmtNum(c.sensexAsk, 2) : "—"}
                         </span>
                       </td>
                       <td className={`opt-subcol opt-subcol-spread opt-cell ${c ? spreadCls(c.spread) : "neutral"}`}>

@@ -5,8 +5,8 @@ the two indices and compute a "spread per strike" row that the dashboard
 displays as a single number.
 
 Per-row formula (PE = put premium, executable convention per client):
-    nifty_value  = nifty_pe_ASK * 325       # price to BUY Nifty PE
-    sensex_value = sensex_pe_BID * 100      # price to SELL Sensex PE
+    nifty_value  = nifty_pe_BID  * 325      # SELL Nifty PE  → receive at BID
+    sensex_value = sensex_pe_ASK * 100      # BUY  Sensex PE → pay at ASK
     spread       = nifty_value - sensex_value
     (falls back to LTP for any leg where bid/ask isn't available)
 
@@ -352,10 +352,10 @@ def get_spread_table() -> dict:
             s_info = _state["options"].get(("SENSEX", wk_i, sensex_strike, "PE")) if sensex_strike else None
             n_bid, n_ask, n_ltp = _live_pe(n_info["security_id"] if n_info else None)
             s_bid, s_ask, s_ltp = _live_pe(s_info["security_id"] if s_info else None)
-            # Executable spread per client: buy Nifty PE at ASK, sell Sensex PE at BID.
+            # Executable spread per client: SELL Nifty PE at BID, BUY Sensex PE at ASK.
             # Fall back to LTP if bid/ask not present.
-            n_price = n_ask if n_ask else n_ltp
-            s_price = s_bid if s_bid else s_ltp
+            n_price = n_bid if n_bid else n_ltp
+            s_price = s_ask if s_ask else s_ltp
             n_value = (n_price * NIFTY_MULT) if n_price else None
             s_value = (s_price * SENSEX_MULT) if s_price else None
             spread = (n_value - s_value) if (n_value is not None and s_value is not None) else None
@@ -364,8 +364,8 @@ def get_spread_table() -> dict:
                 "sensex_strike": sensex_strike,
                 "nifty_pe": n_ltp,         # LTP (informational)
                 "sensex_pe": s_ltp,
-                "nifty_ask": n_ask,        # used for spread (buy side)
-                "sensex_bid": s_bid,       # used for spread (sell side)
+                "nifty_bid": n_bid,        # used for spread (sell side)
+                "sensex_ask": s_ask,       # used for spread (buy side)
                 "nifty_value": round(n_value, 2) if n_value is not None else None,
                 "sensex_value": round(s_value, 2) if s_value is not None else None,
                 "spread": round(spread, 2) if spread is not None else None,

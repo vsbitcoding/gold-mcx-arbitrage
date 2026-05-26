@@ -228,7 +228,7 @@ def public_options_spread(_key: str = Depends(require_api_key)):
     return {
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
-        "formula": "(nifty_pe_ask × 325) − (sensex_pe_bid × 100)   [falls back to LTP if no depth]",
+        "formula": "(nifty_pe_bid × 325) − (sensex_pe_ask × 100)   [falls back to LTP if no depth]",
         "strike_pairing": "sensex_strike = round_to_100(sensex_spot − (nifty_spot − nifty_strike) × 3.2)",
         "status": options_service.status(),
         **options_service.get_spread_table(),
