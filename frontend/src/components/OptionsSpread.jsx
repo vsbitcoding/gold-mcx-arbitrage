@@ -67,7 +67,8 @@ export default function OptionsSpread() {
         <p className="opt-sub">
           Live ATM + 9 OTM puts per weekly expiry.{" "}
           <strong>Spread</strong> = (Nifty PE × 325) − (Sensex PE × 100).{" "}
-          Sensex strike = <code>round(Nifty × 3.2, 100)</code>. ATM auto-follows Nifty spot.
+          Sensex strike = <code>round(Sensex_spot − (Nifty_spot − Strike) × 3.2, 100)</code>.
+          ATM follows live spot.
         </p>
       </div>
 

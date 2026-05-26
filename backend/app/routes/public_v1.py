@@ -219,7 +219,9 @@ def public_options_spread(_key: str = Depends(require_api_key)):
         sensex_value = sensex_pe_ltp × 100
         spread       = nifty_value − sensex_value
 
-    Sensex strike pairing: `Sensex = Nifty_strike × 3.2 → round 100`.
+    Sensex strike pairing (distance-preserving, per client):
+        ITM_value     = nifty_spot − nifty_strike
+        sensex_strike = round_to_100(sensex_spot − ITM_value × 3.2)
     ATM follows live Nifty spot; first row of each week is the ATM, next 9 are
     OTM puts (strikes below ATM).
     """
@@ -227,7 +229,7 @@ def public_options_spread(_key: str = Depends(require_api_key)):
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
         "formula": "(nifty_pe × 325) − (sensex_pe × 100)",
-        "strike_pairing": "sensex_strike = round_to_100(nifty_strike × 3.2)",
+        "strike_pairing": "sensex_strike = round_to_100(sensex_spot − (nifty_spot − nifty_strike) × 3.2)",
         "status": options_service.status(),
         **options_service.get_spread_table(),
     }

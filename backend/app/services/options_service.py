@@ -10,8 +10,13 @@ Per-row formula (PE = put premium):
     spread       = nifty_value - sensex_value
 
 The Nifty ATM strike is computed live from the spot index. The Sensex
-strike paired with each Nifty strike is `nifty_strike × 3.2` rounded to
-the nearest 100 (per client formula).
+strike paired with each Nifty strike preserves moneyness distance:
+
+    ITM_value    = nifty_spot − nifty_strike            (positive for OTM PE)
+    sensex_strike = round_to_100(sensex_spot − ITM × 3.2)
+
+So the Sensex paired strike sits `ITM × 3.2` points away from Sensex spot,
+in the same OTM direction — keeping both legs at equivalent moneyness.
 
 Each index shows ATM + 9 OTM-puts (strikes below ATM) per expiry → 10 rows
 per expiry × 3 expiries = 30 rows total.
@@ -41,7 +46,7 @@ SENSEX_SPOT_ID = "51"         # BSE IDX, "SENSEX"
 NIFTY_STEP = 50
 SENSEX_STEP = 100
 
-# Sensex strike = Nifty strike × this, rounded to SENSEX_STEP
+# Distance-scaling factor: 1 Nifty point ≈ 3.2 Sensex points (per client)
 NIFTY_TO_SENSEX_RATIO = 3.2
 
 # Premium multipliers per client (fixed)
@@ -58,7 +63,10 @@ DISPLAY_BELOW = 9   # 9 strikes below ATM (OTM puts) + ATM itself = 10
 # Subscription buffer (subscribe wider than display so dynamic ATM works
 # without re-subscribing every time spot crosses a strike).
 SUB_ABOVE = 5    # 5 strikes above ATM (cushion for upward spot move)
-SUB_BELOW = 15   # 15 strikes below ATM (the displayed 9 + 6 cushion)
+# Nifty side: 9 displayed OTM + 6 cushion = 15. Sensex side: 9 paired strikes
+# can drop ~1450 below Sensex ATM (9 × 50 × 3.2 ÷ 100), bump to 20 for safety.
+SUB_BELOW_NIFTY = 15
+SUB_BELOW_SENSEX = 20
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -73,6 +81,9 @@ _state: dict = {
     # Anchor ATM strikes captured at refresh() (used to pick the subscription window)
     "nifty_anchor": None,
     "sensex_anchor": None,
+    # Spot prices captured at refresh() — fallback when live spot isn't available
+    "nifty_spot_at_refresh": None,
+    "sensex_spot_at_refresh": None,
 }
 
 
@@ -81,9 +92,22 @@ def nifty_atm(spot: float) -> int:
     return int(round(spot / NIFTY_STEP) * NIFTY_STEP)
 
 
-def sensex_from_nifty(nifty_strike: int) -> int:
-    """Equivalent Sensex strike per client formula (× 3.2, round to 100)."""
-    return int(round(nifty_strike * NIFTY_TO_SENSEX_RATIO / SENSEX_STEP) * SENSEX_STEP)
+def sensex_atm(spot: float) -> int:
+    """Round Sensex spot to nearest 100."""
+    return int(round(spot / SENSEX_STEP) * SENSEX_STEP)
+
+
+def pair_sensex_strike(nifty_strike: int, nifty_spot: float, sensex_spot: float) -> int:
+    """Sensex strike paired with `nifty_strike` (distance-preserving, per client).
+
+        ITM_value     = nifty_spot − nifty_strike      (positive ⇒ OTM PE)
+        sensex_strike = round_to_100(sensex_spot − ITM_value × 3.2)
+
+    So the Sensex strike sits the same moneyness distance away from its spot
+    as the Nifty strike, scaled by the 3.2 ratio.
+    """
+    itm = nifty_spot - nifty_strike
+    return int(round((sensex_spot - itm * NIFTY_TO_SENSEX_RATIO) / SENSEX_STEP) * SENSEX_STEP)
 
 
 def _live_spot(security_id: str) -> Optional[float]:
@@ -197,17 +221,17 @@ def refresh(min_days_ahead: int = 0) -> None:
         sensex_spot = strikes[len(strikes) // 2] if strikes else 77000.0
 
     nifty_anchor = nifty_atm(nifty_spot)
-    sensex_anchor = sensex_from_nifty(nifty_anchor)
+    sensex_anchor = sensex_atm(sensex_spot)
     log.info(
-        "Options anchor — Nifty spot=%.2f → ATM=%d ; Sensex paired ATM=%d",
-        nifty_spot or 0, nifty_anchor, sensex_anchor,
+        "Options anchor — Nifty spot=%.2f → ATM=%d ; Sensex spot=%.2f → ATM=%d",
+        nifty_spot or 0, nifty_anchor, sensex_spot or 0, sensex_anchor,
     )
 
-    # Build subscription windows: ATM-15 .. ATM+5 (21 strikes per index per week)
+    # Build subscription windows around each index's own ATM.
     options: dict = {}
     for wk_i, expiry in enumerate(nifty_weeks):
         strikes_map = nifty_map[expiry]
-        for k in range(-SUB_BELOW, SUB_ABOVE + 1):
+        for k in range(-SUB_BELOW_NIFTY, SUB_ABOVE + 1):
             strike = nifty_anchor + k * NIFTY_STEP
             if strike in strikes_map:
                 options[("NIFTY", wk_i, strike, "PE")] = {
@@ -216,7 +240,7 @@ def refresh(min_days_ahead: int = 0) -> None:
                 }
     for wk_i, expiry in enumerate(sensex_weeks):
         strikes_map = sensex_map[expiry]
-        for k in range(-SUB_BELOW, SUB_ABOVE + 1):
+        for k in range(-SUB_BELOW_SENSEX, SUB_ABOVE + 1):
             strike = sensex_anchor + k * SENSEX_STEP
             if strike in strikes_map:
                 options[("SENSEX", wk_i, strike, "PE")] = {
@@ -229,6 +253,8 @@ def refresh(min_days_ahead: int = 0) -> None:
     _state["sensex_weeks"] = sensex_weeks
     _state["nifty_anchor"] = nifty_anchor
     _state["sensex_anchor"] = sensex_anchor
+    _state["nifty_spot_at_refresh"] = nifty_spot
+    _state["sensex_spot_at_refresh"] = sensex_spot
     log.info(
         "Options subscribed: %d PE contracts across %d weeks × 2 indices",
         len(options), len(nifty_weeks),
@@ -291,9 +317,12 @@ def get_spread_table() -> dict:
     nifty_spot = _live_spot(NIFTY_SPOT_ID)
     sensex_spot = _live_spot(SENSEX_SPOT_ID)
 
-    # Anchor falls back to startup anchor if no live spot yet.
-    nifty_atm_live = nifty_atm(nifty_spot) if nifty_spot else _state.get("nifty_anchor")
-    sensex_atm_live = sensex_from_nifty(nifty_atm_live) if nifty_atm_live else _state.get("sensex_anchor")
+    # Fall back to spot snapshot captured at refresh() if live tick missing.
+    nifty_spot_for_calc = nifty_spot or _state.get("nifty_spot_at_refresh")
+    sensex_spot_for_calc = sensex_spot or _state.get("sensex_spot_at_refresh")
+
+    nifty_atm_live = nifty_atm(nifty_spot_for_calc) if nifty_spot_for_calc else _state.get("nifty_anchor")
+    sensex_atm_live = sensex_atm(sensex_spot_for_calc) if sensex_spot_for_calc else _state.get("sensex_anchor")
 
     weeks_out = []
     nifty_weeks = _state.get("nifty_weeks") or []
@@ -305,7 +334,11 @@ def get_spread_table() -> dict:
         rows = []
         for offset in range(0, DISPLAY_STRIKES):  # 0..9, with 0=ATM, 1..9 below
             nifty_strike = nifty_atm_live - offset * NIFTY_STEP if nifty_atm_live else None
-            sensex_strike = sensex_from_nifty(nifty_strike) if nifty_strike else None
+            sensex_strike = (
+                pair_sensex_strike(nifty_strike, nifty_spot_for_calc, sensex_spot_for_calc)
+                if (nifty_strike and nifty_spot_for_calc and sensex_spot_for_calc)
+                else None
+            )
             n_info = _state["options"].get(("NIFTY", wk_i, nifty_strike, "PE")) if nifty_strike else None
             s_info = _state["options"].get(("SENSEX", wk_i, sensex_strike, "PE")) if sensex_strike else None
             n_pe = _live_spot(n_info["security_id"]) if n_info else None
