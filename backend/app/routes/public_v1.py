@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments
+from app.services import extra_instruments, options_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -207,6 +207,29 @@ def public_calculator(_key: str = Depends(require_api_key)):
             mcx_rec=extra_instruments.get_full_silver(),
             defaults={"multiplier": 31000, "manual": 0, "divisor": 30.9},
         ),
+    }
+
+
+@router.get("/options-spread")
+def public_options_spread(_key: str = Depends(require_api_key)):
+    """Live Nifty / Sensex PE-options spread table (3 weeks × 10 strikes).
+
+    Math (per row):
+        nifty_value  = nifty_pe_ltp  × 325
+        sensex_value = sensex_pe_ltp × 100
+        spread       = nifty_value − sensex_value
+
+    Sensex strike pairing: `Sensex = Nifty_strike × 3.2 → round 100`.
+    ATM follows live Nifty spot; first row of each week is the ATM, next 9 are
+    OTM puts (strikes below ATM).
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "formula": "(nifty_pe × 325) − (sensex_pe × 100)",
+        "strike_pairing": "sensex_strike = round_to_100(nifty_strike × 3.2)",
+        "status": options_service.status(),
+        **options_service.get_spread_table(),
     }
 
 
