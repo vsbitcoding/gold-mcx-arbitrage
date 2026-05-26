@@ -1605,7 +1605,8 @@ body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #fcd34d
 
 /* Strike inline (single line: 23900 / 76000) */
 .opt-strike-inline {
-  display: inline-flex;
+  display: flex;
+  justify-content: center;
   align-items: baseline;
   gap: 4px;
   font-variant-numeric: tabular-nums;
@@ -1628,11 +1629,16 @@ body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #fcd34d
 .opt-matrix-pro tr.atm-row .opt-strike-inline .opt-strike-s { color: var(--accent); }
 .opt-matrix-pro tr.atm-row .opt-strike-slash { color: var(--accent); opacity: 0.5; }
 
-/* ATM badge — block-level on its own line below the strike */
+/* ATM badge — own line below the strike, centered, so the strike text
+   stays perfectly aligned with the non-ATM rows above/below */
 .opt-matrix-pro .atm-badge {
   display: inline-block;
-  margin-top: 6px;
+  margin: 5px auto 0;
   vertical-align: middle;
+}
+.opt-matrix-pro tr.atm-row td.opt-strike-col {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 /* ITM pair (Nifty_ITM / Sensex_ITM in one cell) */
