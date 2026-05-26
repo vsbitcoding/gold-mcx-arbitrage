@@ -13,11 +13,17 @@ import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
+const VALID_PAGES = ["dashboard", "activity", "calculator", "options", "settings"];
+
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
 }
 function getStoredDensity() {
   return localStorage.getItem("arbi_density") || "comfortable";
+}
+function getStoredPage() {
+  const p = localStorage.getItem("arbi_page");
+  return VALID_PAGES.includes(p) ? p : "dashboard";
 }
 
 function Dashboard() {
@@ -30,7 +36,7 @@ function Dashboard() {
   const [theme, setTheme] = useState(getStoredTheme());
   const [density, setDensity] = useState(getStoredDensity());
   const [user] = useState("Vivek_Bitcoding");
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(getStoredPage());
   const fallbackRef = useRef(null);
 
   useEffect(() => {
@@ -42,6 +48,10 @@ function Dashboard() {
     document.body.classList.toggle("density-compact", density === "compact");
     localStorage.setItem("arbi_density", density);
   }, [density]);
+
+  useEffect(() => {
+    localStorage.setItem("arbi_page", page);
+  }, [page]);
 
   // Global keyboard shortcuts: '/' focus search, ← → flip tabs (dashboard only)
   useEffect(() => {
