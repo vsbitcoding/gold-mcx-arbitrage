@@ -1334,12 +1334,25 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
   border: 1px solid var(--border-light);
   border-radius: 12px;
   overflow: auto;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 table.opt-matrix {
   width: 100%;
+  min-width: 720px;          /* prevents columns from over-stretching on wide screens */
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: auto;
+}
+table.opt-matrix .opt-week-col { width: 1fr; }
+.opt-th-sub2 {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-top: 2px;
+  opacity: 0.85;
 }
 table.opt-matrix thead tr.opt-matrix-head1 th {
   background: var(--bg-surface-alt);
@@ -1451,6 +1464,46 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
 .opt-cell.neutral .opt-spread-num { color: var(--text-muted); background: transparent; }
 .opt-matrix tr.atm-row .opt-spread-num { font-size: 15px; padding: 4px 12px; }
 
+/* ITM column — Strike − Nifty_spot, negative ⇒ OTM put */
+.opt-matrix td.opt-itm-col,
+.opt-matrix th.opt-itm-col {
+  text-align: center;
+  min-width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.opt-itm-num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.opt-itm-otm .opt-itm-num     { color: var(--red);        background: rgba(220,38,38,0.08); }
+.opt-itm-itm .opt-itm-num     { color: var(--green);      background: rgba(22,163,74,0.08); }
+.opt-itm-neutral .opt-itm-num { color: var(--text-muted); background: var(--bg-surface-alt); }
+.opt-matrix tr.atm-row .opt-itm-num { font-size: 14px; padding: 4px 12px; }
+
+/* Inline PE prices under each spread number (no hover needed) */
+.opt-pe-inline {
+  margin-top: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+}
+.opt-pe-lbl { font-weight: 800; color: var(--text-secondary); opacity: 0.7; }
+.opt-pe-sep { color: var(--border); }
+.opt-matrix tr.atm-row .opt-pe-inline { color: var(--text-secondary); font-weight: 700; }
+
 .opt-spot-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1498,6 +1551,10 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
   .opt-spread-num { font-size: 13px; padding: 2px 8px; }
   .opt-week-num { font-size: 10px; }
   .opt-week-dates { font-size: 10px; }
+  .opt-itm-num { font-size: 12px; padding: 2px 8px; }
+  .opt-pe-inline { font-size: 9.5px; gap: 4px; }
+  .opt-matrix td.opt-itm-col,
+  .opt-matrix th.opt-itm-col { min-width: 78px; }
 }
 
 /* ── Phone ── horizontal scroll the matrix, compact chips */
@@ -1518,6 +1575,10 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
   .atm-badge { font-size: 8px; padding: 1px 6px; }
   .opt-matrix td.opt-strike-col,
   .opt-matrix th.opt-strike-col { min-width: 90px; }
+  .opt-itm-num { font-size: 11px; padding: 2px 6px; }
+  .opt-matrix td.opt-itm-col,
+  .opt-matrix th.opt-itm-col { min-width: 68px; }
+  .opt-pe-inline { font-size: 9px; gap: 3px; margin-top: 3px; }
 }
 
 /* ===== Calculator page ===== */

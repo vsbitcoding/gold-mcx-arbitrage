@@ -4,10 +4,11 @@ For each of the next THREE weekly expiries, subscribe to PUT options of
 the two indices and compute a "spread per strike" row that the dashboard
 displays as a single number.
 
-Per-row formula (PE = put premium):
-    nifty_value  = nifty_pe_ltp  * 325
-    sensex_value = sensex_pe_ltp * 100
+Per-row formula (PE = put premium, executable convention per client):
+    nifty_value  = nifty_pe_ASK * 325       # price to BUY Nifty PE
+    sensex_value = sensex_pe_BID * 100      # price to SELL Sensex PE
     spread       = nifty_value - sensex_value
+    (falls back to LTP for any leg where bid/ask isn't available)
 
 The Nifty ATM strike is computed live from the spot index. The Sensex
 strike paired with each Nifty strike preserves moneyness distance:
@@ -113,6 +114,14 @@ def pair_sensex_strike(nifty_strike: int, nifty_spot: float, sensex_spot: float)
 def _live_spot(security_id: str) -> Optional[float]:
     q = quote_store.get(security_id)
     return q.ltp or None
+
+
+def _live_pe(security_id: Optional[str]):
+    """Return (bid, ask, ltp) tuple for an option contract; (None, None, None) if unsubscribed."""
+    if not security_id:
+        return None, None, None
+    q = quote_store.get(security_id)
+    return (q.bid or None, q.ask or None, q.ltp or None)
 
 
 def _resolve_index_pe_options(
@@ -341,16 +350,22 @@ def get_spread_table() -> dict:
             )
             n_info = _state["options"].get(("NIFTY", wk_i, nifty_strike, "PE")) if nifty_strike else None
             s_info = _state["options"].get(("SENSEX", wk_i, sensex_strike, "PE")) if sensex_strike else None
-            n_pe = _live_spot(n_info["security_id"]) if n_info else None
-            s_pe = _live_spot(s_info["security_id"]) if s_info else None
-            n_value = (n_pe * NIFTY_MULT) if n_pe else None
-            s_value = (s_pe * SENSEX_MULT) if s_pe else None
+            n_bid, n_ask, n_ltp = _live_pe(n_info["security_id"] if n_info else None)
+            s_bid, s_ask, s_ltp = _live_pe(s_info["security_id"] if s_info else None)
+            # Executable spread per client: buy Nifty PE at ASK, sell Sensex PE at BID.
+            # Fall back to LTP if bid/ask not present.
+            n_price = n_ask if n_ask else n_ltp
+            s_price = s_bid if s_bid else s_ltp
+            n_value = (n_price * NIFTY_MULT) if n_price else None
+            s_value = (s_price * SENSEX_MULT) if s_price else None
             spread = (n_value - s_value) if (n_value is not None and s_value is not None) else None
             rows.append({
                 "nifty_strike": nifty_strike,
                 "sensex_strike": sensex_strike,
-                "nifty_pe": n_pe,
-                "sensex_pe": s_pe,
+                "nifty_pe": n_ltp,         # LTP (informational)
+                "sensex_pe": s_ltp,
+                "nifty_ask": n_ask,        # used for spread (buy side)
+                "sensex_bid": s_bid,       # used for spread (sell side)
                 "nifty_value": round(n_value, 2) if n_value is not None else None,
                 "sensex_value": round(s_value, 2) if s_value is not None else None,
                 "spread": round(spread, 2) if spread is not None else None,
