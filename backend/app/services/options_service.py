@@ -128,10 +128,37 @@ def _pick_weeklies(
     expiry_map: dict[datetime, dict[int, dict]],
     n: int,
 ) -> list[datetime]:
-    """Pick the next `n` expiries that are <= 21 days away (filters monthly)."""
+    """Pick the next `n` weekly expiries (<= 28 days away — filters monthly+)."""
     today = datetime.now()
     near = sorted(e for e in expiry_map.keys() if e >= today and (e - today).days <= 28)
     return near[:n]
+
+
+def _pair_sensex_with_nifty(
+    nifty_weeks: list[datetime],
+    sensex_map: dict[datetime, dict[int, dict]],
+) -> list[datetime | None]:
+    """For each Nifty expiry, find the Sensex expiry in the SAME WEEK.
+
+    Nifty weeklies expire on Tuesday; Sensex weeklies on Thursday — so for each
+    Nifty Tuesday we want the Sensex Thursday 2 days after (within 7 days, AFTER
+    the Nifty date is preferred; fall back to nearest within ±7 days).
+    """
+    all_sensex = sorted(sensex_map.keys())
+    out: list[datetime | None] = []
+    for ne in nifty_weeks:
+        match = next(
+            (se for se in all_sensex if 0 <= (se - ne).days <= 7),
+            None,
+        )
+        if not match:
+            match = min(
+                (se for se in all_sensex if abs((se - ne).days) <= 7),
+                key=lambda se: abs((se - ne).days),
+                default=None,
+            )
+        out.append(match)
+    return out
 
 
 def refresh(min_days_ahead: int = 0) -> None:
@@ -144,14 +171,20 @@ def refresh(min_days_ahead: int = 0) -> None:
     sensex_map = _resolve_index_pe_options(csv_text, "SENSEX", "BSE")
 
     nifty_weeks = _pick_weeklies(nifty_map, WEEK_COUNT)
-    sensex_weeks = _pick_weeklies(sensex_map, WEEK_COUNT)
+    sensex_weeks = _pair_sensex_with_nifty(nifty_weeks, sensex_map)
 
-    if not nifty_weeks or not sensex_weeks:
-        log.warning(
-            "Options refresh: no weekly expiries — nifty=%d sensex=%d",
-            len(nifty_weeks), len(sensex_weeks),
-        )
+    if not nifty_weeks:
+        log.warning("Options refresh: no Nifty weekly expiries found.")
         return
+    # Drop any (nifty, sensex) pairs where Sensex match couldn't be found.
+    paired = [(n, s) for n, s in zip(nifty_weeks, sensex_weeks) if s is not None]
+    if not paired:
+        log.warning("Options refresh: no Nifty↔Sensex same-week pairs found.")
+        return
+    nifty_weeks = [n for n, _ in paired]
+    sensex_weeks = [s for _, s in paired]
+    for i, (n, s) in enumerate(paired):
+        log.info("Options week %d: Nifty %s ↔ Sensex %s", i + 1, n.date(), s.date())
 
     # Anchor ATM from current spot (or fallback to median of available strikes).
     nifty_spot = _live_spot(NIFTY_SPOT_ID)
