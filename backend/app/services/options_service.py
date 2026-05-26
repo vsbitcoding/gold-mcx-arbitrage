@@ -212,10 +212,10 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     instruments: list[tuple] = []
     meta: dict[str, dict] = {}
 
-    # Spot indices
-    instruments.append((marketfeed.MarketFeed.IDX, NIFTY_SPOT_ID, marketfeed.MarketFeed.Full))
+    # Spot indices (Ticker request code — indices have no depth/OI, just LTP)
+    instruments.append((marketfeed.MarketFeed.IDX, NIFTY_SPOT_ID, marketfeed.MarketFeed.Ticker))
     meta[NIFTY_SPOT_ID] = {"short": "nifty_spot", "trading_symbol": "NIFTY", "kind": "index"}
-    instruments.append((marketfeed.MarketFeed.IDX, SENSEX_SPOT_ID, marketfeed.MarketFeed.Full))
+    instruments.append((marketfeed.MarketFeed.IDX, SENSEX_SPOT_ID, marketfeed.MarketFeed.Ticker))
     meta[SENSEX_SPOT_ID] = {"short": "sensex_spot", "trading_symbol": "SENSEX", "kind": "index"}
 
     # Option contracts
