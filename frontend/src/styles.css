@@ -1426,15 +1426,23 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
 .opt-strike-n { font-weight: 700; font-size: 14px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .opt-strike-s { font-size: 11px; color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 
-/* ATM row banner — full-width tinted background + left accent */
-.opt-matrix tr.atm-row td {
-  background: linear-gradient(90deg, rgba(99,102,241,0.18) 0%, rgba(99,102,241,0.08) 100%) !important;
-  font-weight: 700;
+/* ATM row — purple banner only on Strike + ITM columns; bid/ask/spread keep
+   their own column colors so each column reads as one continuous block. */
+.opt-matrix tr.atm-row td { font-weight: 700; }
+.opt-matrix tr.atm-row td.opt-strike-col,
+.opt-matrix tr.atm-row td.opt-itm-col {
+  background: linear-gradient(90deg, rgba(99,102,241,0.18) 0%, rgba(99,102,241,0.08) 100%);
 }
 .opt-matrix tr.atm-row td.opt-strike-col {
   box-shadow: inset 4px 0 0 var(--accent);
 }
 .opt-matrix tr.atm-row .opt-strike-n { color: var(--accent); }
+/* Thin accent border framing the ATM row so it's still clearly marked
+   even without overriding the bid/ask column colors */
+.opt-matrix-pro tr.atm-row td {
+  border-top: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
 
 .atm-badge {
   display: inline-block;
@@ -1545,34 +1553,35 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   background: rgba(99,102,241,0.10);
 }
 
-/* Body cells inherit a soft tint matching their header */
-.opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(59,130,246,0.04); }
-.opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(245,158,11,0.04); }
+/* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
+.opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(59,130,246,0.10); }
+.opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(245,158,11,0.12); }
 .opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: #1d4ed8; }
 .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #b45309; }
-.opt-matrix-pro tbody tr:hover td.opt-subcol-ask { background: rgba(59,130,246,0.10); }
-.opt-matrix-pro tbody tr:hover td.opt-subcol-bid { background: rgba(245,158,11,0.10); }
+.opt-matrix-pro tbody tr:hover td.opt-subcol-ask { background: rgba(59,130,246,0.16); }
+.opt-matrix-pro tbody tr:hover td.opt-subcol-bid { background: rgba(245,158,11,0.18); }
 
-/* ATM row keeps its purple banner, override the tints so the row still pops */
-.opt-matrix-pro tr.atm-row td.opt-subcol-ask,
-.opt-matrix-pro tr.atm-row td.opt-subcol-bid,
-.opt-matrix-pro tr.atm-row td.opt-subcol-spread {
-  background: linear-gradient(90deg, rgba(99,102,241,0.18) 0%, rgba(99,102,241,0.08) 100%) !important;
-}
+/* (ATM row no longer overrides bid/ask/spread cell colors — the 2px
+   accent top/bottom border above marks the row instead, so each column
+   reads as one continuous color block like the DECREASE/INCREASE columns
+   on the main dashboard.) */
 
-/* Dark theme — keep the same hues but increase the alpha so they read */
+/* Dark theme — strong column block fills like DECREASE/INCREASE columns
+   on the main dashboard: deep saturated background + bright readable text. */
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
   color: #93c5fd;
-  background: rgba(59,130,246,0.20);
+  background: rgba(30,64,175,0.50);     /* deep navy header */
 }
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
-  color: #fdba74;                    /* soft warm orange — was gaudy yellow on dark */
-  background: rgba(251,146,60,0.14);
+  color: #fdba74;
+  background: rgba(120,53,15,0.55);     /* deep amber/brown header */
 }
-body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(59,130,246,0.08); }
-body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(251,146,60,0.06); }
-body.dark .opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: #93c5fd; }
-body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #fdba74; }
+body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(30,64,175,0.28); }
+body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(120,53,15,0.30); }
+body.dark .opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: #bfdbfe; font-weight: 700; }
+body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: #fed7aa; font-weight: 700; }
+body.dark .opt-matrix-pro tbody tr:hover td.opt-subcol-ask { background: rgba(30,64,175,0.38); }
+body.dark .opt-matrix-pro tbody tr:hover td.opt-subcol-bid { background: rgba(120,53,15,0.40); }
 
 /* ───── Per-week distinguishing color (Week N label + colored top stripe) ───── */
 .opt-week-group.opt-wk-1 { box-shadow: inset 0 3px 0 #10b981; }   /* emerald */
