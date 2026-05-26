@@ -1325,7 +1325,7 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
 /* ===== Options Spread page (Nifty / Sensex) ===== */
 .opt-page { padding: 0; }
 .opt-head h2 { margin: 0 0 4px; font-size: 22px; }
-.opt-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 13px; max-width: 920px; }
+.opt-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 13px; line-height: 1.5; max-width: 920px; }
 .opt-sub code { background: var(--bg-surface-alt); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }
 
 .opt-spot-bar {
@@ -1343,14 +1343,32 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
   display: flex;
   flex-direction: column;
   min-width: 140px;
+  flex: 1 1 auto;
 }
-.opt-spot-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.4px; }
+.opt-spot-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.opt-spot-label .live-dot {
+  width: 6px;
+  height: 6px;
+  display: inline-block;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
 .opt-spot-value { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .opt-spot-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 .opt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 14px;
 }
 .opt-week-card {
@@ -1361,34 +1379,93 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
-.opt-week-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.opt-week-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); }
-.opt-week-expiries { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); }
+.opt-week-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+.opt-week-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+.opt-week-expiries { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
 .opt-week-expiries strong { color: var(--text-primary); }
 
 .opt-table { font-size: 12px; }
-.opt-table thead th { font-size: 10px; padding: 8px 8px; }
-.opt-table tbody td { padding: 7px 8px; }
-.opt-table tr.atm-row td { background: rgba(99,102,241,0.10); font-weight: 700; }
+.opt-table thead th {
+  font-size: 10px;
+  padding: 8px 8px;
+  white-space: nowrap;
+  background: var(--bg-surface-alt);
+}
+.opt-table tbody td { padding: 8px 6px; }
+
+/* Strike column: stack Nifty / Sensex vertically (cleaner on phone) */
+.opt-strike { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+.opt-strike-n { font-weight: 700; color: var(--text-primary); }
+.opt-strike-s { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+
+/* Spread is the hero — bigger + bolder */
+.opt-spread {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.opt-table tr.atm-row td {
+  background: rgba(99,102,241,0.10);
+  font-weight: 700;
+}
+.opt-table tr.atm-row .opt-spread { font-size: 15px; }
+.opt-table tbody tr:hover td { background: var(--bg-hover); }
 .atm-badge {
   display: inline-block;
-  margin-left: 6px;
+  margin-top: 2px;
   padding: 1px 6px;
   border-radius: 100px;
   background: var(--accent);
   color: #fff;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
-@media (max-width: 480px) {
-  .opt-grid { gap: 10px; }
-  .opt-week-card { padding: 10px 12px; }
-  .opt-week-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+/* ── Tablet ── */
+@media (max-width: 768px) {
+  .opt-head h2 { font-size: 18px; }
+  .opt-sub { font-size: 12px; }
+  .opt-week-card { padding: 10px 12px; gap: 8px; }
+  .opt-spot-value { font-size: 16px; }
+}
+
+/* ── Phone ── single-column, compact, only essentials */
+@media (max-width: 600px) {
+  .opt-spot-chip { padding: 7px 10px; min-width: 110px; }
+  .opt-spot-label { font-size: 9px; }
+  .opt-spot-value { font-size: 15px; }
+  .opt-spot-sub { font-size: 10px; }
+
+  /* Stack week expiries onto their own line */
+  .opt-week-head { flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 6px; }
   .opt-week-expiries { flex-direction: column; gap: 2px; }
-  .opt-table thead th, .opt-table tbody td { padding: 6px 5px; font-size: 11px; }
+
+  /* Hide intermediate PE columns — keep only Strike + Spread (client's original spec) */
+  .opt-table .col-pe { display: none; }
+  .opt-table thead th, .opt-table tbody td { padding: 7px 4px; font-size: 11px; }
+  .opt-strike-n { font-size: 12px; }
+  .opt-strike-s { font-size: 9px; }
+  .opt-spread { font-size: 13px; }
+  .opt-table tr.atm-row .opt-spread { font-size: 14px; }
 }
 
 /* ===== Calculator page ===== */

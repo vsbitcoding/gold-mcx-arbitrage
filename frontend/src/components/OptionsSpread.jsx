@@ -23,22 +23,25 @@ function WeekCard({ week }) {
       <table className="info-table opt-table">
         <thead>
           <tr>
-            <th>Strike (Nifty / Sensex)</th>
-            <th>Nifty PE</th>
-            <th>Sensex PE</th>
+            <th>Strike</th>
+            <th className="col-pe">Nifty PE</th>
+            <th className="col-pe">Sensex PE</th>
             <th>Spread</th>
           </tr>
         </thead>
         <tbody>
           {week.rows.map((r, i) => (
             <tr key={i} className={i === 0 ? "atm-row" : ""}>
-              <td className="num">
-                {r.nifty_strike ?? "—"} / {r.sensex_strike ?? "—"}
-                {i === 0 && <span className="atm-badge">ATM</span>}
+              <td>
+                <div className="opt-strike">
+                  <span className="opt-strike-n">{r.nifty_strike ?? "—"}</span>
+                  <span className="opt-strike-s">/ {r.sensex_strike ?? "—"}</span>
+                  {i === 0 && <span className="atm-badge">ATM</span>}
+                </div>
               </td>
-              <td className="num">{r.nifty_pe == null ? "—" : fmtNum(r.nifty_pe, 2)}</td>
-              <td className="num">{r.sensex_pe == null ? "—" : fmtNum(r.sensex_pe, 2)}</td>
-              <td className={`num ${r.spread == null ? "" : r.spread >= 0 ? "pnl-positive" : "pnl-negative"}`}>
+              <td className="num col-pe">{r.nifty_pe == null ? "—" : fmtNum(r.nifty_pe, 2)}</td>
+              <td className="num col-pe">{r.sensex_pe == null ? "—" : fmtNum(r.sensex_pe, 2)}</td>
+              <td className={`opt-spread ${r.spread == null ? "" : r.spread >= 0 ? "pnl-positive" : "pnl-negative"}`}>
                 {r.spread == null ? "—" : (r.spread >= 0 ? "+" : "") + fmtNum(r.spread, 2)}
               </td>
             </tr>
@@ -80,12 +83,18 @@ export default function OptionsSpread() {
 
       <div className="opt-spot-bar">
         <div className="opt-spot-chip">
-          <span className="opt-spot-label">NIFTY spot</span>
+          <span className="opt-spot-label">
+            {data?.nifty_spot != null && <span className="live-dot" />}
+            NIFTY spot
+          </span>
           <span className="opt-spot-value">{data?.nifty_spot == null ? "—" : fmtNum(data.nifty_spot, 2)}</span>
           <span className="opt-spot-sub">ATM {data?.nifty_atm ?? "—"}</span>
         </div>
         <div className="opt-spot-chip">
-          <span className="opt-spot-label">SENSEX spot</span>
+          <span className="opt-spot-label">
+            {data?.sensex_spot != null && <span className="live-dot" />}
+            SENSEX spot
+          </span>
           <span className="opt-spot-value">{data?.sensex_spot == null ? "—" : fmtNum(data.sensex_spot, 2)}</span>
           <span className="opt-spot-sub">ATM {data?.sensex_atm ?? "—"}</span>
         </div>
