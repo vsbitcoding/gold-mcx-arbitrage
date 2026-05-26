@@ -1328,6 +1328,129 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
 .opt-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 13px; line-height: 1.5; max-width: 920px; }
 .opt-sub code { background: var(--bg-surface-alt); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }
 
+/* ===== Combined matrix table (strike × weeks) ===== */
+.opt-matrix-wrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: auto;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+table.opt-matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+table.opt-matrix thead tr.opt-matrix-head1 th {
+  background: var(--bg-surface-alt);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 700;
+}
+table.opt-matrix thead tr.opt-matrix-head2 th {
+  background: var(--bg-surface-alt);
+  padding: 6px 12px;
+  border-bottom: 2px solid var(--border);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-align: center;
+}
+.opt-week-num {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+.opt-week-dates {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  font-weight: 600;
+}
+.opt-week-sep { color: var(--text-muted); }
+.opt-th-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.opt-matrix tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px dashed var(--border-light);
+  vertical-align: middle;
+  text-align: center;
+}
+.opt-matrix tbody tr:last-child td { border-bottom: none; }
+.opt-matrix tbody tr:hover td { background: var(--bg-hover); }
+
+/* Strike column (left): stacked Nifty / Sensex labels + ATM badge */
+.opt-matrix td.opt-strike-col,
+.opt-matrix th.opt-strike-col {
+  text-align: center;
+  position: sticky;
+  left: 0;
+  background: var(--bg-surface);
+  z-index: 2;
+  min-width: 120px;
+}
+.opt-matrix thead th.opt-strike-col {
+  background: var(--bg-surface-alt);
+}
+.opt-strike { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.opt-strike-n { font-weight: 700; font-size: 14px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.opt-strike-s { font-size: 11px; color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ATM row banner — full-width tinted background + left accent */
+.opt-matrix tr.atm-row td {
+  background: linear-gradient(90deg, rgba(99,102,241,0.18) 0%, rgba(99,102,241,0.08) 100%) !important;
+  font-weight: 700;
+}
+.opt-matrix tr.atm-row td.opt-strike-col {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.opt-matrix tr.atm-row .opt-strike-n { color: var(--accent); }
+
+.atm-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+}
+
+/* Spread cells */
+.opt-spread-num {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.opt-cell.pos .opt-spread-num { color: var(--green); background: rgba(22,163,74,0.10); }
+.opt-cell.neg .opt-spread-num { color: var(--red); background: rgba(220,38,38,0.10); }
+.opt-cell.neutral .opt-spread-num { color: var(--text-muted); background: transparent; }
+.opt-matrix tr.atm-row .opt-spread-num { font-size: 15px; padding: 4px 12px; }
+
 .opt-spot-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1366,106 +1489,35 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
 .opt-spot-value { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .opt-spot-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-.opt-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-  gap: 14px;
-}
-.opt-week-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-.opt-week-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-light);
-}
-.opt-week-title {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--accent);
-}
-.opt-week-expiries { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
-.opt-week-expiries strong { color: var(--text-primary); }
-
-.opt-table { font-size: 12px; }
-.opt-table thead th {
-  font-size: 10px;
-  padding: 8px 8px;
-  white-space: nowrap;
-  background: var(--bg-surface-alt);
-}
-.opt-table tbody td { padding: 8px 6px; }
-
-/* Strike column: stack Nifty / Sensex vertically (cleaner on phone) */
-.opt-strike { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
-.opt-strike-n { font-weight: 700; color: var(--text-primary); }
-.opt-strike-s { font-size: 10px; color: var(--text-muted); font-weight: 500; }
-
-/* Spread is the hero — bigger + bolder */
-.opt-spread {
-  font-family: 'Roboto Mono', ui-monospace, monospace;
-  font-weight: 700;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.opt-table tr.atm-row td {
-  background: rgba(99,102,241,0.10);
-  font-weight: 700;
-}
-.opt-table tr.atm-row .opt-spread { font-size: 15px; }
-.opt-table tbody tr:hover td { background: var(--bg-hover); }
-.atm-badge {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 1px 6px;
-  border-radius: 100px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-/* ── Tablet ── */
-@media (max-width: 768px) {
+/* ── Tablet ── slight shrink, table still fits */
+@media (max-width: 900px) {
   .opt-head h2 { font-size: 18px; }
   .opt-sub { font-size: 12px; }
-  .opt-week-card { padding: 10px 12px; gap: 8px; }
   .opt-spot-value { font-size: 16px; }
+  .opt-matrix tbody td { padding: 8px 8px; }
+  .opt-spread-num { font-size: 13px; padding: 2px 8px; }
+  .opt-week-num { font-size: 10px; }
+  .opt-week-dates { font-size: 10px; }
 }
 
-/* ── Phone ── single-column, compact, only essentials */
+/* ── Phone ── horizontal scroll the matrix, compact chips */
 @media (max-width: 600px) {
-  .opt-spot-chip { padding: 7px 10px; min-width: 110px; }
+  .opt-spot-chip { padding: 7px 10px; min-width: 100px; }
   .opt-spot-label { font-size: 9px; }
-  .opt-spot-value { font-size: 15px; }
+  .opt-spot-value { font-size: 14px; }
   .opt-spot-sub { font-size: 10px; }
 
-  /* Stack week expiries onto their own line */
-  .opt-week-head { flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 6px; }
-  .opt-week-expiries { flex-direction: column; gap: 2px; }
-
-  /* Hide intermediate PE columns — keep only Strike + Spread (client's original spec) */
-  .opt-table .col-pe { display: none; }
-  .opt-table thead th, .opt-table tbody td { padding: 7px 4px; font-size: 11px; }
+  .opt-matrix-wrap { border-radius: 8px; }
+  .opt-matrix thead tr.opt-matrix-head1 th,
+  .opt-matrix thead tr.opt-matrix-head2 th { padding: 6px 8px; }
+  .opt-matrix tbody td { padding: 8px 6px; }
   .opt-strike-n { font-size: 12px; }
-  .opt-strike-s { font-size: 9px; }
-  .opt-spread { font-size: 13px; }
-  .opt-table tr.atm-row .opt-spread { font-size: 14px; }
+  .opt-strike-s { font-size: 10px; }
+  .opt-spread-num { font-size: 12px; padding: 2px 6px; }
+  .opt-matrix tr.atm-row .opt-spread-num { font-size: 13px; }
+  .atm-badge { font-size: 8px; padding: 1px 6px; }
+  .opt-matrix td.opt-strike-col,
+  .opt-matrix th.opt-strike-col { min-width: 90px; }
 }
 
 /* ===== Calculator page ===== */

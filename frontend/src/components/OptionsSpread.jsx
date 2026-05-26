@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -6,50 +6,19 @@ function fmtExpiry(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", {
     timeZone: "Asia/Kolkata",
-    day: "2-digit", month: "short", year: "2-digit",
+    day: "2-digit", month: "short",
   });
 }
 
-function WeekCard({ week }) {
-  return (
-    <div className="opt-week-card">
-      <div className="opt-week-head">
-        <div className="opt-week-title">Week {week.week_index + 1}</div>
-        <div className="opt-week-expiries">
-          <span>Nifty: <strong>{fmtExpiry(week.nifty_expiry)}</strong></span>
-          <span>Sensex: <strong>{fmtExpiry(week.sensex_expiry)}</strong></span>
-        </div>
-      </div>
-      <table className="info-table opt-table">
-        <thead>
-          <tr>
-            <th>Strike</th>
-            <th className="col-pe">Nifty PE</th>
-            <th className="col-pe">Sensex PE</th>
-            <th>Spread</th>
-          </tr>
-        </thead>
-        <tbody>
-          {week.rows.map((r, i) => (
-            <tr key={i} className={i === 0 ? "atm-row" : ""}>
-              <td>
-                <div className="opt-strike">
-                  <span className="opt-strike-n">{r.nifty_strike ?? "—"}</span>
-                  <span className="opt-strike-s">/ {r.sensex_strike ?? "—"}</span>
-                  {i === 0 && <span className="atm-badge">ATM</span>}
-                </div>
-              </td>
-              <td className="num col-pe">{r.nifty_pe == null ? "—" : fmtNum(r.nifty_pe, 2)}</td>
-              <td className="num col-pe">{r.sensex_pe == null ? "—" : fmtNum(r.sensex_pe, 2)}</td>
-              <td className={`opt-spread ${r.spread == null ? "" : r.spread >= 0 ? "pnl-positive" : "pnl-negative"}`}>
-                {r.spread == null ? "—" : (r.spread >= 0 ? "+" : "") + fmtNum(r.spread, 2)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+function fmtSpread(v) {
+  if (v == null) return "—";
+  const s = v >= 0 ? "+" : "−";
+  return s + fmtNum(Math.abs(v), 0);
+}
+
+function spreadCls(v) {
+  if (v == null) return "neutral";
+  return v >= 0 ? "pos" : "neg";
 }
 
 export default function OptionsSpread() {
@@ -69,13 +38,36 @@ export default function OptionsSpread() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Build the combined matrix: rows = strikes (descending from ATM), columns = weeks.
+  const matrix = useMemo(() => {
+    if (!data?.weeks?.length) return null;
+    // Use week 0's strikes as the canonical strike list (ATM-derived; same in all weeks)
+    const baseRows = data.weeks[0].rows;
+    return baseRows.map((baseRow, idx) => {
+      const cells = data.weeks.map((wk) => {
+        const r = wk.rows[idx];
+        return r ? { spread: r.spread, niftyPE: r.nifty_pe, sensexPE: r.sensex_pe } : null;
+      });
+      return {
+        index: idx,
+        niftyStrike: baseRow.nifty_strike,
+        sensexStrike: baseRow.sensex_strike,
+        isAtm: idx === 0,
+        cells,
+      };
+    });
+  }, [data]);
+
+  const weeks = data?.weeks || [];
+
   return (
     <div className="opt-page">
       <div className="opt-head">
         <h2>Nifty / Sensex — PE Options Spread</h2>
         <p className="opt-sub">
-          ATM + 9 OTM puts per expiry. <strong>Spread</strong> = (Nifty PE × 325) − (Sensex PE × 100).
-          Strike pairing: <code>Sensex = Nifty × 3.2 → round 100</code>. ATM follows live spot.
+          Live ATM + 9 OTM puts per weekly expiry.{" "}
+          <strong>Spread</strong> = (Nifty PE × 325) − (Sensex PE × 100).{" "}
+          Sensex strike = <code>round(Nifty × 3.2, 100)</code>. ATM auto-follows Nifty spot.
         </p>
       </div>
 
@@ -84,37 +76,87 @@ export default function OptionsSpread() {
       <div className="opt-spot-bar">
         <div className="opt-spot-chip">
           <span className="opt-spot-label">
-            {data?.nifty_spot != null && <span className="live-dot" />}
-            NIFTY spot
+            {data?.nifty_spot != null && <span className="live-dot" />}NIFTY spot
           </span>
-          <span className="opt-spot-value">{data?.nifty_spot == null ? "—" : fmtNum(data.nifty_spot, 2)}</span>
+          <span className="opt-spot-value">
+            {data?.nifty_spot == null ? "—" : fmtNum(data.nifty_spot, 2)}
+          </span>
           <span className="opt-spot-sub">ATM {data?.nifty_atm ?? "—"}</span>
         </div>
         <div className="opt-spot-chip">
           <span className="opt-spot-label">
-            {data?.sensex_spot != null && <span className="live-dot" />}
-            SENSEX spot
+            {data?.sensex_spot != null && <span className="live-dot" />}SENSEX spot
           </span>
-          <span className="opt-spot-value">{data?.sensex_spot == null ? "—" : fmtNum(data.sensex_spot, 2)}</span>
+          <span className="opt-spot-value">
+            {data?.sensex_spot == null ? "—" : fmtNum(data.sensex_spot, 2)}
+          </span>
           <span className="opt-spot-sub">ATM {data?.sensex_atm ?? "—"}</span>
         </div>
         {data?.status?.subscribed_options != null && (
           <div className="opt-spot-chip" title="Total option contracts under live subscription">
-            <span className="opt-spot-label">Subscribed</span>
+            <span className="opt-spot-label">SUBSCRIBED</span>
             <span className="opt-spot-value">{data.status.subscribed_options}</span>
             <span className="opt-spot-sub">PE contracts</span>
           </div>
         )}
       </div>
 
-      <div className="opt-grid">
-        {(data?.weeks || []).map((w) => (
-          <WeekCard key={w.week_index} week={w} />
-        ))}
-        {(data?.weeks || []).length === 0 && (
-          <div className="empty-state">Loading options data…</div>
-        )}
-      </div>
+      {!matrix ? (
+        <div className="empty-state">Loading options data…</div>
+      ) : (
+        <div className="opt-matrix-wrap">
+          <table className="opt-matrix">
+            <thead>
+              <tr className="opt-matrix-head1">
+                <th rowSpan={2} className="opt-strike-col">Strike <span className="opt-th-sub">(Nifty / Sensex)</span></th>
+                {weeks.map((w) => (
+                  <th key={w.week_index} className="opt-week-col">
+                    <div className="opt-week-num">Week {w.week_index + 1}</div>
+                    <div className="opt-week-dates">
+                      <span>N {fmtExpiry(w.nifty_expiry)}</span>
+                      <span className="opt-week-sep">·</span>
+                      <span>S {fmtExpiry(w.sensex_expiry)}</span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+              <tr className="opt-matrix-head2">
+                {weeks.map((w) => (
+                  <th key={w.week_index} className="opt-week-col">Spread</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.map((row) => (
+                <tr key={row.index} className={row.isAtm ? "atm-row" : ""}>
+                  <td className="opt-strike-col">
+                    <div className="opt-strike">
+                      <span className="opt-strike-n">{row.niftyStrike ?? "—"}</span>
+                      <span className="opt-strike-s">/ {row.sensexStrike ?? "—"}</span>
+                    </div>
+                    {row.isAtm && <span className="atm-badge">ATM</span>}
+                  </td>
+                  {row.cells.map((c, i) => (
+                    <td
+                      key={i}
+                      className={`opt-cell ${c ? spreadCls(c.spread) : "neutral"}`}
+                      title={
+                        c && c.niftyPE != null && c.sensexPE != null
+                          ? `Nifty PE: ${fmtNum(c.niftyPE, 2)}\nSensex PE: ${fmtNum(c.sensexPE, 2)}`
+                          : "No live quote"
+                      }
+                    >
+                      <span className="opt-spread-num">
+                        {c ? fmtSpread(c.spread) : "—"}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
