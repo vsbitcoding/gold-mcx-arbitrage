@@ -1615,72 +1615,39 @@ body.dark .opt-matrix-pro tbody td.opt-subcol-bid  .opt-leg-num { color: var(--g
 body.dark .opt-matrix-pro tbody tr:hover td.opt-subcol-ask { background: rgba(252,129,129,0.28); }
 body.dark .opt-matrix-pro tbody tr:hover td.opt-subcol-bid { background: rgba(72,187,120,0.28); }
 
-/* ───── Per-week distinguishing color (Week N label + colored top stripe) ───── */
-.opt-week-group.opt-wk-1 { box-shadow: inset 0 3px 0 #10b981; }   /* emerald */
-.opt-week-group.opt-wk-2 { box-shadow: inset 0 3px 0 #ec4899; }   /* pink */
-.opt-week-group.opt-wk-3 { box-shadow: inset 0 3px 0 #a855f7; }   /* violet */
-.opt-week-group.opt-wk-1 .opt-week-num { color: #10b981; }
-.opt-week-group.opt-wk-2 .opt-week-num { color: #ec4899; }
-.opt-week-group.opt-wk-3 .opt-week-num { color: #a855f7; }
+/* ───── Per-week color — fill the Week N header box with the week's color ───── */
+.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-1 {
+  background: #d1fae5;                  /* emerald-100 */
+}
+.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-2 {
+  background: #fce7f3;                  /* pink-100 */
+}
+.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-3 {
+  background: #ede9fe;                  /* violet-100 */
+}
+.opt-week-group.opt-wk-1 .opt-week-num { color: #047857; }   /* emerald-700 */
+.opt-week-group.opt-wk-2 .opt-week-num { color: #be185d; }   /* pink-700 */
+.opt-week-group.opt-wk-3 .opt-week-num { color: #6d28d9; }   /* violet-700 */
+.opt-week-group.opt-wk-1 .opt-week-dates,
+.opt-week-group.opt-wk-2 .opt-week-dates,
+.opt-week-group.opt-wk-3 .opt-week-dates { color: var(--text-primary); }
 
-/* Dark mode — lighter, less saturated for contrast */
-body.dark .opt-week-group.opt-wk-1 { box-shadow: inset 0 3px 0 #34d399; }
-body.dark .opt-week-group.opt-wk-2 { box-shadow: inset 0 3px 0 #f472b6; }
-body.dark .opt-week-group.opt-wk-3 { box-shadow: inset 0 3px 0 #c084fc; }
-body.dark .opt-week-group.opt-wk-1 .opt-week-num { color: #34d399; }
-body.dark .opt-week-group.opt-wk-2 .opt-week-num { color: #f472b6; }
-body.dark .opt-week-group.opt-wk-3 .opt-week-num { color: #c084fc; }
-
-/* ─── Full colored box around each week section ───
-   Top edge: already on .opt-week-group (header). Add left edge on first
-   sub-col, right edge on last sub-col, bottom edge on last body row. */
-.opt-matrix-pro td.opt-wk-1.opt-subcol-ask,
-.opt-matrix-pro th.opt-wk-1.opt-subcol-ask { box-shadow: inset 3px 0 0 #10b981; }
-.opt-matrix-pro td.opt-wk-2.opt-subcol-ask,
-.opt-matrix-pro th.opt-wk-2.opt-subcol-ask { box-shadow: inset 3px 0 0 #ec4899; }
-.opt-matrix-pro td.opt-wk-3.opt-subcol-ask,
-.opt-matrix-pro th.opt-wk-3.opt-subcol-ask { box-shadow: inset 3px 0 0 #a855f7; }
-
-.opt-matrix-pro td.opt-wk-1.opt-subcol-spread,
-.opt-matrix-pro th.opt-wk-1.opt-subcol-spread { box-shadow: inset -3px 0 0 #10b981; }
-.opt-matrix-pro td.opt-wk-2.opt-subcol-spread,
-.opt-matrix-pro th.opt-wk-2.opt-subcol-spread { box-shadow: inset -3px 0 0 #ec4899; }
-.opt-matrix-pro td.opt-wk-3.opt-subcol-spread,
-.opt-matrix-pro th.opt-wk-3.opt-subcol-spread { box-shadow: inset -3px 0 0 #a855f7; }
-
-/* Bottom edge on last row of each week */
-.opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-ask    { box-shadow: inset 3px 0 0 #10b981, inset 0 -3px 0 #10b981; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #10b981; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-spread { box-shadow: inset -3px 0 0 #10b981, inset 0 -3px 0 #10b981; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-ask    { box-shadow: inset 3px 0 0 #ec4899, inset 0 -3px 0 #ec4899; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #ec4899; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-spread { box-shadow: inset -3px 0 0 #ec4899, inset 0 -3px 0 #ec4899; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-ask    { box-shadow: inset 3px 0 0 #a855f7, inset 0 -3px 0 #a855f7; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #a855f7; }
-.opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-spread { box-shadow: inset -3px 0 0 #a855f7, inset 0 -3px 0 #a855f7; }
-
-/* Dark mode versions */
-body.dark .opt-matrix-pro td.opt-wk-1.opt-subcol-ask,
-body.dark .opt-matrix-pro th.opt-wk-1.opt-subcol-ask { box-shadow: inset 3px 0 0 #34d399; }
-body.dark .opt-matrix-pro td.opt-wk-2.opt-subcol-ask,
-body.dark .opt-matrix-pro th.opt-wk-2.opt-subcol-ask { box-shadow: inset 3px 0 0 #f472b6; }
-body.dark .opt-matrix-pro td.opt-wk-3.opt-subcol-ask,
-body.dark .opt-matrix-pro th.opt-wk-3.opt-subcol-ask { box-shadow: inset 3px 0 0 #c084fc; }
-body.dark .opt-matrix-pro td.opt-wk-1.opt-subcol-spread,
-body.dark .opt-matrix-pro th.opt-wk-1.opt-subcol-spread { box-shadow: inset -3px 0 0 #34d399; }
-body.dark .opt-matrix-pro td.opt-wk-2.opt-subcol-spread,
-body.dark .opt-matrix-pro th.opt-wk-2.opt-subcol-spread { box-shadow: inset -3px 0 0 #f472b6; }
-body.dark .opt-matrix-pro td.opt-wk-3.opt-subcol-spread,
-body.dark .opt-matrix-pro th.opt-wk-3.opt-subcol-spread { box-shadow: inset -3px 0 0 #c084fc; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-ask    { box-shadow: inset 3px 0 0 #34d399, inset 0 -3px 0 #34d399; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #34d399; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-1.opt-subcol-spread { box-shadow: inset -3px 0 0 #34d399, inset 0 -3px 0 #34d399; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-ask    { box-shadow: inset 3px 0 0 #f472b6, inset 0 -3px 0 #f472b6; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #f472b6; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-2.opt-subcol-spread { box-shadow: inset -3px 0 0 #f472b6, inset 0 -3px 0 #f472b6; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-ask    { box-shadow: inset 3px 0 0 #c084fc, inset 0 -3px 0 #c084fc; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-bid    { box-shadow: inset 0 -3px 0 #c084fc; }
-body.dark .opt-matrix-pro tbody tr:last-child td.opt-wk-3.opt-subcol-spread { box-shadow: inset -3px 0 0 #c084fc, inset 0 -3px 0 #c084fc; }
+/* Dark mode — deeper saturated fills + bright text */
+body.dark .opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-1 {
+  background: rgba(52,211,153,0.30);
+}
+body.dark .opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-2 {
+  background: rgba(244,114,182,0.30);
+}
+body.dark .opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group.opt-wk-3 {
+  background: rgba(192,132,252,0.30);
+}
+body.dark .opt-week-group.opt-wk-1 .opt-week-num { color: #6ee7b7; }
+body.dark .opt-week-group.opt-wk-2 .opt-week-num { color: #f9a8d4; }
+body.dark .opt-week-group.opt-wk-3 .opt-week-num { color: #d8b4fe; }
+body.dark .opt-week-group.opt-wk-1 .opt-week-dates,
+body.dark .opt-week-group.opt-wk-2 .opt-week-dates,
+body.dark .opt-week-group.opt-wk-3 .opt-week-dates { color: #f1f5f9; }
 
 /* UNIFIED section separators — single 1px slate border-right on every
    "section-end" cell. No border-left anywhere, so boundaries never double up.
