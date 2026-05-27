@@ -1557,19 +1557,14 @@ table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
 /* (Old sub-col header rule removed — it had higher specificity than the
    intended black/bold rule below and was forcing color back to muted grey.) */
 /* Sub-column headers — match the top headers (STRIKE / ITM / VARIATION):
-   14px, weight 800, black on plain bg. Identical treatment. */
+   14px, weight 800. Color inherits from the base head2 rule (line 1375),
+   which is already #000 in light mode and #fff in dark mode (line 1379). */
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #000;
   font-weight: 800;
   font-size: 14px;
   background: var(--bg-surface-alt);
-}
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #fff;
 }
 
 /* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
