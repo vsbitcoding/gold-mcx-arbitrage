@@ -1554,17 +1554,8 @@ table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
   text-align: center;
   vertical-align: middle;
 }
-table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
-  background: var(--bg-surface-alt);
-  padding: 6px 8px;
-  border-bottom: 2px solid var(--border);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  text-align: center;
-}
+/* (Old sub-col header rule removed — it had higher specificity than the
+   intended black/bold rule below and was forcing color back to muted grey.) */
 /* Sub-column headers — match the top headers (STRIKE / ITM / VARIATION):
    14px, weight 800, black on plain bg. Identical treatment. */
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
