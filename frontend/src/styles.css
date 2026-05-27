@@ -1367,15 +1367,16 @@ table.opt-matrix thead tr.opt-matrix-head1 th {
 }
 table.opt-matrix thead tr.opt-matrix-head2 th {
   background: var(--bg-surface-alt);
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 2px solid var(--border);
-  font-size: 14px;
+  font-size: 15px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-primary);
+  letter-spacing: 0.7px;
+  color: #000;
   font-weight: 900;
   text-align: center;
 }
+body.dark table.opt-matrix thead tr.opt-matrix-head2 th { color: #fff; }
 .opt-week-num {
   font-size: 14px;
   font-weight: 900;
@@ -1564,17 +1565,16 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   color: var(--text-muted);
   text-align: center;
 }
-/* Sub-column headers — pure black + heaviest weight per client.
-   Background tints stay so columns are still identifiable. */
+/* Sub-column headers — pure black, heaviest weight, no background tint
+   (tinted bg was washing out the text). Body cells still keep their tints. */
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
   color: #000;
   font-weight: 900;
+  font-size: 15px;
+  background: var(--bg-surface-alt);
 }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask    { background: rgba(217,48,37,0.10); }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid    { background: rgba(30,142,62,0.10); }
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread { background: rgba(99,102,241,0.10); }
 
 /* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
 .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(217,48,37,0.10); }
@@ -1589,18 +1589,13 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
    reads as one continuous color block like the DECREASE/INCREASE columns
    on the main dashboard.) */
 
-/* Dark theme — strong column block fills with bright white sub-headers
-   so they read just as bold/strong as light-mode black ones. */
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
-  color: #fff;
-  background: rgba(252,129,129,0.30);
-}
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
-  color: #fff;
-  background: rgba(72,187,120,0.30);
-}
+/* Dark theme — sub-column headers in bright white, no background tint
+   (tinted bg was washing out the text). Body cells keep their tints. */
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
   color: #fff;
+  background: var(--bg-surface-alt);
 }
 body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(252,129,129,0.18); }
 body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(72,187,120,0.18); }
