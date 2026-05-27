@@ -62,11 +62,11 @@ export default function OptionsSpread() {
         ? baseRow.nifty_strike - niftySpot : null;
       const sensexItm = (baseRow.sensex_strike != null && sensexSpot != null)
         ? baseRow.sensex_strike - sensexSpot : null;
-      // Variation = (Nifty ITM × 3.2) − Sensex ITM
+      // Variation = Sensex ITM − (Nifty ITM × 3.2)
       // Quantifies the rounding gap between perfect 3.2× scaling and the
       // actual Sensex strike (which is round-to-100).
       const variation = (niftyItm != null && sensexItm != null)
-        ? (niftyItm * 3.2) - sensexItm : null;
+        ? sensexItm - (niftyItm * 3.2) : null;
       return {
         index: idx,
         niftyStrike: baseRow.nifty_strike,
@@ -132,7 +132,7 @@ export default function OptionsSpread() {
                   ITM <span className="opt-th-sub">N / S (strike − spot)</span>
                 </th>
                 <th rowSpan={2} className="opt-var-col">
-                  Variation <span className="opt-th-sub">N×3.2 − S</span>
+                  Variation <span className="opt-th-sub">S − N×3.2</span>
                 </th>
                 {weeks.map((w) => (
                   <th key={w.week_index} colSpan={3} className={`opt-week-group opt-wk-${w.week_index + 1}`}>
