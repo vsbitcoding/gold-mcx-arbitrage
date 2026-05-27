@@ -62,6 +62,11 @@ export default function OptionsSpread() {
         ? baseRow.nifty_strike - niftySpot : null;
       const sensexItm = (baseRow.sensex_strike != null && sensexSpot != null)
         ? baseRow.sensex_strike - sensexSpot : null;
+      // Variation = (Nifty ITM × 3.2) − Sensex ITM
+      // Quantifies the rounding gap between perfect 3.2× scaling and the
+      // actual Sensex strike (which is round-to-100).
+      const variation = (niftyItm != null && sensexItm != null)
+        ? (niftyItm * 3.2) - sensexItm : null;
       return {
         index: idx,
         niftyStrike: baseRow.nifty_strike,
@@ -69,6 +74,7 @@ export default function OptionsSpread() {
         isAtm: idx === 0,
         niftyItm,
         sensexItm,
+        variation,
         cells,
       };
     });
@@ -125,6 +131,9 @@ export default function OptionsSpread() {
                 <th rowSpan={2} className="opt-itm-col">
                   ITM <span className="opt-th-sub">N / S (strike − spot)</span>
                 </th>
+                <th rowSpan={2} className="opt-var-col">
+                  Variation <span className="opt-th-sub">N×3.2 − S</span>
+                </th>
                 {weeks.map((w) => (
                   <th key={w.week_index} colSpan={3} className={`opt-week-group opt-wk-${w.week_index + 1}`}>
                     <div className="opt-week-num">Week {w.week_index + 1}</div>
@@ -167,6 +176,11 @@ export default function OptionsSpread() {
                         {fmtSigned(row.sensexItm, 2)}
                       </span>
                     </div>
+                  </td>
+                  <td className="opt-var-col">
+                    <span className={`opt-var-num opt-itm-${itmCls(row.variation)}`}>
+                      {fmtSigned(row.variation, 2)}
+                    </span>
                   </td>
                   {row.cells.map((c, i) => (
                     <React.Fragment key={i}>
