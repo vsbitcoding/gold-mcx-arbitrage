@@ -1565,15 +1565,23 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   color: var(--text-muted);
   text-align: center;
 }
-/* Sub-column headers — pure black, heaviest weight, no background tint
-   (tinted bg was washing out the text). Body cells still keep their tints. */
+/* Sub-column headers — make them visibly heavy. Use !important to defeat
+   any cascade conflict, plus a subtle 0.5px text-shadow for extra weight
+   in case the loaded Inter font's 900 variant didn't actually download. */
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #000;
-  font-weight: 900;
-  font-size: 15px;
-  background: var(--bg-surface-alt);
+  color: #000 !important;
+  font-weight: 900 !important;
+  font-size: 16px !important;
+  background: var(--bg-surface-alt) !important;
+  text-shadow: 0 0 0.4px currentColor;
+  -webkit-font-smoothing: antialiased;
+}
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
+  color: #fff !important;
 }
 
 /* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
