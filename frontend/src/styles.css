@@ -1369,11 +1369,11 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
   background: var(--bg-surface-alt);
   padding: 8px 12px;
   border-bottom: 2px solid var(--border);
-  font-size: 13px;
+  font-size: 14px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.4px;
   color: #000;
-  font-weight: 900;
+  font-weight: 800;
   text-align: center;
 }
 body.dark table.opt-matrix thead tr.opt-matrix-head2 th { color: #fff; }
@@ -1565,23 +1565,20 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   color: var(--text-muted);
   text-align: center;
 }
-/* Sub-column headers — make them visibly heavy. Use !important to defeat
-   any cascade conflict, plus a subtle 0.5px text-shadow for extra weight
-   in case the loaded Inter font's 900 variant didn't actually download. */
+/* Sub-column headers — match the top headers (STRIKE / ITM / VARIATION):
+   14px, weight 800, black on plain bg. Identical treatment. */
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #000 !important;
-  font-weight: 900 !important;
-  font-size: 14px !important;
-  background: var(--bg-surface-alt) !important;
-  text-shadow: 0 0 0.4px currentColor;
-  -webkit-font-smoothing: antialiased;
+  color: #000;
+  font-weight: 800;
+  font-size: 14px;
+  background: var(--bg-surface-alt);
 }
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #fff !important;
+  color: #fff;
 }
 
 /* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
