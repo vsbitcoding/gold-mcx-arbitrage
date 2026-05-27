@@ -1564,23 +1564,17 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
   color: var(--text-muted);
   text-align: center;
 }
-/* N bid column = SELL side (we receive at bid) → blue family */
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
-  color: var(--red);
-  background: rgba(217,48,37,0.10);
-  font-weight: 800;
-}
-/* Standard market convention: bid = green (buyers), ask = red (sellers). */
-.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
-  color: var(--green);
-  background: rgba(30,142,62,0.10);
-  font-weight: 800;
-}
+/* Sub-column headers — pure black + heaviest weight per client.
+   Background tints stay so columns are still identifiable. */
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: var(--accent);
-  font-weight: 800;
-  background: rgba(99,102,241,0.10);
+  color: #000;
+  font-weight: 900;
 }
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask    { background: rgba(217,48,37,0.10); }
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid    { background: rgba(30,142,62,0.10); }
+.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread { background: rgba(99,102,241,0.10); }
 
 /* Body cells get a saturated column-wide tint (like DECREASE/INCREASE blocks) */
 .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(217,48,37,0.10); }
@@ -1595,15 +1589,18 @@ table.opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol {
    reads as one continuous color block like the DECREASE/INCREASE columns
    on the main dashboard.) */
 
-/* Dark theme — strong column block fills like DECREASE/INCREASE columns
-   on the main dashboard: deep saturated background + bright readable text. */
+/* Dark theme — strong column block fills with bright white sub-headers
+   so they read just as bold/strong as light-mode black ones. */
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask {
-  color: var(--red);
-  background: rgba(252,129,129,0.30);     /* deep navy header */
+  color: #fff;
+  background: rgba(252,129,129,0.30);
 }
 body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid {
-  color: var(--green);
-  background: rgba(72,187,120,0.30);     /* deep amber/brown header */
+  color: #fff;
+  background: rgba(72,187,120,0.30);
+}
+body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
+  color: #fff;
 }
 body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(252,129,129,0.18); }
 body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(72,187,120,0.18); }
