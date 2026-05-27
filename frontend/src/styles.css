@@ -1440,11 +1440,8 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
   box-shadow: inset 4px 0 0 var(--accent);
 }
 .opt-matrix tr.atm-row .opt-strike-n { color: var(--accent); }
-/* Thin accent marker framing the ATM row — using box-shadow INSET instead
-   of border so the vertical column separators remain a continuous line. */
-.opt-matrix-pro tr.atm-row td {
-  box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
-}
+/* (ATM row no longer marked with horizontal blue lines — the purple banner
+   on Strike + ITM columns and the "ATM" badge under the strike are enough.) */
 
 .atm-badge {
   display: inline-block;
