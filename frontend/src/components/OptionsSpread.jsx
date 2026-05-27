@@ -146,13 +146,16 @@ export default function OptionsSpread() {
                 ))}
               </tr>
               <tr className="opt-matrix-head2">
-                {weeks.map((w) => (
-                  <React.Fragment key={w.week_index}>
-                    <th className="opt-subcol opt-subcol-ask">N bid</th>
-                    <th className="opt-subcol opt-subcol-bid">S ask</th>
-                    <th className="opt-subcol opt-subcol-spread">Spread</th>
-                  </React.Fragment>
-                ))}
+                {weeks.map((w) => {
+                  const wk = `opt-wk-${w.week_index + 1}`;
+                  return (
+                    <React.Fragment key={w.week_index}>
+                      <th className={`opt-subcol opt-subcol-ask ${wk}`}>N bid</th>
+                      <th className={`opt-subcol opt-subcol-bid ${wk}`}>S ask</th>
+                      <th className={`opt-subcol opt-subcol-spread ${wk}`}>Spread</th>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -182,25 +185,28 @@ export default function OptionsSpread() {
                       {fmtSigned(row.variation, 2)}
                     </span>
                   </td>
-                  {row.cells.map((c, i) => (
-                    <React.Fragment key={i}>
-                      <td className="opt-subcol opt-subcol-ask">
-                        <span className="opt-leg-num">
-                          {c && c.niftyBid != null ? fmtNum(c.niftyBid, 2) : "—"}
-                        </span>
-                      </td>
-                      <td className="opt-subcol opt-subcol-bid">
-                        <span className="opt-leg-num">
-                          {c && c.sensexAsk != null ? fmtNum(c.sensexAsk, 2) : "—"}
-                        </span>
-                      </td>
-                      <td className={`opt-subcol opt-subcol-spread opt-cell ${c ? spreadCls(c.spread) : "neutral"}`}>
-                        <span className="opt-spread-num">
-                          {c ? fmtSigned(c.spread, 0) : "—"}
-                        </span>
-                      </td>
-                    </React.Fragment>
-                  ))}
+                  {row.cells.map((c, i) => {
+                    const wk = `opt-wk-${i + 1}`;
+                    return (
+                      <React.Fragment key={i}>
+                        <td className={`opt-subcol opt-subcol-ask ${wk}`}>
+                          <span className="opt-leg-num">
+                            {c && c.niftyBid != null ? fmtNum(c.niftyBid, 2) : "—"}
+                          </span>
+                        </td>
+                        <td className={`opt-subcol opt-subcol-bid ${wk}`}>
+                          <span className="opt-leg-num">
+                            {c && c.sensexAsk != null ? fmtNum(c.sensexAsk, 2) : "—"}
+                          </span>
+                        </td>
+                        <td className={`opt-subcol opt-subcol-spread opt-cell ${wk} ${c ? spreadCls(c.spread) : "neutral"}`}>
+                          <span className="opt-spread-num">
+                            {c ? fmtSigned(c.spread, 0) : "—"}
+                          </span>
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
