@@ -1537,14 +1537,14 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
 
 /* ───── Pro tabular layout (Strike | ITM | Variation | per-week: N bid | S ask | Spread) ───── */
 table.opt-matrix-pro {
-  min-width: 1330px;
+  min-width: 1355px;
   table-layout: fixed;                /* fixed widths → no row flip / blink as values change */
 }
 /* Explicit column widths sized for worst-case content so values never get cut:
    ITM can hold "−1,420.12 / −X,XXX.XX" (~21 chars), Spread up to "−89,216". */
 .opt-matrix-pro .opt-strike-col   { width: 145px; }
 .opt-matrix-pro .opt-itm-col      { width: 200px; }
-.opt-matrix-pro .opt-var-col      { width: 100px; }
+.opt-matrix-pro .opt-var-col      { width: 125px; }
 .opt-matrix-pro .opt-subcol-ask    { width: 90px; }
 .opt-matrix-pro .opt-subcol-bid    { width: 95px; }
 .opt-matrix-pro .opt-subcol-spread { width: 100px; }
