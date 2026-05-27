@@ -1440,11 +1440,10 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
   box-shadow: inset 4px 0 0 var(--accent);
 }
 .opt-matrix tr.atm-row .opt-strike-n { color: var(--accent); }
-/* Thin accent border framing the ATM row so it's still clearly marked
-   even without overriding the bid/ask column colors */
+/* Thin accent marker framing the ATM row — using box-shadow INSET instead
+   of border so the vertical column separators remain a continuous line. */
 .opt-matrix-pro tr.atm-row td {
-  border-top: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
 }
 
 .atm-badge {
@@ -1538,8 +1537,16 @@ table.opt-matrix thead tr.opt-matrix-head2 th {
 
 /* ───── Pro tabular layout (Strike | ITM | Variation | per-week: N bid | S ask | Spread) ───── */
 table.opt-matrix-pro {
-  min-width: 1080px;
+  min-width: 1140px;
+  table-layout: fixed;                /* fixed widths → no row flip / blink as values change */
 }
+/* Explicit column widths so cells don't resize per-value */
+.opt-matrix-pro .opt-strike-col   { width: 140px; }
+.opt-matrix-pro .opt-itm-col      { width: 150px; }
+.opt-matrix-pro .opt-var-col      { width: 95px; }
+.opt-matrix-pro .opt-subcol-ask    { width: 80px; }
+.opt-matrix-pro .opt-subcol-bid    { width: 85px; }
+.opt-matrix-pro .opt-subcol-spread { width: 95px; }
 table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
   background: var(--bg-surface-alt);
   padding: 10px 12px;
@@ -1623,49 +1630,39 @@ body.dark .opt-week-group.opt-wk-1 .opt-week-num { color: #34d399; }
 body.dark .opt-week-group.opt-wk-2 .opt-week-num { color: #f472b6; }
 body.dark .opt-week-group.opt-wk-3 .opt-week-num { color: #c084fc; }
 
-/* Vertical separators framing each week group — subtle slate line (was harsh
-   pure-black 3px which fought against the colored column tints). */
-.opt-matrix-pro tbody td.opt-subcol-ask,
-.opt-matrix-pro thead th.opt-subcol-ask,
-.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
-  border-left: 1px solid #475569;
-}
-.opt-matrix-pro tbody td.opt-subcol-spread,
-.opt-matrix-pro thead th.opt-subcol-spread {
-  border-right: 1px solid #475569;
-}
-body.dark .opt-matrix-pro tbody td.opt-subcol-ask,
-body.dark .opt-matrix-pro thead th.opt-subcol-ask,
-body.dark .opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
-  border-left-color: #94a3b8;
-}
-body.dark .opt-matrix-pro tbody td.opt-subcol-spread,
-body.dark .opt-matrix-pro thead th.opt-subcol-spread {
-  border-right-color: #94a3b8;
-}
-/* Strip the rightmost group's outer right border so it doesn't double the table edge */
-.opt-matrix-pro tbody tr td.opt-subcol-spread:last-child,
-.opt-matrix-pro thead tr th.opt-subcol-spread:last-child {
-  border-right: none;
-}
-
-/* Major section separators: Strike | ITM | Variation | Week 1 | Week 2 | Week 3
-   1px slate line — visible but refined, doesn't fight the colored column tints. */
+/* UNIFIED section separators — single 1px slate border-right on every
+   "section-end" cell. No border-left anywhere, so boundaries never double up.
+   Boundaries: Strike | ITM | Variation | Week 1 | Week 2 | Week 3
+   Each section ends with one cell's border-right; the next section's first
+   cell has no left border, so the line is always exactly 1px. */
 .opt-matrix-pro thead th.opt-strike-col,
 .opt-matrix-pro tbody td.opt-strike-col,
 .opt-matrix-pro thead th.opt-itm-col,
 .opt-matrix-pro tbody td.opt-itm-col,
 .opt-matrix-pro thead th.opt-var-col,
-.opt-matrix-pro tbody td.opt-var-col {
-  border-right: 1px solid #475569;
+.opt-matrix-pro tbody td.opt-var-col,
+.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group,
+.opt-matrix-pro thead th.opt-subcol-spread,
+.opt-matrix-pro tbody td.opt-subcol-spread {
+  border-right: 2px solid #1e293b;
+}
+/* Strip right border off the very last cell of each row so it doesn't
+   double against the table-wrap edge */
+.opt-matrix-pro tbody tr > td:last-child,
+.opt-matrix-pro thead tr.opt-matrix-head1 > th:last-child,
+.opt-matrix-pro thead tr.opt-matrix-head2 > th:last-child {
+  border-right: none;
 }
 body.dark .opt-matrix-pro thead th.opt-strike-col,
 body.dark .opt-matrix-pro tbody td.opt-strike-col,
 body.dark .opt-matrix-pro thead th.opt-itm-col,
 body.dark .opt-matrix-pro tbody td.opt-itm-col,
 body.dark .opt-matrix-pro thead th.opt-var-col,
-body.dark .opt-matrix-pro tbody td.opt-var-col {
-  border-right-color: #94a3b8;
+body.dark .opt-matrix-pro tbody td.opt-var-col,
+body.dark .opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group,
+body.dark .opt-matrix-pro thead th.opt-subcol-spread,
+body.dark .opt-matrix-pro tbody td.opt-subcol-spread {
+  border-right-color: #cbd5e1;
 }
 
 .opt-matrix-pro tbody td.opt-subcol {
