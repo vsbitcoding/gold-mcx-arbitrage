@@ -1563,7 +1563,7 @@ table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
 .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
   font-weight: 800;
-  font-size: 14px;
+  font-size: 12px;
   background: var(--bg-surface-alt);
 }
 
@@ -1580,14 +1580,10 @@ table.opt-matrix-pro thead tr.opt-matrix-head1 th.opt-week-group {
    reads as one continuous color block like the DECREASE/INCREASE columns
    on the main dashboard.) */
 
-/* Dark theme — sub-column headers in bright white, no background tint
-   (tinted bg was washing out the text). Body cells keep their tints. */
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-ask,
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-bid,
-body.dark .opt-matrix-pro thead tr.opt-matrix-head2 th.opt-subcol-spread {
-  color: #fff;
-  background: var(--bg-surface-alt);
-}
+/* (Dark-mode sub-col color rule deleted — line 1379 already handles dark
+   mode for ALL head2 cells. A separate body.dark sub-col rule was getting
+   mangled by the CSS minifier into a light-mode rule that applied #fff
+   to .opt-subcol-ask, making the header invisible in light mode.) */
 body.dark .opt-matrix-pro tbody td.opt-subcol-ask    { background: rgba(252,129,129,0.18); }
 body.dark .opt-matrix-pro tbody td.opt-subcol-bid    { background: rgba(72,187,120,0.18); }
 body.dark .opt-matrix-pro tbody td.opt-subcol-ask  .opt-leg-num { color: var(--red); font-weight: 700; }
