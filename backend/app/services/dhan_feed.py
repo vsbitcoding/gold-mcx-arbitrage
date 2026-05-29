@@ -265,13 +265,25 @@ def _run_real_feed_thread() -> None:
             rate_limited_flag = {"hit": False}
             err_window = {"count": 0, "since": time.time()}
 
+            def _force_close():
+                """Force close the SDK so feed.run() exits — without this the
+                SDK retries internally every ~2s forever, extending Dhan's ban."""
+                try:
+                    if _active_feed:
+                        _active_feed.close_connection()
+                except Exception as e:
+                    log.warning("force_close: close_connection() failed: %s", e)
+
             def on_error(_instance, err):
                 msg = str(err)
                 log.warning("MarketFeed error: %s", msg)
                 _set_state(last_error=msg[:200])
                 # Dhan rate-limits aggressive reconnects (HTTP 429).
                 if "429" in msg or "rate" in msg.lower():
-                    rate_limited_flag["hit"] = True
+                    if not rate_limited_flag["hit"]:
+                        rate_limited_flag["hit"] = True
+                        log.warning("Dhan 429 detected — force-closing SDK to exit feed.run()")
+                        _force_close()
                     return
                 # Pre-emptive: if non-429 errors flood (e.g. "no close frame"
                 # repeated every 2s), treat as effective rate-limit and back off
@@ -281,10 +293,11 @@ def _run_real_feed_thread() -> None:
                     err_window["since"] = now
                     err_window["count"] = 0
                 err_window["count"] += 1
-                if err_window["count"] >= 5:
+                if err_window["count"] >= 5 and not rate_limited_flag["hit"]:
                     log.warning("MarketFeed error flood (%d in <30s) — treating as rate-limit.",
                                 err_window["count"])
                     rate_limited_flag["hit"] = True
+                    _force_close()
 
             def on_close(_instance):
                 log.info("MarketFeed connection closed.")
