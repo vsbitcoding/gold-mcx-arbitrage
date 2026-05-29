@@ -122,9 +122,10 @@ def _account_cap_allows_new_fire(db: Session, pair: dict) -> tuple[bool, dict | 
     return (used + this_fire) <= cap_rupees, snap
 
 
-def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str, snap: dict) -> None:
+def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str, snap: dict) -> bool:
+    """Log a fire-blocked event once per ladder. Returns True if a row was added."""
     if rule_id in _account_cap_blocked_logged:
-        return
+        return False
     _account_cap_blocked_logged.add(rule_id)
     activity.log(
         db, "fire_blocked",
@@ -135,15 +136,32 @@ def _log_account_cap_block(db: Session, rule_id: int, pair_name: str, side: str,
         ),
         details=snap,
     )
+    return True
 
 
 def evaluate(db: Session) -> None:
-    # Group ladder rules by pair to avoid recomputing snapshots
+    """Two-pass evaluation, runs up to ~2 Hz from the feed.
+
+    Pass 1 (entries): may open new positions and flush them.
+    Pass 2 (exits):   fetch ALL open positions ONCE (after entry flushes, so a
+                      same-tick fill is still visible) and close from that dict.
+
+    Avoids the old N+1 of one open-positions SELECT per ladder per tick, and
+    only commits when something actually changed.
+    """
     rules = db.query(LadderRule).filter(LadderRule.enabled == True).all()
+    if not rules:
+        return  # nothing armed → no work, no commit, no WAL churn
+
     by_pair: dict[str, list[LadderRule]] = {}
     for r in rules:
         by_pair.setdefault(r.pair_name, []).append(r)
 
+    dirty = False
+    # pair_name -> (pair, snap, ladders, dec_spread, inc_spread)
+    resolved: dict[str, tuple] = {}
+
+    # ── Pass 1: entries (may flush new positions) ──
     for pair_name, ladders in by_pair.items():
         pair = _pair_def(pair_name)
         if not pair:
@@ -151,64 +169,96 @@ def evaluate(db: Session) -> None:
         snap = compute_pair(pair)
         dec_spread = snap["decrease_spread"]
         inc_spread = snap["increase_spread"]
+        resolved[pair_name] = (pair, snap, ladders, dec_spread, inc_spread)
 
         for rule in ladders:
             if rule.side == "decrease":
-                _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread)
+                if _entry_decrease(db, pair, rule, snap, dec_spread, inc_spread):
+                    dirty = True
             else:
-                _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread)
+                if _entry_increase(db, pair, rule, snap, dec_spread, inc_spread):
+                    dirty = True
 
-    db.commit()
+    # ── Pass 2: exits — one query for all open positions, grouped by ladder ──
+    needs_exit = any(
+        any(r.exit is not None for r in ladders)
+        for (_pair, _snap, ladders, _dec, _inc) in resolved.values()
+    )
+    if needs_exit:
+        open_by_ladder: dict[int, list[Position]] = {}
+        for p in db.query(Position).filter(Position.status == "open").all():
+            if p.ladder_rule_id is not None:
+                open_by_ladder.setdefault(p.ladder_rule_id, []).append(p)
+
+        for pair_name, (pair, snap, ladders, dec_spread, inc_spread) in resolved.items():
+            for rule in ladders:
+                if rule.exit is None:
+                    continue
+                positions = open_by_ladder.get(rule.id)
+                if not positions:
+                    continue
+                # decrease ladders cover on increase_spread; increase ladders on decrease_spread
+                if rule.side == "decrease":
+                    if inc_spread is not None and inc_spread <= rule.exit:
+                        for p in positions:
+                            _close_trade(db, p, snap, closed_by="auto")
+                            dirty = True
+                else:
+                    if dec_spread is not None and dec_spread >= rule.exit:
+                        for p in positions:
+                            _close_trade(db, p, snap, closed_by="auto")
+                            dirty = True
+
+    if dirty:
+        db.commit()
 
 
-def _evaluate_decrease(db, pair, rule, snap, dec_spread, inc_spread):
-    # Entry/firing logic
+def _entry_decrease(db, pair, rule, snap, dec_spread, inc_spread) -> bool:
+    """Entry/firing logic for a decrease ladder. Returns True if it wrote."""
+    dirty = False
     if rule.entry is not None and dec_spread is not None:
         if dec_spread < rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
             allowed_acct, acct_snap = _account_cap_allows_new_fire(db, pair)
             if not allowed_acct:
-                _log_account_cap_block(db, rule.id, pair["name"], "decrease", acct_snap)
+                if _log_account_cap_block(db, rule.id, pair["name"], "decrease", acct_snap):
+                    dirty = True
                 _armed[rule.id] = False
             elif can_open_new_cycle_for_ladder(db, pair, rule):
                 _open_trade(db, pair, "decrease", snap, rule.id)
                 db.flush()
+                dirty = True
                 _account_cap_blocked_logged.discard(rule.id)
                 if not can_open_new_cycle_for_ladder(db, pair, rule):
                     _armed[rule.id] = False
             else:
                 _armed[rule.id] = False
-
-    # Exit logic — close all open positions for this ladder when cover spread hits exit
-    if rule.exit is not None and inc_spread is not None:
-        for p in open_positions_for_ladder(db, rule.id):
-            if inc_spread <= rule.exit:
-                _close_trade(db, p, snap, closed_by="auto")
+    return dirty
 
 
-def _evaluate_increase(db, pair, rule, snap, dec_spread, inc_spread):
+def _entry_increase(db, pair, rule, snap, dec_spread, inc_spread) -> bool:
+    """Entry/firing logic for an increase ladder. Returns True if it wrote."""
+    dirty = False
     if rule.entry is not None and inc_spread is not None:
         if inc_spread > rule.entry:
             _armed[rule.id] = True
         elif _armed.get(rule.id, False):
             allowed_acct, acct_snap = _account_cap_allows_new_fire(db, pair)
             if not allowed_acct:
-                _log_account_cap_block(db, rule.id, pair["name"], "increase", acct_snap)
+                if _log_account_cap_block(db, rule.id, pair["name"], "increase", acct_snap):
+                    dirty = True
                 _armed[rule.id] = False
             elif can_open_new_cycle_for_ladder(db, pair, rule):
                 _open_trade(db, pair, "increase", snap, rule.id)
                 db.flush()
+                dirty = True
                 _account_cap_blocked_logged.discard(rule.id)
                 if not can_open_new_cycle_for_ladder(db, pair, rule):
                     _armed[rule.id] = False
             else:
                 _armed[rule.id] = False
-
-    if rule.exit is not None and dec_spread is not None:
-        for p in open_positions_for_ladder(db, rule.id):
-            if dec_spread >= rule.exit:
-                _close_trade(db, p, snap, closed_by="auto")
+    return dirty
 
 
 def _open_trade(db: Session, pair: dict, mode: str, snap: dict, ladder_id: int) -> None:

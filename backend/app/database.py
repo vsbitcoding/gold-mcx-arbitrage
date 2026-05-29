@@ -23,6 +23,10 @@ if is_sqlite:
         cur.execute("PRAGMA synchronous=NORMAL")
         cur.execute("PRAGMA cache_size=-20000")  # 20 MB page cache
         cur.execute("PRAGMA temp_store=MEMORY")
+        # Wait up to 5s for a contended write lock instead of instantly raising
+        # "database is locked" (feed writer vs nightly VACUUM vs request CRUD).
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.execute("PRAGMA wal_autocheckpoint=1000")
         cur.close()
 
 

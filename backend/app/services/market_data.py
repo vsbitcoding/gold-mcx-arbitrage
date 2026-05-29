@@ -1,9 +1,15 @@
 """In-memory live quote store (keyed by security_id). Persists to DB so the
 dashboard never goes blank across service restarts or market holidays.
+
+Persistence is batched: live ticks only touch the in-memory dict (synchronous,
+under lock) and mark the security_id dirty. A single daemon writer thread
+flushes ALL dirty quotes in ONE transaction every 30s — keeping DB writes off
+the hot Dhan feed thread and collapsing ~6 inline writes/sec into 1 tx/30s.
 """
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -19,47 +25,79 @@ class Quote:
     timestamp: float = 0.0
 
 
-PERSIST_THROTTLE_SECONDS = 30
+PERSIST_INTERVAL_SECONDS = 30
 
 
 class QuoteStore:
     def __init__(self) -> None:
         self._quotes: dict[str, Quote] = {}
-        self._last_persist: dict[str, float] = {}
+        self._dirty: dict[str, tuple[float, float, float]] = {}  # sid -> (bid, ask, ltp) pending write
         self._lock = Lock()
+        self._writer_started = False
 
     def update(self, security_id: str, bid: float, ask: float, ltp: float, ts: float) -> None:
         sid = str(security_id)
         with self._lock:
             self._quotes[sid] = Quote(bid=bid, ask=ask, ltp=ltp, timestamp=ts)
-        if (bid or ask or ltp) and self._should_persist(sid):
-            self._persist(sid, bid, ask, ltp)
+            if bid or ask or ltp:
+                self._dirty[sid] = (bid, ask, ltp)  # newest value wins
+        self._ensure_writer()
 
-    def _should_persist(self, sid: str) -> bool:
-        now = time.time()
-        last = self._last_persist.get(sid, 0)
-        if now - last >= PERSIST_THROTTLE_SECONDS:
-            self._last_persist[sid] = now
-            return True
-        return False
+    # ── batched persistence ──────────────────────────────────────────────
+    def _ensure_writer(self) -> None:
+        if self._writer_started:
+            return
+        with self._lock:
+            if self._writer_started:
+                return
+            self._writer_started = True
+        t = threading.Thread(target=self._writer_loop, name="quote-persist", daemon=True)
+        t.start()
 
-    def _persist(self, sid: str, bid: float, ask: float, ltp: float) -> None:
-        try:
-            from app.database import SessionLocal
-            from app.models import LastQuote
-            db = SessionLocal()
+    def _writer_loop(self) -> None:
+        while True:
+            time.sleep(PERSIST_INTERVAL_SECONDS)
             try:
-                row = db.query(LastQuote).filter(LastQuote.instrument == sid).first()
+                self._flush_dirty()
+            except Exception as e:  # never let the writer thread die
+                log.warning("quote persist flush failed: %s", e)
+
+    def _flush_dirty(self) -> None:
+        with self._lock:
+            if not self._dirty:
+                return
+            pending = dict(self._dirty)
+            self._dirty.clear()
+
+        from app.database import SessionLocal
+        from app.models import LastQuote
+        db = SessionLocal()
+        try:
+            sids = list(pending.keys())
+            existing = {
+                row.instrument: row
+                for row in db.query(LastQuote).filter(LastQuote.instrument.in_(sids)).all()
+            }
+            for sid, (bid, ask, ltp) in pending.items():
+                row = existing.get(sid)
                 if row:
-                    row.bid = bid; row.ask = ask; row.ltp = ltp
+                    row.bid = bid
+                    row.ask = ask
+                    row.ltp = ltp
                 else:
                     db.add(LastQuote(instrument=sid, bid=bid, ask=ask, ltp=ltp))
-                db.commit()
-            finally:
-                db.close()
-        except Exception as e:
-            log.debug("persist failed: %s", e)
+            db.commit()
+        except Exception:
+            db.rollback()
+            # Re-queue the failed batch so the next cycle retries it (newer ticks win).
+            with self._lock:
+                for sid, v in pending.items():
+                    self._dirty.setdefault(sid, v)
+            raise
+        finally:
+            db.close()
 
+    # ── reads ────────────────────────────────────────────────────────────
     def get(self, security_id: str) -> Quote:
         with self._lock:
             return self._quotes.get(str(security_id), Quote())

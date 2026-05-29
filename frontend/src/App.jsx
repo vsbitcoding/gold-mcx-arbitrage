@@ -75,21 +75,28 @@ function Dashboard() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Slow-cadence fetch for things WS doesn't push (positions, history, feed status)
+  // Slow-cadence fetch for things WS doesn't push (positions, history, feed status).
+  // Account is fetched on a slower, separate cadence (rarely changes).
   const refreshSlow = useCallback(async () => {
     try {
-      const [op, h, fs, acc] = await Promise.all([
+      const [op, h, fs] = await Promise.all([
         api.positions(),
         api.history(7),
         api.feedStatus().catch(() => null),
-        api.getAccount().catch(() => null),
       ]);
       if (op && Array.isArray(op.positions)) setPositions(op.positions);
       else setPositions(op || []);
       if (h && Array.isArray(h.trades)) setHistory(h.trades);
       else setHistory(h || []);
       setFeedStatus(fs);
-      setAccount(acc);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const refreshAccount = useCallback(async () => {
+    try {
+      setAccount(await api.getAccount().catch(() => null));
     } catch (e) {
       console.error(e);
     }
@@ -107,19 +114,34 @@ function Dashboard() {
 
   useEffect(() => {
     refreshSlow();
+    refreshAccount();
     refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
 
-    const slowTimer = setInterval(refreshSlow, 3000);
+    // Slow REST cadence: positions/history/feed + account every 10s (account on
+    // its own timer so its slower-changing data can later be dialed back).
+    // Paused entirely while the tab is hidden (no point polling a tab nobody sees).
+    let slowTimer = setInterval(refreshSlow, 10000);
+    let acctTimer = setInterval(refreshAccount, 10000);
+
+    function onVisibility() {
+      if (document.hidden) {
+        clearInterval(slowTimer); slowTimer = null;
+        clearInterval(acctTimer); acctTimer = null;
+      } else {
+        // Came back into view → refresh immediately so numbers aren't stale.
+        refreshSlow();
+        refreshAccount();
+        if (!slowTimer) slowTimer = setInterval(refreshSlow, 10000);
+        if (!acctTimer) acctTimer = setInterval(refreshAccount, 10000);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
 
     const sock = createLiveSocket({
       onSnapshot: (data) => setPairs(data),
       onState: (s) => setWsState(s),
     });
 
-    function startFallback() {
-      if (fallbackRef.current) return;
-      fallbackRef.current = setInterval(refreshPairsFallback, 2000);
-    }
     function stopFallback() {
       if (fallbackRef.current) {
         clearInterval(fallbackRef.current);
@@ -129,10 +151,12 @@ function Dashboard() {
 
     return () => {
       clearInterval(slowTimer);
+      clearInterval(acctTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
       stopFallback();
       sock.close();
     };
-  }, [refreshSlow, refreshPairsFallback]);
+  }, [refreshSlow, refreshAccount, refreshPairsFallback]);
 
   // Engage REST fallback only if WS keeps failing
   useEffect(() => {
@@ -164,6 +188,7 @@ function Dashboard() {
 
   const onLocalSaved = () => {
     refreshSlow();
+    refreshAccount();
   };
 
   return (
