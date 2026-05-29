@@ -95,6 +95,14 @@ def _trigger_reconnect(reason: str) -> None:
     global _active_feed, _last_reconnect_epoch
     if time.time() - _last_reconnect_epoch < RECONNECT_GRACE_SECONDS:
         return
+    # Don't double-tap: if the feed loop is already reconnecting (or rate-limited)
+    # let it finish its cool-down. Watchdog jumping in here on top of an ongoing
+    # SDK retry was the root cause of the 2026-05-29 Dhan 429 cascade.
+    with _state_lock:
+        cur_mode = _state["mode"]
+    if cur_mode in ("reconnecting", "starting"):
+        log.info("Skip watchdog reconnect (%s) — feed is already in %s mode.", reason, cur_mode)
+        return
     _last_reconnect_epoch = time.time()
     log.warning("Watchdog forcing reconnect: %s", reason)
     dhan_auth.invalidate()
@@ -124,10 +132,13 @@ def _watchdog() -> None:
                 continue
         ist = _ist_now()
         today = ist.date()
+        # Post-open fresh subscription — delayed to 09:17-09:25 IST.
+        # Was 09:01-09:05 but Dhan's WS is at its worst exactly at market open;
+        # waiting 15 minutes lets their side stabilise and avoids the 429 storm.
         if (
             ist.weekday() < 5
             and ist.hour == 9
-            and 1 <= ist.minute <= 5
+            and 17 <= ist.minute <= 25
             and last_postmarket_open != today
         ):
             _trigger_reconnect("post-open fresh subscription")
@@ -252,19 +263,28 @@ def _run_real_feed_thread() -> None:
 
             # Track error type so we can break out on Dhan rate-limit (429).
             rate_limited_flag = {"hit": False}
+            err_window = {"count": 0, "since": time.time()}
 
             def on_error(_instance, err):
                 msg = str(err)
                 log.warning("MarketFeed error: %s", msg)
                 _set_state(last_error=msg[:200])
                 # Dhan rate-limits aggressive reconnects (HTTP 429).
-                # The SDK keeps trying every ~2 s internally → we have to forcefully
-                # break out so the OUTER backoff loop can apply a real cool-down.
                 if "429" in msg or "rate" in msg.lower():
                     rate_limited_flag["hit"] = True
-                    # Don't try to call _instance.disconnect() — it's async and
-                    # we're in a sync callback. The error will bubble up to the
-                    # outer except where 5-min cool-down kicks in.
+                    return
+                # Pre-emptive: if non-429 errors flood (e.g. "no close frame"
+                # repeated every 2s), treat as effective rate-limit and back off
+                # BEFORE Dhan actually 429s us. >= 5 errors in 30s → trip flag.
+                now = time.time()
+                if now - err_window["since"] > 30:
+                    err_window["since"] = now
+                    err_window["count"] = 0
+                err_window["count"] += 1
+                if err_window["count"] >= 5:
+                    log.warning("MarketFeed error flood (%d in <30s) — treating as rate-limit.",
+                                err_window["count"])
+                    rate_limited_flag["hit"] = True
 
             def on_close(_instance):
                 log.info("MarketFeed connection closed.")
@@ -282,7 +302,7 @@ def _run_real_feed_thread() -> None:
             # If we exited because of rate-limit, use long cool-down (5 min).
             # Otherwise reset to fast backoff for benign disconnects.
             if rate_limited_flag["hit"]:
-                cool = 300
+                cool = 900
                 log.warning("Rate-limited by Dhan — cooling down for %ds before reconnect.", cool)
                 _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
                 time.sleep(cool)
@@ -293,7 +313,7 @@ def _run_real_feed_thread() -> None:
             err_str = str(e)
             # Dhan rate-limit: cool down 5 min instead of fast retry
             if "429" in err_str or "rate" in err_str.lower():
-                cool = 300
+                cool = 900
                 log.warning("Feed loop hit rate-limit — cooling down for %ds: %s", cool, err_str[:120])
                 _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
                 time.sleep(cool)
