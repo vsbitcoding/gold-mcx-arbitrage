@@ -31,15 +31,16 @@ CROSS_TEMPLATES = [
     ("silverm", "silver", 5, 1, "sonext"),      # SILVER MINI × SILVER full
     ("silvermic", "silverm", 5, 1, "sonext"),   # SILVER MIC × SILVER MINI
     # SILVER100 families — spread = (SILVER100 × 100) − small leg (client formula).
-    # The ×100 lives in MULTIPLIERS["silver100"]; lots are 1:1 (price-multiplier,
-    # not a weight hedge ratio — change if client wants a different lot ratio).
-    ("silver100", "silvermic", 1, 1, "sonext"),  # SILVER100 × SILVER MIC
-    ("silver100", "silverm", 1, 1, "sonext"),    # SILVER100 × SILVER MINI
+    # The ×100 lives in MULTIPLIERS["silver100"]. Lots are weight-balanced per client:
+    #   10 × SILVER100 (100g) = 1000g = 1 × SILVER MIC (1 kg)
+    #   50 × SILVER100 (100g) = 5000g = 1 × SILVER MINI (5 kg)
+    ("silver100", "silvermic", 10, 1, "sonext"),  # SILVER100 × SILVER MIC  (10:1)
+    ("silver100", "silverm", 50, 1, "sonext"),    # SILVER100 × SILVER MINI (50:1)
 ]
 
 CALENDAR_INSTRUMENTS = [
     "petal", "guinea", "ten", "mini",
-    "gold", "silver", "silverm", "silvermic",
+    "gold", "silver", "silverm", "silvermic", "silver100",
 ]
 
 # Display names (GOLD prefix dropped — common knowledge it's gold trading)
