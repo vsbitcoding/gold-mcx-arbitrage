@@ -27,6 +27,7 @@ MARGIN_PERCENT: dict[str, float] = {
     "silvermic": 11.0,
     "silverm":   12.0,
     "silver":    13.0,
+    "silver100": 11.0,
 }
 
 DEFAULT_PCT = 10.0

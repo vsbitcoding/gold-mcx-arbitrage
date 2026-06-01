@@ -30,6 +30,11 @@ CROSS_TEMPLATES = [
     ("mini", "gold", 10, 1, "sonext"),          # GOLD MINI × GOLD full
     ("silverm", "silver", 5, 1, "sonext"),      # SILVER MINI × SILVER full
     ("silvermic", "silverm", 5, 1, "sonext"),   # SILVER MIC × SILVER MINI
+    # SILVER100 families — spread = (SILVER100 × 100) − small leg (client formula).
+    # The ×100 lives in MULTIPLIERS["silver100"]; lots are 1:1 (price-multiplier,
+    # not a weight hedge ratio — change if client wants a different lot ratio).
+    ("silver100", "silvermic", 1, 1, "sonext"),  # SILVER100 × SILVER MIC
+    ("silver100", "silverm", 1, 1, "sonext"),    # SILVER100 × SILVER MINI
 ]
 
 CALENDAR_INSTRUMENTS = [
@@ -47,6 +52,7 @@ MCX_SYMBOL = {
     "silver": "SILVER",
     "silverm": "SILVER MINI",
     "silvermic": "SILVER MIC",
+    "silver100": "SILVER 100",
 }
 
 

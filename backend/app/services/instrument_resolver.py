@@ -27,6 +27,7 @@ SYMBOL_MAP = {
     "silver": "SILVER",      # SILVER full (30 kg)
     "silverm": "SILVERM",    # SILVER MINI (5 kg)
     "silvermic": "SILVERMIC",  # SILVER MIC (1 kg)
+    "silver100": "SILVER100",  # SILVER 100 (100 g)
 }
 
 
