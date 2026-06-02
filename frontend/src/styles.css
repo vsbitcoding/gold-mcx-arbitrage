@@ -3801,3 +3801,70 @@ body.dark .mc-lead      .metal-card-head { color: #9fb0c2; }
 body.density-compact .metal-row { padding: 3px 0; }
 body.density-compact .mr-diff-val { font-size: 15px; }
 body.density-compact .metal-card-head { padding: 6px 12px; }
+
+/* ===== Cross / Calendar pairs as cards (4 per row, all expiries, gear menu) ===== */
+.spread-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 16px 16px;
+}
+.sc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 11px;
+  overflow: visible;                 /* so the gear menu isn't clipped */
+  box-shadow: 0 2px 7px rgba(0,0,0,.06);
+}
+.sc-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 11px;
+  background: var(--bg-surface-alt);
+  border-bottom: 2px solid var(--border);
+  border-radius: 11px 11px 0 0;
+}
+.sc-pair { font-size: 12.5px; font-weight: 800; color: var(--text-primary); letter-spacing: .2px; }
+.sc-count { font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+
+.sc-row {
+  display: grid;
+  grid-template-columns: 1fr 66px 66px 26px;
+  align-items: center; gap: 5px;
+  padding: 5px 11px;
+  border-bottom: 1px dashed var(--border-light);
+}
+.sc-row:last-child { border-bottom: none; }
+.sc-colhead { background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+.sc-colhead span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.sc-colhead .sc-c { text-align: center; }
+.sc-row:not(.sc-colhead):hover { background: var(--bg-hover); }
+
+.sc-exp { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 0; }
+.sc-exp-txt { overflow: hidden; text-overflow: ellipsis; }
+.sc-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #cbd5e1; }
+.sd-armed { background: #f59e0b; }
+.sd-in_position { background: #3b82f6; }
+.sc-front { color: #f59e0b; flex: none; }
+.sc-open { font-size: 9px; font-weight: 800; background: var(--accent); color: #fff; border-radius: 100px; padding: 1px 5px; flex: none; }
+.sc-open.orphan { background: #f59e0b; }
+
+.sc-dec, .sc-inc { text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12.5px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 0; }
+.sc-dec { color: var(--red); background: rgba(220,38,38,.07); }
+.sc-inc { color: var(--green); background: rgba(22,163,74,.07); }
+
+.sc-gear-wrap { position: relative; text-align: right; }
+.sc-gear { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text-muted); padding: 2px 4px; border-radius: 5px; line-height: 1; }
+.sc-gear:hover { background: var(--bg-surface-alt); color: var(--text-primary); }
+.sc-menu {
+  position: absolute; right: 0; top: 100%; z-index: 40;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  padding: 4px; display: flex; flex-direction: column; min-width: 124px;
+}
+.sc-menu button { text-align: left; background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-primary); padding: 7px 10px; border-radius: 6px; }
+.sc-menu button:hover { background: var(--bg-hover); }
+
+/* responsive: 4 → 3 → 2 → 1 */
+@media (max-width: 1280px) { .spread-cards { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (max-width: 920px)  { .spread-cards { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 560px)  { .spread-cards { grid-template-columns: 1fr; gap: 10px; } }

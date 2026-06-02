@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FrontRow, OtherMonthRow, SortableTh } from "./spread/SpreadRows.jsx";
+import SpreadCards from "./spread/SpreadCards.jsx";
 import { LadderModal, PositionsModal, HistoryModal } from "./spread/Modals.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
 import MetalSpread from "./MetalSpread.jsx";
@@ -194,90 +194,31 @@ export default function LiveSpreadTable({ rows, onSaved }) {
 
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
 
-      {tab !== "metals" && (<>
-      <div className="table-container">
-        <table className="pair-table fixed">
-          <colgroup>
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "18%" }} />
-          </colgroup>
-          <thead>
-            <tr className="group-row">
-              <th colSpan={2} className="cg-identity col-end-group">Identity</th>
-              <th className="cg-decrease">▼ Decrease</th>
-              <th className="cg-increase col-end-group">▲ Increase</th>
-              <th colSpan={4} className="cg-status">Status &amp; Ladders</th>
-            </tr>
-            <tr>
-              <SortableTh label={tab === "cross" ? "Pair" : "Spread"} field="label" sort={sort} setSort={setSort} className="gc-identity" />
-              <SortableTh label="Expiry" field="expiry" sort={sort} setSort={setSort} className="gc-identity col-end-group" />
-              <SortableTh label="Spread" field="decrease_spread" sort={sort} setSort={setSort} className="gc-decrease" />
-              <SortableTh label="Spread" field="increase_spread" sort={sort} setSort={setSort} className="gc-increase col-end-group" />
-              <SortableTh label="Status" field="status" sort={sort} setSort={setSort} className="gc-status" />
-              <SortableTh label="Dec ▼" field="decrease_count" sort={sort} setSort={setSort} className="gc-status" />
-              <SortableTh label="Inc ▲" field="increase_count" sort={sort} setSort={setSort} className="gc-status" />
-              <th className="gc-status">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <SkeletonRows />
-            ) : groupedRows.length === 0 ? (
-              <tr><td colSpan={8} className="empty-state">No pairs match the filter.</td></tr>
-            ) : sliceGroups.flatMap((g) => {
-              const isOpen = !!expandedGroups[g.label];
-              const sortedByExpiry = [...g.rows].sort((a, b) =>
-                (a.big_expiry || "") < (b.big_expiry || "") ? -1 : 1
-              );
-              const front = sortedByExpiry[0];
-              const others = sortedByExpiry.slice(1);
-              return [
-                <FrontRow
-                  key={`f:${g.label}`}
-                  row={front}
-                  label={g.label}
-                  hasMore={others.length > 0}
-                  expanded={isOpen}
-                  onToggle={() => toggleGroup(g.label)}
-                  onManage={(n) => setOpenPair(n)}
-                  onPositions={(n) => setOpenPositionsPair(n)}
-                  onHistory={(n) => setOpenHistoryPair(n)}
-                />,
-                ...(isOpen ? others.map((r, idx) => (
-                  <OtherMonthRow
-                    key={r.name}
-                    row={r}
-                    isLast={idx === others.length - 1}
-                    onManage={(n) => setOpenPair(n)}
-                    onPositions={(n) => setOpenPositionsPair(n)}
-                    onHistory={(n) => setOpenHistoryPair(n)}
-                  />
-                )) : []),
-              ];
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {groupedRows.length > PAIR_PAGE_SIZE && (
-        <div className="pagination-controls">
-          <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
-          <div className="pager">
-            <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
-            <button className="active">{safePage}</button>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
-            <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
-          </div>
-        </div>
-      )}
-      </>
+      {tab !== "metals" && (
+        rows.length === 0 ? (
+          <div className="empty-state" style={{ padding: "24px 16px" }}>Loading…</div>
+        ) : (
+          <>
+            <SpreadCards
+              groups={sliceGroups}
+              onManage={(n) => setOpenPair(n)}
+              onPositions={(n) => setOpenPositionsPair(n)}
+              onHistory={(n) => setOpenHistoryPair(n)}
+            />
+            {groupedRows.length > PAIR_PAGE_SIZE && (
+              <div className="pagination-controls">
+                <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
+                <div className="pager">
+                  <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                  <button className="active">{safePage}</button>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                  <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+                </div>
+              </div>
+            )}
+          </>
+        )
       )}
 
       {openRow && <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />}
