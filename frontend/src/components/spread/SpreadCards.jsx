@@ -2,6 +2,24 @@ import React, { useEffect, useState } from "react";
 import { fmtSpread } from "../../utils/format.js";
 import { STATUS_LABEL } from "./constants.js";
 
+// Price multiplier per instrument (mirror of backend config.MULTIPLIERS).
+// % = spread ÷ (near-leg price × multiplier) × 100  — per client:
+//   Petal ×10, Guinea ×1.25, Silver100 ×100 (its price is quoted ×100),
+//   every other instrument ×1 = direct division.
+const MULT = {
+  petal: 10, guinea: 1.25, ten: 1, mini: 1, gold: 1,
+  silver: 1, silverm: 1, silvermic: 1, silver100: 100,
+};
+function calcPct(spread, nearPrice, instrument) {
+  if (spread == null || !nearPrice) return null;
+  const m = MULT[instrument] ?? 1;
+  return (spread / (nearPrice * m)) * 100;
+}
+function fmtPct(v) {
+  if (v == null) return null;
+  return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
+}
+
 /**
  * Card view of cross / calendar pairs. One card per pair-group, all expiries
  * shown (spreads only). A gear icon per expiry opens a small menu with
@@ -68,8 +86,18 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     </span>
                   )}
                 </span>
-                <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
-                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
+                <div className="sc-spread">
+                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
+                  {isCalendar && calcPct(row.decrease_spread, row.small_ask, row.small) != null && (
+                    <span className="sc-pct dec">{fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small))}</span>
+                  )}
+                </div>
+                <div className="sc-spread">
+                  <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
+                  {isCalendar && calcPct(row.increase_spread, row.small_bid, row.small) != null && (
+                    <span className="sc-pct inc">{fmtPct(calcPct(row.increase_spread, row.small_bid, row.small))}</span>
+                  )}
+                </div>
                 <span className="sc-gear-wrap">
                   <button
                     className="sc-gear"
