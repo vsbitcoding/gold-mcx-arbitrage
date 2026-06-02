@@ -40,66 +40,58 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
     return () => { alive = false; stop(); document.removeEventListener("visibilitychange", onVis); };
   }, [controlled]);
 
-  // Mark the first row of each metal group so we can draw a separator + label once.
-  const rows = useMemo(() => {
+  // Group the flat rows into one card per metal (preserves API order).
+  const cards = useMemo(() => {
     const rs = data?.rows || [];
-    let last = null;
-    return rs.map((r) => {
-      const firstOfGroup = r.metal !== last;
-      last = r.metal;
-      return { ...r, firstOfGroup };
-    });
+    const byMetal = new Map();
+    for (const r of rs) {
+      if (!byMetal.has(r.metal)) byMetal.set(r.metal, []);
+      byMetal.get(r.metal).push(r);
+    }
+    return Array.from(byMetal, ([metal, rows]) => ({ metal, rows }));
   }, [data]);
 
   return (
     <div className={`metal-page${embedded ? " metal-embedded" : ""}`}>
       {!embedded && (
-        <div className="metal-head">
-          <h2>Metal — Calendar Spreads</h2>
-        </div>
+        <div className="metal-head"><h2>Metal — Calendar Spreads</h2></div>
       )}
       <p className="metal-sub">
-        Watch-only. <strong>Difference</strong> = far-month Buy − near-month Sell.{" "}
-        <strong>% Spread</strong> = Difference ÷ near Sell × 100.
+        Watch-only · <strong>Difference</strong> = far-month Buy − near-month Sell ·{" "}
+        <strong>% Spread</strong> = Difference ÷ near Sell × 100
       </p>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
 
-      {!rows.length ? (
+      {!cards.length ? (
         <div className="empty-state">Loading metal data…</div>
       ) : (
-        <div className="metal-wrap">
-          <table className="metal-table">
-            <thead>
-              <tr>
-                <th className="ml-metal">Metal</th>
-                <th className="ml-month">Month</th>
-                <th className="ml-diff">Difference</th>
-                <th className="ml-pct">% Spread</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className={r.firstOfGroup ? "metal-group-start" : ""}>
-                  <td className="ml-metal">{r.firstOfGroup ? r.metal : ""}</td>
-                  <td className="ml-month">{r.month}</td>
-                  <td className="ml-diff">
-                    <div className={`ml-diff-val ${signCls(r.difference)}`}>
-                      {fmtSigned(r.difference, 2)}
+        <div className="metal-cards">
+          {cards.map((c) => (
+            <div className="metal-card" key={c.metal}>
+              <div className="metal-card-head">{c.metal}</div>
+              <div className="metal-card-body">
+                {c.rows.map((r, i) => (
+                  <div className="metal-row" key={i}>
+                    <div className="mr-month">{r.month}</div>
+                    <div className="mr-diff">
+                      <span className={`mr-diff-val ${signCls(r.difference)}`}>
+                        {fmtSigned(r.difference, 2)}
+                      </span>
+                      {r.far_price != null && r.near_price != null && (
+                        <span className="mr-calc">
+                          {fmtNum(r.far_price, 2)}−{fmtNum(r.near_price, 2)}
+                        </span>
+                      )}
                     </div>
-                    {r.far_price != null && r.near_price != null && (
-                      <div className="ml-diff-calc">
-                        {fmtNum(r.far_price, 2)} − {fmtNum(r.near_price, 2)}
-                      </div>
-                    )}
-                  </td>
-                  <td className={`ml-pct ${signCls(r.pct)}`}>
-                    {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div className={`mr-pct ${signCls(r.pct)}`}>
+                      {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
