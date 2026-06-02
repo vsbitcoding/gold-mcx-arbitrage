@@ -3701,7 +3701,7 @@ td.ldr-actions .save-btn {
 
 .metal-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);   /* 4 cards across → 8 metals = 2 rows */
+  grid-template-columns: repeat(4, minmax(0, 1fr));   /* 4 across → 8 metals = 2 rows; minmax(0,…) lets cards shrink without overflow */
   gap: 12px;
 }
 .metal-card {
@@ -3758,13 +3758,13 @@ body.dark .mc-lead      .metal-card-head { color: #9fb0c2; }
   font-size: 12px; font-weight: 600; color: var(--text-secondary);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
-.mr-diff { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.12; }
+.mr-diff { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.12; min-width: 0; }
 .mr-diff-val {
   font-family: 'Roboto Mono', ui-monospace, monospace;
   font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
 }
 .mr-calc {
-  font-size: 10px; color: var(--text-muted); margin-top: 1px;
+  font-size: 10px; color: var(--text-muted); margin-top: 1px; white-space: nowrap;
   font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
 }
 .mr-pct {
@@ -3776,9 +3776,26 @@ body.dark .mc-lead      .metal-card-head { color: #9fb0c2; }
 .mr-diff-val.neg, .mr-pct.neg { color: var(--red); }
 .mr-diff-val.neutral, .mr-pct.neutral { color: var(--text-muted); }
 
-/* Tablet → 2 cards across (8 metals = 4 rows); Phone → 1 across */
-@media (max-width: 1100px) { .metal-cards { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px)  { .metal-cards { grid-template-columns: 1fr; } }
+/* Responsive card grid: 4 → 3 → 2 → 1 columns. minmax(0,…) everywhere so the
+   inner price text can never push a card wider than its share. */
+@media (max-width: 1200px) { .metal-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px)  { .metal-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 560px)  { .metal-cards { grid-template-columns: 1fr; gap: 10px; } }
+
+/* Small screens: tighten the fixed month/pct columns + fonts so nothing clips */
+@media (max-width: 900px) {
+  .metal-card-head { font-size: 12px; padding: 7px 10px; }
+  .metal-card-body { padding: 2px 10px 4px; }
+  .metal-row { grid-template-columns: 50px 1fr 54px; gap: 5px; }
+  .mr-month { font-size: 11px; }
+  .mr-diff-val { font-size: 15px; }
+  .mr-pct { font-size: 12px; }
+  .mr-calc { font-size: 9.5px; }
+}
+@media (max-width: 380px) {
+  .metal-row { grid-template-columns: 46px 1fr 50px; }
+  .mr-calc { font-size: 9px; }
+}
 
 /* Denser in compact mode */
 body.density-compact .metal-row { padding: 3px 0; }
