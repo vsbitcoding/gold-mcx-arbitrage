@@ -12,17 +12,20 @@ function fmtSigned(v, decimals) {
   return (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), decimals);
 }
 
-export default function MetalSpread() {
-  const [data, setData] = useState(null);
+export default function MetalSpread({ data: dataProp, embedded = false }) {
+  const controlled = dataProp !== undefined;   // parent supplies data when embedded
+  const [dataState, setDataState] = useState(null);
   const [err, setErr] = useState(null);
+  const data = controlled ? dataProp : dataState;
 
   useEffect(() => {
+    if (controlled) return;   // parent owns the fetch loop
     let alive = true;
     let timer = null;
     async function load() {
       try {
         const r = await api.metalsSpread();
-        if (alive) { setData(r); setErr(null); }
+        if (alive) { setDataState(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     function start() { if (!timer) timer = setInterval(load, 2000); }
@@ -35,7 +38,7 @@ export default function MetalSpread() {
     start();
     document.addEventListener("visibilitychange", onVis);
     return () => { alive = false; stop(); document.removeEventListener("visibilitychange", onVis); };
-  }, []);
+  }, [controlled]);
 
   // Mark the first row of each metal group so we can draw a separator + label once.
   const rows = useMemo(() => {
@@ -49,14 +52,16 @@ export default function MetalSpread() {
   }, [data]);
 
   return (
-    <div className="metal-page">
-      <div className="metal-head">
-        <h2>Metal — Calendar Spreads</h2>
-        <p className="metal-sub">
-          Watch-only. <strong>Difference</strong> = far-month Buy − near-month Sell.{" "}
-          <strong>% Spread</strong> = Difference ÷ near Sell × 100.
-        </p>
-      </div>
+    <div className={`metal-page${embedded ? " metal-embedded" : ""}`}>
+      {!embedded && (
+        <div className="metal-head">
+          <h2>Metal — Calendar Spreads</h2>
+        </div>
+      )}
+      <p className="metal-sub">
+        Watch-only. <strong>Difference</strong> = far-month Buy − near-month Sell.{" "}
+        <strong>% Spread</strong> = Difference ÷ near Sell × 100.
+      </p>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
 

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FrontRow, OtherMonthRow, SortableTh } from "./spread/SpreadRows.jsx";
 import { LadderModal, PositionsModal, HistoryModal } from "./spread/Modals.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
+import MetalSpread from "./MetalSpread.jsx";
+import { api } from "../api/client.js";
 
 function SkeletonRows({ count = 6 }) {
   return Array.from({ length: count }).map((_, i) => (
@@ -24,6 +26,26 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [openPositionsPair, setOpenPositionsPair] = useState(null);
   const [openHistoryPair, setOpenHistoryPair] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [metalData, setMetalData] = useState(null);
+
+  // Metal tab data — fetched here so the tab badge can show the count; paused when hidden.
+  useEffect(() => {
+    let alive = true;
+    let timer = null;
+    async function load() {
+      try {
+        const r = await api.metalsSpread();
+        if (alive) setMetalData(r);
+      } catch { /* keep last */ }
+    }
+    function start() { if (!timer) timer = setInterval(load, 2000); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function onVis() { if (document.hidden) stop(); else { load(); start(); } }
+    load();
+    start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; stop(); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
 
   function toggleGroup(label) {
     setExpandedGroups((g) => ({ ...g, [label]: !g[label] }));
@@ -132,35 +154,43 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <button className={`pair-tab ${tab === "calendar" ? "active" : ""}`} onClick={() => setTab("calendar")}>
             Calendar Spreads <span className="count">{calendarRows.length}</span>
           </button>
+          <button className={`pair-tab ${tab === "metals" ? "active" : ""}`} onClick={() => setTab("metals")}>
+            Metal <span className="count">{metalData?.count ?? 0}</span>
+          </button>
         </div>
-        <div className="header-controls">
-          <div className="search-container">
-            <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        {tab !== "metals" && (
+          <div className="header-controls">
+            <div className="search-container">
+              <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <select className="expiry-filter" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+              <option value="all">All expiries</option>
+              {expiryOptions.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
+            </select>
+            <div className="filter-tabs">
+              <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+                All <span className="count">{counts.all}</span>
+              </button>
+              <button className={`filter-tab ${filter === "armed" ? "active" : ""}`} onClick={() => setFilter("armed")}>
+                Armed <span className="count">{counts.armed}</span>
+              </button>
+              <button className={`filter-tab ${filter === "in_position" ? "active" : ""}`} onClick={() => setFilter("in_position")}>
+                In Position <span className="count">{counts.in_position}</span>
+              </button>
+              <button className={`filter-tab ${filter === "idle" ? "active" : ""}`} onClick={() => setFilter("idle")}>
+                Idle <span className="count">{counts.idle}</span>
+              </button>
+            </div>
+            {(search || filter !== "all" || expiryFilter !== "all" || sort.field) && (
+              <button className="btn btn-secondary btn-sm" onClick={resetFilters} title="Clear filters & sort">Reset</button>
+            )}
           </div>
-          <select className="expiry-filter" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
-            <option value="all">All expiries</option>
-            {expiryOptions.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
-          </select>
-          <div className="filter-tabs">
-            <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
-              All <span className="count">{counts.all}</span>
-            </button>
-            <button className={`filter-tab ${filter === "armed" ? "active" : ""}`} onClick={() => setFilter("armed")}>
-              Armed <span className="count">{counts.armed}</span>
-            </button>
-            <button className={`filter-tab ${filter === "in_position" ? "active" : ""}`} onClick={() => setFilter("in_position")}>
-              In Position <span className="count">{counts.in_position}</span>
-            </button>
-            <button className={`filter-tab ${filter === "idle" ? "active" : ""}`} onClick={() => setFilter("idle")}>
-              Idle <span className="count">{counts.idle}</span>
-            </button>
-          </div>
-          {(search || filter !== "all" || expiryFilter !== "all" || sort.field) && (
-            <button className="btn btn-secondary btn-sm" onClick={resetFilters} title="Clear filters & sort">Reset</button>
-          )}
-        </div>
+        )}
       </div>
 
+      {tab === "metals" && <MetalSpread data={metalData} embedded />}
+
+      {tab !== "metals" && (<>
       <div className="table-container">
         <table className="pair-table fixed">
           <colgroup>
@@ -242,6 +272,8 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {openRow && <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />}

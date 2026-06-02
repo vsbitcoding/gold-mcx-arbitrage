@@ -7,14 +7,13 @@ import Activity from "./components/Activity.jsx";
 import Calculator from "./components/Calculator.jsx";
 import Settings from "./components/Settings.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
-import MetalSpread from "./components/MetalSpread.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
-const VALID_PAGES = ["dashboard", "activity", "calculator", "options", "metals", "settings"];
+const VALID_PAGES = ["dashboard", "activity", "calculator", "options", "settings"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -216,7 +215,6 @@ function Dashboard() {
         {page === "activity" && <Activity />}
         {page === "calculator" && <Calculator />}
         {page === "options" && <OptionsSpread />}
-        {page === "metals" && <MetalSpread />}
         {page === "settings" && <Settings />}
       </div>
     </div>
