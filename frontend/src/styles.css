@@ -3817,14 +3817,23 @@ body.density-compact .metal-card-head { padding: 6px 12px; }
   box-shadow: 0 2px 7px rgba(0,0,0,.06);
 }
 .sc-card-head {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: center; align-items: center;
+  position: relative;
   padding: 7px 11px;
   background: var(--bg-surface-alt);
   border-bottom: 2px solid var(--border);
   border-radius: 11px 11px 0 0;
 }
-.sc-pair { font-size: 12.5px; font-weight: 800; color: var(--text-primary); letter-spacing: .2px; }
-.sc-count { font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+.sc-pair { font-size: 12.5px; font-weight: 800; letter-spacing: .3px; }
+.sc-count { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+
+/* Real-life metal colours: gold-family pairs = gold, silver-family = silver */
+.sc-card.sc-gold   { border-top: 3px solid #d4af37; }
+.sc-card.sc-silver { border-top: 3px solid #9ca3af; }
+.sc-gold   .sc-card-head { color: #9a7b0a; background: rgba(212,175,55,0.13); border-bottom-color: #d4af37; }
+.sc-silver .sc-card-head { color: #566472; background: rgba(148,163,184,0.18); border-bottom-color: #9ca3af; }
+body.dark .sc-gold   .sc-card-head { color: #e6c757; }
+body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 .sc-row {
   display: grid;

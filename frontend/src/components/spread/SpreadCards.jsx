@@ -23,17 +23,21 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
     return <div className="empty-state">No pairs match.</div>;
   }
 
+  // Show fuller cards first (6 expiries, then 5, …) so the grid looks even.
+  const ordered = [...groups].sort((a, b) => b.rows.length - a.rows.length);
+
   return (
     <div className="spread-cards">
-      {groups.map((g) => {
+      {ordered.map((g) => {
         // Front month first (chronological), regardless of any active sort.
         const rows = [...g.rows].sort((a, b) =>
           String(a.big_expiry || a.expiry_label || "").localeCompare(
             String(b.big_expiry || b.expiry_label || "")
           )
         );
+        const isSilver = String(g.label || "").toUpperCase().includes("SILVER");
         return (
-          <div className="sc-card" key={g.label}>
+          <div className={`sc-card ${isSilver ? "sc-silver" : "sc-gold"}`} key={g.label}>
             <div className="sc-card-head">
               <span className="sc-pair">{g.label}</span>
               <span className="sc-count">{rows.length} exp</span>

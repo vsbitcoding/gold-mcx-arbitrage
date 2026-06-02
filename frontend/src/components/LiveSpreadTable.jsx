@@ -151,17 +151,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     <div className="sessions-container">
       <div className="sessions-header">
         <h2>Live Spread Monitor</h2>
-        <div className="pair-tabs">
-          <button className={`pair-tab ${tab === "cross" ? "active" : ""}`} onClick={() => setTab("cross")}>
-            Cross Pairs <span className="count">{crossRows.length}</span>
-          </button>
-          <button className={`pair-tab ${tab === "calendar" ? "active" : ""}`} onClick={() => setTab("calendar")}>
-            Calendar Spreads <span className="count">{calendarRows.length}</span>
-          </button>
-          <button className={`pair-tab ${tab === "metals" ? "active" : ""}`} onClick={() => setTab("metals")}>
-            Metal <span className="count">{metalData?.count ?? 0}</span>
-          </button>
-        </div>
         {tab !== "metals" && (
           <div className="header-controls">
             <div className="search-container">
@@ -190,6 +179,17 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             )}
           </div>
         )}
+        <div className="pair-tabs">
+          <button className={`pair-tab ${tab === "cross" ? "active" : ""}`} onClick={() => setTab("cross")}>
+            Cross Pairs <span className="count">{crossRows.length}</span>
+          </button>
+          <button className={`pair-tab ${tab === "calendar" ? "active" : ""}`} onClick={() => setTab("calendar")}>
+            Calendar Spreads <span className="count">{calendarRows.length}</span>
+          </button>
+          <button className={`pair-tab ${tab === "metals" ? "active" : ""}`} onClick={() => setTab("metals")}>
+            Metal <span className="count">{metalData?.count ?? 0}</span>
+          </button>
+        </div>
       </div>
 
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
