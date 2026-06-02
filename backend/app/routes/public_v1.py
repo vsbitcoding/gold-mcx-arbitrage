@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, options_service
+from app.services import extra_instruments, metals_service, options_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -232,6 +232,25 @@ def public_options_spread(_key: str = Depends(require_api_key)):
         "strike_pairing": "sensex_strike = round_to_100(sensex_spot − (nifty_spot − nifty_strike) × 3.2)",
         "status": options_service.status(),
         **options_service.get_spread_table(),
+    }
+
+
+@router.get("/metals-spread")
+def public_metals_spread(_key: str = Depends(require_api_key)):
+    """Live base-metal calendar-spread table (watch-only).
+
+    Per row (adjacent month pair):
+        far_price  = far month  Buy Price  (bid)
+        near_price = near month Sell Price (ask)
+        difference = far_price − near_price
+        pct        = difference ÷ near_price × 100
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "formula": "difference = far.buy − near.sell ; pct = difference ÷ near.sell × 100",
+        "status": metals_service.status(),
+        **metals_service.get_table(),
     }
 
 

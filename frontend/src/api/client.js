@@ -103,6 +103,8 @@ export const api = {
   calcQuotes: () => request("/api/calculator/quotes"),
   // Options spread (Nifty / Sensex PE)
   optionsSpread: () => request("/api/options/spread"),
+  // Base-metal calendar spreads (Metal tab)
+  metalsSpread: () => request("/api/metals/spread"),
   // Account config
   getAccount: () => request("/api/config/account"),
   updateAccount: (body) => request("/api/config/account", {

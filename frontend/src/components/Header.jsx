@@ -91,6 +91,12 @@ export default function Header({
             Nifty / Sensex
           </button>
           <button
+            className={`nav-tab ${page === "metals" ? "active" : ""}`}
+            onClick={() => onNavigate("metals")}
+          >
+            Metal
+          </button>
+          <button
             className={`nav-tab ${page === "settings" ? "active" : ""}`}
             onClick={() => onNavigate("settings")}
           >

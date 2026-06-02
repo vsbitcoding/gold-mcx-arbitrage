@@ -196,6 +196,17 @@ def _run_real_feed_thread() -> None:
             for sid, m in options_meta.items():
                 subs[sid] = m
 
+            # Resolve + add base-metal calendar legs (Copper/Aluminium/Zinc/Nickel/Lead +
+            # minis) — watch-only 'Metal' tab. These are MCX FUTCOM, so they flow through
+            # the default MCX-Full path below (NOT added to non_mcx_meta).
+            from app.services import metals_service
+            try:
+                metals_service.refresh()
+            except Exception as e:
+                log.warning("metals_service.refresh() failed: %s", e)
+            for sid, m in metals_service.get_subscription_meta().items():
+                subs[sid] = m
+
             _set_state(instruments=subs)
 
             # Build instrument tuples: (exchange, security_id, request_code).
