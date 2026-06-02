@@ -61,13 +61,16 @@ WEEK_COUNT = 3
 DISPLAY_STRIKES = 10
 DISPLAY_BELOW = 9   # 9 strikes below ATM (OTM puts) + ATM itself = 10
 
-# Subscription buffer (subscribe wider than display so dynamic ATM works
-# without re-subscribing every time spot crosses a strike).
-SUB_ABOVE = 5    # 5 strikes above ATM (cushion for upward spot move)
-# Nifty side: 9 displayed OTM + 6 cushion = 15. Sensex side: 9 paired strikes
-# can drop ~1450 below Sensex ATM (9 × 50 × 3.2 ÷ 100), bump to 20 for safety.
-SUB_BELOW_NIFTY = 15
-SUB_BELOW_SENSEX = 20
+# Subscription buffer (subscribe wider than display so the dynamic ATM stays
+# covered all day WITHOUT re-subscribing mid-session — Dhan rate-limits hard on
+# reconnects, so we deliberately use ONE wide static window per day instead).
+# The anchor is captured at the daily ~09:17 IST refresh; the window must cover
+# a full day's index move in BOTH directions from that open level:
+#   SUB_ABOVE = up-move room   (30 strikes → Sensex ~3000 pts / Nifty ~1500 pts)
+#   SUB_BELOW = down-move room + the 9 displayed OTM puts
+SUB_ABOVE = 30
+SUB_BELOW_NIFTY = 35
+SUB_BELOW_SENSEX = 35
 
 
 # ────────────────────────────────────────────────────────────────────────
