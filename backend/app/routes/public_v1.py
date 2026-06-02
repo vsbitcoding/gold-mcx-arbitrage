@@ -33,6 +33,8 @@ def _spread_dict(s: dict) -> dict:
         "expiry": s.get("expiry_label", ""),                 # "29 May 2026" / "Far ... − Near ..."
         "decrease": s["decrease_spread"],                    # null if no live quote
         "increase": s["increase_spread"],                    # null if no live quote
+        "decrease_pct": s.get("decrease_pct"),               # decrease ÷ near price × 100 (shown on Calendar)
+        "increase_pct": s.get("increase_pct"),
     }
 
 

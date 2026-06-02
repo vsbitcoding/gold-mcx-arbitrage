@@ -41,6 +41,17 @@ def compute_pair(pair: dict) -> dict:
             _rate(big_ask, pair["big"]) - _rate(small_bid, pair["small"]), 4
         )
 
+    # Spread as % of the near/small leg's price (multiplier-correct; same value
+    # the dashboard shows on Calendar). decrease_pct = decrease ÷ (small ask × mult).
+    decrease_pct = None
+    increase_pct = None
+    small_ask_val = _rate(small_ask, pair["small"]) if small_ask else 0
+    small_bid_val = _rate(small_bid, pair["small"]) if small_bid else 0
+    if decrease_spread is not None and small_ask_val:
+        decrease_pct = round(decrease_spread / small_ask_val * 100, 2)
+    if increase_spread is not None and small_bid_val:
+        increase_pct = round(increase_spread / small_bid_val * 100, 2)
+
     return {
         "name": pair["name"],
         "type": pair["type"],
@@ -65,6 +76,8 @@ def compute_pair(pair: dict) -> dict:
         "small_ask": small_ask,
         "decrease_spread": decrease_spread,
         "increase_spread": increase_spread,
+        "decrease_pct": decrease_pct,
+        "increase_pct": increase_pct,
     }
 
 
