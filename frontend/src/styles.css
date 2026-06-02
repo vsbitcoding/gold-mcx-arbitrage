@@ -3718,9 +3718,30 @@ td.ldr-actions .save-btn {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.6px;
+  text-align: center;                 /* centered metal name */
   color: var(--text-primary);
   border-bottom: 2px solid var(--border);
 }
+
+/* Per-metal real-life colour theme — top stripe + tinted header + name colour */
+.mc-copper    { border-top: 3px solid #b87333; }
+.mc-aluminium { border-top: 3px solid #9aa7b4; }
+.mc-zinc      { border-top: 3px solid #5e83a8; }
+.mc-nickel    { border-top: 3px solid #9a8c5a; }
+.mc-lead      { border-top: 3px solid #5a6472; }
+
+.mc-copper    .metal-card-head { color: #a85d1f; background: rgba(184,115,51,0.14); border-bottom-color: #b87333; }
+.mc-aluminium .metal-card-head { color: #5b7186; background: rgba(154,167,180,0.16); border-bottom-color: #9aa7b4; }
+.mc-zinc      .metal-card-head { color: #3f6a96; background: rgba(94,131,168,0.15); border-bottom-color: #5e83a8; }
+.mc-nickel    .metal-card-head { color: #6f7a4e; background: rgba(154,140,90,0.16); border-bottom-color: #9a8c5a; }
+.mc-lead      .metal-card-head { color: #475569; background: rgba(90,100,114,0.16); border-bottom-color: #5a6472; }
+
+/* Dark mode — lighter metal name colours for contrast (tints + stripe carry over) */
+body.dark .mc-copper    .metal-card-head { color: #e0a76a; }
+body.dark .mc-aluminium .metal-card-head { color: #b9c6d4; }
+body.dark .mc-zinc      .metal-card-head { color: #8fb4d8; }
+body.dark .mc-nickel    .metal-card-head { color: #cabf8c; }
+body.dark .mc-lead      .metal-card-head { color: #9fb0c2; }
 .metal-card-body { padding: 2px 12px 4px; }
 
 .metal-row {

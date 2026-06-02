@@ -12,6 +12,17 @@ function fmtSigned(v, decimals) {
   return (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), decimals);
 }
 
+// Real-life metal colour theme per family (minis share their parent's colour).
+function metalColorKey(symbol) {
+  const s = (symbol || "").toUpperCase();
+  if (s.startsWith("COPPER")) return "copper";
+  if (s.startsWith("ALUMIN")) return "aluminium";  // ALUMINIUM + ALUMINI
+  if (s.startsWith("ZINC")) return "zinc";          // ZINC + ZINCMINI
+  if (s.startsWith("NICKEL")) return "nickel";
+  if (s.startsWith("LEAD")) return "lead";          // LEAD + LEADMINI
+  return "default";
+}
+
 export default function MetalSpread({ data: dataProp, embedded = false }) {
   const controlled = dataProp !== undefined;   // parent supplies data when embedded
   const [dataState, setDataState] = useState(null);
@@ -48,7 +59,9 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
       if (!byMetal.has(r.metal)) byMetal.set(r.metal, []);
       byMetal.get(r.metal).push(r);
     }
-    return Array.from(byMetal, ([metal, rows]) => ({ metal, rows }));
+    return Array.from(byMetal, ([metal, rows]) => ({
+      metal, rows, color: metalColorKey(rows[0] && rows[0].symbol),
+    }));
   }, [data]);
 
   return (
@@ -68,7 +81,7 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
       ) : (
         <div className="metal-cards">
           {cards.map((c) => (
-            <div className="metal-card" key={c.metal}>
+            <div className={`metal-card mc-${c.color}`} key={c.metal}>
               <div className="metal-card-head">{c.metal}</div>
               <div className="metal-card-body">
                 {c.rows.map((r, i) => (
