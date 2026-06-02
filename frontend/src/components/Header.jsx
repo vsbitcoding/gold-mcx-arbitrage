@@ -104,10 +104,6 @@ export default function Header({
           <span className="health-label">{label}</span>
           {extra && <span className="health-meta">{extra}</span>}
         </span>
-        <button className="density-toggle" onClick={onToggleDensity} title="Toggle table density (Ctrl+Shift+D)">
-          <span className="icon">{density === "compact" ? "⊟" : "▤"}</span>
-          {density === "compact" ? "Compact" : "Comfort"}
-        </button>
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
