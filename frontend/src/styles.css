@@ -3825,7 +3825,7 @@ body.density-compact .metal-card-head { padding: 6px 12px; }
   border-radius: 11px 11px 0 0;
 }
 .sc-pair { font-size: 12.5px; font-weight: 800; letter-spacing: .3px; }
-.sc-count { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 9.5px; color: var(--text-muted); font-weight: 700; }
+.sc-count { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 11.5px; color: var(--text-secondary); font-weight: 700; }
 
 /* Real-life metal colours: gold-family pairs = gold, silver-family = silver */
 .sc-card.sc-gold   { border-top: 3px solid #d4af37; }
