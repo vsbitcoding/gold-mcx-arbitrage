@@ -69,10 +69,6 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
       {!embedded && (
         <div className="metal-head"><h2>Metal — Calendar Spreads</h2></div>
       )}
-      <p className="metal-sub">
-        Watch-only · <strong>Difference</strong> = far-month Buy − near-month Sell ·{" "}
-        <strong>% Spread</strong> = Difference ÷ near Sell × 100
-      </p>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
 
