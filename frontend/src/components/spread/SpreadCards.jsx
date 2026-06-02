@@ -92,6 +92,7 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
               <span className="sc-c">▲ Inc</span>
               {isCalendar && <span className="sc-c">%</span>}
               <span />
+              {isCalendar && <span className="sc-tail" />}
             </div>
             {rows.map((row, i) => (
               <div className={`sc-row status-${row.status}`} key={row.name}>
@@ -137,6 +138,7 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     </div>
                   )}
                 </span>
+                {isCalendar && <span className="sc-tail" />}
               </div>
             ))}
           </div>

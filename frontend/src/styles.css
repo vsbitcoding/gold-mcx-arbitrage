@@ -3845,7 +3845,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* Calendar: longer expiry + a separate Decrease-% column (Expiry | Dec | % | Inc | gear) */
 /* Calendar: expiry is the FLEXIBLE column (gets all leftover width → full near−far
    date always shows); Dec/Inc/% are compact + fixed. Columns: Expiry | Dec | Inc | % | gear */
-.sc-cal .sc-row { grid-template-columns: 1fr 70px 70px 48px 20px; }
+/* Expiry wide enough for the full date; Dec/Inc/% tight together; leftover width
+   trails to the RIGHT (sc-tail 1fr) so there's no gap between columns. */
+.sc-cal .sc-row { grid-template-columns: 178px 70px 70px 52px 22px 1fr; }
 .sc-cal .sc-exp { font-size: 11px; }
 .sc-cal .sc-exp-txt { overflow: visible; }   /* never clip the date */
 .spread-cards.sc-cal { grid-template-columns: repeat(3, minmax(0, 1fr)); }  /* 3 per row only on wide screens (see media below) */
@@ -3892,4 +3894,11 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* 3-per-row only on wide screens so the expiry column stays wide enough for the
    full date; otherwise 2, then 1. */
 @media (max-width: 1366px) { .spread-cards.sc-cal { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-@media (max-width: 720px)  { .spread-cards.sc-cal { grid-template-columns: 1fr; gap: 10px; } }
+@media (max-width: 720px)  {
+  .spread-cards.sc-cal { grid-template-columns: 1fr; gap: 10px; }
+  /* phone: expiry flexes, drop the trailing spacer, allow the date to wrap */
+  .sc-cal .sc-row { grid-template-columns: 1fr 56px 56px 44px 20px; }
+  .sc-cal .sc-tail { display: none; }
+  .sc-cal .sc-exp { white-space: normal; }
+  .sc-cal .sc-exp-txt { white-space: normal; }
+}
