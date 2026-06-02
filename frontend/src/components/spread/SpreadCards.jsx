@@ -20,6 +20,30 @@ function fmtPct(v) {
   return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
 }
 
+// Client-specified card order: all gold pairs (Petal → Guinea → Ten → Mini/Gold last),
+// then silver (smallest unit first).
+const CROSS_ORDER = [
+  "PETAL / GUINEA", "PETAL / TEN", "PETAL / MINI",
+  "GUINEA / TEN", "GUINEA / MINI", "TEN / MINI", "MINI / GOLD",
+  "SILVER 100 / SILVER MIC", "SILVER 100 / SILVER MINI",
+  "SILVER MIC / SILVER MINI", "SILVER MINI / SILVER",
+];
+// Calendar (single-instrument groups): gold by size, then silver by size.
+const CAL_ORDER = ["PETAL", "GUINEA", "TEN", "MINI", "GOLD", "SILVER 100", "SILVER MIC", "SILVER MINI", "SILVER"];
+
+function rankOf(label, order) {
+  const i = order.indexOf(String(label || "").toUpperCase().trim());
+  return i === -1 ? 999 : i;
+}
+
+// Calendar expiry: show near month first, far second (client) e.g. "5 Jun 2026 − 3 Jul 2026".
+function fmtCalExpiry(label) {
+  const clean = String(label || "—").replace(/\b(Far|Near)\s+/g, "");
+  const parts = clean.split(/\s[−–-]\s/);
+  if (parts.length === 2) return `${parts[1].trim()} − ${parts[0].trim()}`;
+  return clean;
+}
+
 /**
  * Card view of cross / calendar pairs. One card per pair-group, all expiries
  * shown (spreads only). A gear icon per expiry opens a small menu with
@@ -41,10 +65,10 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
     return <div className="empty-state">No pairs match.</div>;
   }
 
-  // Show fuller cards first (6 expiries, then 5, …) so the grid looks even.
-  const ordered = [...groups].sort((a, b) => b.rows.length - a.rows.length);
-  // Calendar expiries are long ("31 Jul 2026 − 30 Jun 2026") → wider expiry column.
   const isCalendar = groups[0]?.rows?.[0]?.type === "calendar";
+  // Client-specified card order (gold family first, then silver).
+  const order = isCalendar ? CAL_ORDER : CROSS_ORDER;
+  const ordered = [...groups].sort((a, b) => rankOf(a.label, order) - rankOf(b.label, order));
 
   return (
     <div className={`spread-cards ${isCalendar ? "sc-cal" : ""}`}>
@@ -65,6 +89,7 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
             <div className="sc-row sc-colhead">
               <span>Expiry</span>
               <span className="sc-c">▼ Dec</span>
+              {isCalendar && <span className="sc-c">%</span>}
               <span className="sc-c">▲ Inc</span>
               <span />
             </div>
@@ -75,7 +100,7 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     className={`sc-dot sd-${row.status}`}
                     title={STATUS_LABEL[row.status] || row.status}
                   />
-                  <span className="sc-exp-txt">{(row.expiry_label || "—").replace(/\b(Far|Near)\s+/g, "")}</span>
+                  <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
                   {i === 0 && <span className="sc-front" title="Front month">★</span>}
                   {row.open_positions_count > 0 && (
                     <span
@@ -86,18 +111,13 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     </span>
                   )}
                 </span>
-                <div className="sc-spread">
-                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
-                  {isCalendar && calcPct(row.decrease_spread, row.small_ask, row.small) != null && (
-                    <span className="sc-pct dec">{fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small))}</span>
-                  )}
-                </div>
-                <div className="sc-spread">
-                  <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
-                  {isCalendar && calcPct(row.increase_spread, row.small_bid, row.small) != null && (
-                    <span className="sc-pct inc">{fmtPct(calcPct(row.increase_spread, row.small_bid, row.small))}</span>
-                  )}
-                </div>
+                <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
+                {isCalendar && (
+                  <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
+                    {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
+                  </span>
+                )}
+                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
                 <span className="sc-gear-wrap">
                   <button
                     className="sc-gear"
