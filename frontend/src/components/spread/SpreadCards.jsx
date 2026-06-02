@@ -89,8 +89,8 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
             <div className="sc-row sc-colhead">
               <span>Expiry</span>
               <span className="sc-c">▼ Dec</span>
-              {isCalendar && <span className="sc-c">%</span>}
               <span className="sc-c">▲ Inc</span>
+              {isCalendar && <span className="sc-c">%</span>}
               <span />
             </div>
             {rows.map((row, i) => (
@@ -112,12 +112,12 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                   )}
                 </span>
                 <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
+                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
                 {isCalendar && (
                   <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
                     {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
                   </span>
                 )}
-                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
                 <span className="sc-gear-wrap">
                   <button
                     className="sc-gear"
