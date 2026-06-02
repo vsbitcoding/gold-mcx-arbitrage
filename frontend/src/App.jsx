@@ -8,7 +8,7 @@ import Settings from "./components/Settings.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
-import { ConfirmProvider } from "./components/ConfirmDialog.jsx";
+import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
@@ -26,6 +26,7 @@ function getStoredPage() {
 }
 
 function Dashboard() {
+  const confirm = useConfirm();
   const [pairs, setPairs] = useState([]);
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
@@ -173,7 +174,14 @@ function Dashboard() {
     }
   }, [wsState]);
 
-  function logout() {
+  async function logout() {
+    const ok = await confirm({
+      title: "Log out?",
+      message: "You'll need to sign in again to access the dashboard.",
+      confirmText: "Logout",
+      danger: true,
+    });
+    if (!ok) return;
     clearToken();
     window.location.reload();
   }
