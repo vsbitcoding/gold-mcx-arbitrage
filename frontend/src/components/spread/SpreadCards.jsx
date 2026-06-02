@@ -25,9 +25,11 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
 
   // Show fuller cards first (6 expiries, then 5, …) so the grid looks even.
   const ordered = [...groups].sort((a, b) => b.rows.length - a.rows.length);
+  // Calendar expiries are long ("31 Jul 2026 − 30 Jun 2026") → wider expiry column.
+  const isCalendar = groups[0]?.rows?.[0]?.type === "calendar";
 
   return (
-    <div className="spread-cards">
+    <div className={`spread-cards ${isCalendar ? "sc-cal" : ""}`}>
       {ordered.map((g) => {
         // Front month first (chronological), regardless of any active sort.
         const rows = [...g.rows].sort((a, b) =>
@@ -55,7 +57,7 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     className={`sc-dot sd-${row.status}`}
                     title={STATUS_LABEL[row.status] || row.status}
                   />
-                  <span className="sc-exp-txt">{row.expiry_label || "—"}</span>
+                  <span className="sc-exp-txt">{(row.expiry_label || "—").replace(/\b(Far|Near)\s+/g, "")}</span>
                   {i === 0 && <span className="sc-front" title="Front month">★</span>}
                   {row.open_positions_count > 0 && (
                     <span

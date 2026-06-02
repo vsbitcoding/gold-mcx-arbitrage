@@ -151,8 +151,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     <div className="sessions-container">
       <div className="sessions-header">
         <h2>Live Spread Monitor</h2>
-        {tab !== "metals" && (
-          <div className="header-controls">
+        <div className="header-controls" aria-hidden={tab === "metals"} style={{ visibility: tab === "metals" ? "hidden" : "visible" }}>
             <div className="search-container">
               <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
@@ -177,8 +176,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
             {(search || filter !== "all" || expiryFilter !== "all" || sort.field) && (
               <button className="btn btn-secondary btn-sm" onClick={resetFilters} title="Clear filters & sort">Reset</button>
             )}
-          </div>
-        )}
+        </div>
         <div className="pair-tabs">
           <button className={`pair-tab ${tab === "cross" ? "active" : ""}`} onClick={() => setTab("cross")}>
             Cross Pairs <span className="count">{crossRows.length}</span>

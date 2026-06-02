@@ -3837,11 +3837,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 .sc-row {
   display: grid;
-  grid-template-columns: 1fr 66px 66px 26px;
-  align-items: center; gap: 5px;
+  grid-template-columns: 100px 1fr 1fr 24px;   /* fixed expiry → rows align; Dec/Inc share rest, centered */
+  align-items: center; gap: 6px;
   padding: 5px 11px;
   border-bottom: 1px dashed var(--border-light);
 }
+.sc-cal .sc-row { grid-template-columns: 166px 1fr 1fr 24px; }  /* calendar expiry is longer */
 .sc-row:last-child { border-bottom: none; }
 .sc-colhead { background: var(--bg-surface); border-bottom: 1px solid var(--border); }
 .sc-colhead span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
@@ -3857,7 +3858,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sc-open { font-size: 9px; font-weight: 800; background: var(--accent); color: #fff; border-radius: 100px; padding: 1px 5px; flex: none; }
 .sc-open.orphan { background: #f59e0b; }
 
-.sc-dec, .sc-inc { text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12.5px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 0; }
+.sc-dec, .sc-inc { justify-self: center; min-width: 64px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12.5px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 8px; }
 .sc-dec { color: var(--red); background: rgba(220,38,38,.07); }
 .sc-inc { color: var(--green); background: rgba(22,163,74,.07); }
 
