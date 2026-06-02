@@ -73,12 +73,6 @@ export default function Header({
             Dashboard
           </button>
           <button
-            className={`nav-tab ${page === "activity" ? "active" : ""}`}
-            onClick={() => onNavigate("activity")}
-          >
-            Activity
-          </button>
-          <button
             className={`nav-tab ${page === "calculator" ? "active" : ""}`}
             onClick={() => onNavigate("calculator")}
           >
@@ -95,6 +89,12 @@ export default function Header({
             onClick={() => onNavigate("settings")}
           >
             Settings
+          </button>
+          <button
+            className={`nav-tab ${page === "activity" ? "active" : ""}`}
+            onClick={() => onNavigate("activity")}
+          >
+            Activity
           </button>
         </nav>
       </div>
