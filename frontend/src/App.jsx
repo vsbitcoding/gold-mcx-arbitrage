@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
-import StatCards from "./components/StatCards.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Activity from "./components/Activity.jsx";
 import Calculator from "./components/Calculator.jsx";
@@ -207,10 +206,7 @@ function Dashboard() {
       />
       <div className="container">
         {page === "dashboard" && (
-          <>
-            <StatCards pairs={pairs} positions={positions} history={history} account={account} />
-            <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
-          </>
+          <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
         )}
         {page === "activity" && <Activity />}
         {page === "calculator" && <Calculator />}

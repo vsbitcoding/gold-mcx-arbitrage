@@ -19,7 +19,11 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [expiryFilter, setExpiryFilter] = useState("all");
-  const [tab, setTab] = useState("cross");
+  const [tab, setTab] = useState(() => {
+    const t = localStorage.getItem("arbi_spread_tab");
+    return ["cross", "calendar", "metals"].includes(t) ? t : "cross";
+  });
+  useEffect(() => { localStorage.setItem("arbi_spread_tab", tab); }, [tab]);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [page, setPage] = useState(1);
   const [openPair, setOpenPair] = useState(null);
