@@ -62,6 +62,7 @@ export default function Header({
     <div className="header">
       <div className="header-left">
         <div className="brand">
+          <img src="/favicon.svg" className="brand-logo" alt="Arbi" width="26" height="26" />
           <span className="accent">Arbi</span>
           <span>Dash</span>
         </div>

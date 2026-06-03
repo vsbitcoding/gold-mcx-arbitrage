@@ -106,6 +106,7 @@ body {
   gap: 10px;
 }
 .brand .accent { color: var(--accent); }
+.brand-logo { width: 26px; height: 26px; flex: none; border-radius: 6px; display: block; }
 .dot {
   width: 8px;
   height: 8px;
