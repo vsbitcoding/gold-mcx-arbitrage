@@ -105,6 +105,10 @@ export const api = {
   optionsSpread: () => request("/api/options/spread"),
   // Base-metal calendar spreads (Metal tab)
   metalsSpread: () => request("/api/metals/spread"),
+  // Other-commodity calendar spreads (Crude / NatGas / Electricity)
+  otherCommSpread: () => request("/api/othercomm/spread"),
+  // Live Buyer/Seller price table (gold & silver active contracts)
+  priceTable: () => request("/api/price/table"),
   // Account config
   getAccount: () => request("/api/config/account"),
   updateAccount: (body) => request("/api/config/account", {

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, metals_service, options_service
+from app.services import extra_instruments, metals_service, options_service, othercomm_service, price_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -253,6 +253,36 @@ def public_metals_spread(_key: str = Depends(require_api_key)):
         "formula": "difference = far.buy − near.sell ; pct = difference ÷ near.sell × 100",
         "status": metals_service.status(),
         **metals_service.get_table(),
+    }
+
+
+@router.get("/othercomm-spread")
+def public_othercomm_spread(_key: str = Depends(require_api_key)):
+    """Live other-commodity calendar-spread table (Crude / NatGas / Electricity).
+
+    Per row (adjacent month pair):
+        far_price  = far month  Buy Price  (bid)
+        near_price = near month Sell Price (ask)
+        difference = far_price − near_price
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "formula": "difference = far.buy − near.sell",
+        "status": othercomm_service.status(),
+        **othercomm_service.get_table(),
+    }
+
+
+@router.get("/price-table")
+def public_price_table(_key: str = Depends(require_api_key)):
+    """Live Buyer (bid) / Seller (ask) price for every active contract of the
+    gold & silver instruments, grouped per instrument in display sequence."""
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "status": price_service.status(),
+        **price_service.get_table(),
     }
 
 

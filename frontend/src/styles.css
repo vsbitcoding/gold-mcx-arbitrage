@@ -3803,6 +3803,61 @@ body.density-compact .metal-row { padding: 3px 0; }
 body.density-compact .mr-diff-val { font-size: 15px; }
 body.density-compact .metal-card-head { padding: 6px 12px; }
 
+/* ===== Other Commodity tab — same cards as Metal, minus the % column ===== */
+.mc-nopct .metal-row { grid-template-columns: 1fr auto; }
+.mc-nopct .mr-diff { align-items: flex-end; }
+@media (max-width: 900px) { .mc-nopct .metal-row { grid-template-columns: 1fr auto; } }
+@media (max-width: 380px) { .mc-nopct .metal-row { grid-template-columns: 1fr auto; } }
+
+/* Energy / power family colours */
+.mc-crude              { border-top: 3px solid #c2410c; }
+.mc-natgas             { border-top: 3px solid #2563eb; }
+.mc-elec               { border-top: 3px solid #d4a017; }
+.mc-crude  .metal-card-head { color: #b8430f; background: rgba(194,65,12,0.13); border-bottom-color: #c2410c; }
+.mc-natgas .metal-card-head { color: #2456c8; background: rgba(37,99,235,0.13); border-bottom-color: #2563eb; }
+.mc-elec   .metal-card-head { color: #9a7b12; background: rgba(212,160,23,0.15); border-bottom-color: #d4a017; }
+body.dark .mc-crude  .metal-card-head { color: #f4925e; }
+body.dark .mc-natgas .metal-card-head { color: #7da9f5; }
+body.dark .mc-elec   .metal-card-head { color: #e6c356; }
+
+/* ===== Price tab — Buyer / Seller for every active contract ===== */
+.price-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--border-light);
+}
+.price-row:last-child { border-bottom: none; }
+.price-head-row {
+  padding: 4px 0 5px;
+  border-bottom: 1px solid var(--border);
+}
+.price-head-row .pr-month,
+.price-head-row .pr-buy,
+.price-head-row .pr-sell {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.pr-month {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.pr-buy, .pr-sell {
+  text-align: right;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.pr-buy  { color: var(--green); }
+.pr-sell { color: var(--red); }
+.price-head-row .pr-buy, .price-head-row .pr-sell { text-align: right; }
+@media (max-width: 900px) {
+  .price-row { grid-template-columns: 1.2fr 1fr 1fr; gap: 5px; }
+  .pr-month { font-size: 11px; }
+  .pr-buy, .pr-sell { font-size: 13px; }
+}
+
 /* ===== Cross / Calendar pairs as cards (4 per row, all expiries, gear menu) ===== */
 .spread-cards {
   display: grid;

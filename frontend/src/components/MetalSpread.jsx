@@ -23,7 +23,22 @@ function metalColorKey(symbol) {
   return "default";
 }
 
-export default function MetalSpread({ data: dataProp, embedded = false }) {
+// Colour theme for the Other-Commodity families.
+export function otherCommColorKey(symbol) {
+  const s = (symbol || "").toUpperCase();
+  if (s.startsWith("CRUDE")) return "crude";        // CRUDEOIL + CRUDEOILM
+  if (s.startsWith("NAT")) return "natgas";         // NATURALGAS + NATGASMINI
+  if (s.startsWith("ELEC")) return "elec";          // ELECDMBL
+  return "default";
+}
+
+export default function MetalSpread({
+  data: dataProp,
+  embedded = false,
+  showPct = true,
+  colorFn = metalColorKey,
+  loadingText = "Loading metal data…",
+}) {
   const controlled = dataProp !== undefined;   // parent supplies data when embedded
   const [dataState, setDataState] = useState(null);
   const [err, setErr] = useState(null);
@@ -60,9 +75,9 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
       byMetal.get(r.metal).push(r);
     }
     return Array.from(byMetal, ([metal, rows]) => ({
-      metal, rows, color: metalColorKey(rows[0] && rows[0].symbol),
+      metal, rows, color: colorFn(rows[0] && rows[0].symbol),
     }));
-  }, [data]);
+  }, [data, colorFn]);
 
   return (
     <div className={`metal-page${embedded ? " metal-embedded" : ""}`}>
@@ -73,11 +88,11 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
       {err && <div className="settings-banner danger">⚠ {err}</div>}
 
       {!cards.length ? (
-        <div className="empty-state">Loading metal data…</div>
+        <div className="empty-state">{loadingText}</div>
       ) : (
         <div className="metal-cards">
           {cards.map((c) => (
-            <div className={`metal-card mc-${c.color}`} key={c.metal}>
+            <div className={`metal-card mc-${c.color}${showPct ? "" : " mc-nopct"}`} key={c.metal}>
               <div className="metal-card-head">{c.metal}</div>
               <div className="metal-card-body">
                 {c.rows.map((r, i) => (
@@ -93,9 +108,11 @@ export default function MetalSpread({ data: dataProp, embedded = false }) {
                         </span>
                       )}
                     </div>
-                    <div className={`mr-pct ${signCls(r.pct)}`}>
-                      {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
-                    </div>
+                    {showPct && (
+                      <div className={`mr-pct ${signCls(r.pct)}`}>
+                        {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

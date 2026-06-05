@@ -2,8 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import SpreadCards from "./spread/SpreadCards.jsx";
 import { LadderModal, PositionsModal, HistoryModal } from "./spread/Modals.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
-import MetalSpread from "./MetalSpread.jsx";
+import MetalSpread, { otherCommColorKey } from "./MetalSpread.jsx";
+import PriceTable from "./PriceTable.jsx";
 import { api } from "../api/client.js";
+
+// Tabs that show their own watch-only cards (no search/filter/pagination).
+const WATCH_TABS = ["metals", "price", "othercomm"];
 
 function SkeletonRows({ count = 6 }) {
   return Array.from({ length: count }).map((_, i) => (
@@ -21,7 +25,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [expiryFilter, setExpiryFilter] = useState("all");
   const [tab, setTab] = useState(() => {
     const t = localStorage.getItem("arbi_spread_tab");
-    return ["cross", "calendar", "metals"].includes(t) ? t : "cross";
+    return ["cross", "calendar", "metals", "price", "othercomm"].includes(t) ? t : "cross";
   });
   useEffect(() => { localStorage.setItem("arbi_spread_tab", tab); }, [tab]);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
@@ -31,15 +35,25 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const [openHistoryPair, setOpenHistoryPair] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [metalData, setMetalData] = useState(null);
+  const [otherCommData, setOtherCommData] = useState(null);
+  const [priceData, setPriceData] = useState(null);
 
-  // Metal tab data — fetched here so the tab badge can show the count; paused when hidden.
+  // Watch-only tab data (Metal / Other Commodity / Price) — fetched here so the
+  // tab badges can show counts; all paused together when the page is hidden.
   useEffect(() => {
     let alive = true;
     let timer = null;
     async function load() {
       try {
-        const r = await api.metalsSpread();
-        if (alive) setMetalData(r);
+        const [m, o, p] = await Promise.all([
+          api.metalsSpread().catch(() => null),
+          api.otherCommSpread().catch(() => null),
+          api.priceTable().catch(() => null),
+        ]);
+        if (!alive) return;
+        if (m) setMetalData(m);
+        if (o) setOtherCommData(o);
+        if (p) setPriceData(p);
       } catch { /* keep last */ }
     }
     function start() { if (!timer) timer = setInterval(load, 2000); }
@@ -151,7 +165,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     <div className="sessions-container">
       <div className="sessions-header">
         <h2>Live Spread Monitor</h2>
-        <div className="header-controls" aria-hidden={tab === "metals"} style={{ visibility: tab === "metals" ? "hidden" : "visible" }}>
+        <div className="header-controls" aria-hidden={WATCH_TABS.includes(tab)} style={{ visibility: WATCH_TABS.includes(tab) ? "hidden" : "visible" }}>
             <div className="search-container">
               <input placeholder="Search pair / month..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
@@ -187,12 +201,28 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <button className={`pair-tab ${tab === "metals" ? "active" : ""}`} onClick={() => setTab("metals")}>
             Metal <span className="count">{metalData?.count ?? 0}</span>
           </button>
+          <button className={`pair-tab ${tab === "price" ? "active" : ""}`} onClick={() => setTab("price")}>
+            Price <span className="count">{priceData?.count ?? 0}</span>
+          </button>
+          <button className={`pair-tab ${tab === "othercomm" ? "active" : ""}`} onClick={() => setTab("othercomm")}>
+            Other Commodity <span className="count">{otherCommData?.count ?? 0}</span>
+          </button>
         </div>
       </div>
 
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
+      {tab === "price" && <PriceTable data={priceData} embedded />}
+      {tab === "othercomm" && (
+        <MetalSpread
+          data={otherCommData}
+          embedded
+          showPct={false}
+          colorFn={otherCommColorKey}
+          loadingText="Loading other-commodity data…"
+        />
+      )}
 
-      {tab !== "metals" && (
+      {!WATCH_TABS.includes(tab) && (
         rows.length === 0 ? (
           <div className="empty-state" style={{ padding: "24px 16px" }}>Loading…</div>
         ) : (

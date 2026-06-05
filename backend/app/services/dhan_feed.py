@@ -199,13 +199,29 @@ def _run_real_feed_thread() -> None:
             # Resolve + add base-metal calendar legs (Copper/Aluminium/Zinc/Nickel/Lead +
             # minis) — watch-only 'Metal' tab. These are MCX FUTCOM, so they flow through
             # the default MCX-Full path below (NOT added to non_mcx_meta).
-            from app.services import metals_service
+            from app.services import metals_service, othercomm_service, price_service
             try:
                 metals_service.refresh()
             except Exception as e:
                 log.warning("metals_service.refresh() failed: %s", e)
             for sid, m in metals_service.get_subscription_meta().items():
                 subs[sid] = m
+
+            # Other-commodity calendar legs (Crude/NatGas/Electricity) — watch-only
+            # 'Other Commodity' tab. MCX FUTCOM → default MCX-Full path.
+            try:
+                othercomm_service.refresh()
+            except Exception as e:
+                log.warning("othercomm_service.refresh() failed: %s", e)
+            for sid, m in othercomm_service.get_subscription_meta().items():
+                subs[sid] = m
+
+            # 'Price' tab — gold/silver active contracts (already subscribed by the
+            # pair feed, so just resolve them; no extra subscription needed).
+            try:
+                price_service.refresh()
+            except Exception as e:
+                log.warning("price_service.refresh() failed: %s", e)
 
             _set_state(instruments=subs)
 
