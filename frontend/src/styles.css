@@ -3821,6 +3821,14 @@ body.dark .mc-natgas .metal-card-head { color: #7da9f5; }
 body.dark .mc-elec   .metal-card-head { color: #e6c356; }
 
 /* ===== Price tab — Buyer / Seller for every active contract ===== */
+/* Gold-family cards → gold theme, silver-family → silver theme */
+.pc-gold   { border-top: 3px solid #c9a227; }
+.pc-silver { border-top: 3px solid #9aa3ad; }
+.pc-gold   .metal-card-head { color: #a9842a; background: rgba(201,162,39,0.14); border-bottom-color: #c9a227; }
+.pc-silver .metal-card-head { color: #67707c; background: rgba(154,163,173,0.18); border-bottom-color: #9aa3ad; }
+body.dark .pc-gold   .metal-card-head { color: #e6c356; }
+body.dark .pc-silver .metal-card-head { color: #c0c9d3; }
+
 .price-row {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1fr;

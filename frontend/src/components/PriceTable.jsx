@@ -1,6 +1,12 @@
 import React from "react";
 import { fmtNum } from "../utils/format.js";
 
+// Gold-family → gold theme, silver-family → silver theme (card stripe + header).
+const SILVER_SHORTS = ["silver", "silverm", "silvermic", "silver100"];
+function priceColorKey(short) {
+  return SILVER_SHORTS.includes(short) ? "silver" : "gold";
+}
+
 // Live Buyer (bid) / Seller (ask) price for every active contract of the gold &
 // silver instruments. Watch-only — price only, no spread / no %.
 export default function PriceTable({ data, embedded = false }) {
@@ -13,7 +19,7 @@ export default function PriceTable({ data, embedded = false }) {
       ) : (
         <div className="metal-cards price-cards">
           {groups.map((g) => (
-            <div className="metal-card price-card" key={g.short}>
+            <div className={`metal-card price-card pc-${priceColorKey(g.short)}`} key={g.short}>
               <div className="metal-card-head">{g.instrument}</div>
               <div className="metal-card-body">
                 <div className="price-row price-head-row">
