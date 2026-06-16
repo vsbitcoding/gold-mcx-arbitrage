@@ -73,9 +73,16 @@ def _clean(vals: list) -> list:
 
 
 def refresh_bands() -> int:
-    pairs = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
-    if not pairs:
+    cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
+    if not cross:
         return 0
+    # Only the FRONT-month pair per cross group — the liquid / actionable one.
+    # Keeps the daily Dhan historical pulls light (≈1 per group → no rate-limit).
+    from collections import defaultdict
+    groups: dict = defaultdict(list)
+    for p in cross:
+        groups[p.get("label")].append(p)
+    pairs = [min(ps, key=lambda x: x.get("name", "")) for ps in groups.values()]
     try:
         dhan = _dhan()
     except Exception as e:
@@ -85,12 +92,22 @@ def refresh_bands() -> int:
     cache: dict[str, dict] = {}
     def closes(sid):
         sid = str(sid)
-        if sid not in cache:
+        if sid in cache:
+            return cache[sid]
+        # Dhan rate-limits the historical API — pace calls + retry empties (a
+        # rate-limited response comes back without candle arrays → empty dict).
+        c = {}
+        for attempt in range(3):
             try:
-                cache[sid] = _daily_closes(dhan, sid)
+                c = _daily_closes(dhan, sid)
             except Exception as e:
                 log.warning("hist pull failed sid=%s: %s", sid, e)
-                cache[sid] = {}
+                c = {}
+            if c:
+                break
+            time.sleep(1.0 + attempt)
+        cache[sid] = c
+        time.sleep(0.45)            # pace between distinct contracts
         return cache[sid]
 
     new: dict[str, dict] = {}
