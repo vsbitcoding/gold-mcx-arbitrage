@@ -276,12 +276,13 @@ def public_othercomm_spread(_key: str = Depends(require_api_key)):
 
 @router.get("/signals")
 def public_signals(_key: str = Depends(require_api_key)):
-    """Live mean-reversion signals for cross pairs (direction/entry/target).
+    """Currently-open fire-once mean-reversion signals (cross pairs).
 
-    direction: 'narrow' = spread is high, expected to fall to target (the mean);
-               'widen'  = spread is low,  expected to rise to target.
-    Each signal: {label, expiry_label, direction, entry, target, current, z, age_min}.
-    Validated by backtest (~82% of such signals end profitable). Not financial advice.
+    Each signal is FROZEN at fire: {label, expiry_label, direction, entry, target,
+    probability (% chance to reach target, from history), expected_days, current,
+    progress_pct, z_at_entry, age_min}.
+    direction: 'narrow' = spread high, expected to fall to target (the mean);
+               'widen'  = spread low,  expected to rise. Not financial advice.
     """
     return {
         "server_time": datetime.now(timezone.utc).isoformat(),
@@ -289,6 +290,20 @@ def public_signals(_key: str = Depends(require_api_key)):
         "status": signal_service.status(),
         "signals": signal_service.get_active_signals(),
     }
+
+
+@router.get("/signals-history")
+def public_signals_history(limit: int = Query(100, ge=1, le=500), _key: str = Depends(require_api_key)):
+    """Resolved signals, each marked outcome 'right' (hit target) or 'wrong'."""
+    return {"server_time": datetime.now(timezone.utc).isoformat(),
+            "history": signal_service.get_history(limit)}
+
+
+@router.get("/signals-accuracy")
+def public_signals_accuracy(_key: str = Depends(require_api_key)):
+    """Overall + per-pair signal accuracy (the verifiable track record)."""
+    return {"server_time": datetime.now(timezone.utc).isoformat(),
+            **signal_service.get_accuracy()}
 
 
 @router.get("/price-table")

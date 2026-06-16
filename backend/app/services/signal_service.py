@@ -1,17 +1,20 @@
-"""Live mean-reversion SIGNAL engine (watch-only — no trade firing).
+"""Fire-once mean-reversion SIGNAL engine with historical probability + accuracy
+tracking (watch-only — no trade firing).
 
-Validated by backtest on gold cross pairs: when a cross-spread reaches an
-extreme (±1.5σ of its 20-day average), it reverts toward the average ~82% of
-the time (avg +400 pts over ~6 days).
+Design (kept fully off the live-feed hot path):
+  • DAILY batch (background): pull each front-month cross pair's full available
+    daily history (~1+ yr) → compute (a) the current band (20-day mean ± 1.5σ)
+    and (b) a per-pair PROBABILITY table — walk-forward, bucketed by how
+    stretched the spread was (z), what % reached target within MAXHOLD days.
+    Heavy, but runs once/day and only stores a tiny summary in memory.
+  • TICK (background, ~3s, the single writer): compare each pair's live mid-spread
+    to its band. On a confirmed extreme it FIRES ONE frozen Signal (direction,
+    entry, target, probability%) → persisted to DB. It then tracks the open
+    signal to resolution: HIT (reached target) or EXPIRED (didn't, in time).
+  • READ paths (snapshot chip / API) are memory-only and never write.
 
-Daily  : pull recent daily closes from Dhan → build each cross pair's band
-         (mean ± 1.5σ over the last 20 clean daily closes; target = mean).
-Live   : compare each pair's current mid-spread to its band → auto-fire a
-         signal (direction + entry + target). Display / alert only.
-
-Direction:
-  mid ≥ upper band  → "narrow"  (spread is high → expected to fall to mean)
-  mid ≤ lower band  → "widen"   (spread is low  → expected to rise to mean)
+Direction: mid ≥ upper → "narrow" (high, expected to fall); mid ≤ lower →
+"widen" (low, expected to rise). Target = the mean.
 """
 from __future__ import annotations
 
@@ -19,29 +22,36 @@ import logging
 import statistics
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from app.config import MULTIPLIERS, settings
+from app.database import SessionLocal
+from app.models import Signal
 from app.services import dhan_auth, pair_registry
 
 log = logging.getLogger("signal_service")
 
-WINDOW = 20            # rolling days for mean / sd
-ENTRY_K = 1.5          # entry threshold in σ (validated)
-LOOKBACK_DAYS = 120    # daily history to pull
-DEBOUNCE_SECONDS = 20  # spread must hold beyond the band this long before a signal opens
-MAX_AGE_SECONDS = 7 * 24 * 3600   # auto-expire a signal that never reverts
+WINDOW = 20                       # rolling days for mean / sd (the band)
+ENTRY_K = 1.5                     # fire threshold in σ
+LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
+MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
+DEBOUNCE_SECONDS = 20             # live mid must hold beyond band this long before firing
+MAX_AGE_SECONDS = 14 * 24 * 3600  # live signal expires (=wrong) if target not hit in ~10 trading days
+TICK_SECONDS = 3
+MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
+Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 
-_bands: dict[str, dict] = {}    # pair_name -> {mean, sd, upper, lower, target, n}
-_active: dict[str, dict] = {}   # pair_name -> {direction, entry, target, started, current, z}
-_pending: dict[str, dict] = {}  # pair_name -> {direction, since}  (debounce buffer)
-_state: dict = {"last_refresh": None, "bands": 0}
+_model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
+_active: dict[str, dict] = {}     # pair_name -> open frozen signal (mirrors DB open row)
+_pending: dict[str, dict] = {}    # pair_name -> {direction, since}  (debounce buffer)
+_state: dict = {"last_refresh": None, "models": 0}
 
 
+# ───────────────────────── Dhan history ─────────────────────────
 def _dhan():
     from dhanhq import dhanhq
     from dhanhq.dhan_context import DhanContext
-    # Re-uses the feed's in-process cached token (no extra Dhan login).
     tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN, settings.DHAN_TOTP_SECRET)
     return dhanhq(DhanContext(tok.client_id, tok.access_token))
 
@@ -49,10 +59,8 @@ def _dhan():
 def _daily_closes(dhan, sid: str) -> dict:
     to = datetime.now().strftime("%Y-%m-%d")
     frm = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-    res = dhan.historical_daily_data(
-        security_id=str(sid), exchange_segment="MCX_COMM",
-        instrument_type="FUTCOM", from_date=frm, to_date=to,
-    )
+    res = dhan.historical_daily_data(security_id=str(sid), exchange_segment="MCX_COMM",
+                                     instrument_type="FUTCOM", from_date=frm, to_date=to)
     data = res.get("data", res) if isinstance(res, dict) else res
     closes = data.get("close") if isinstance(data, dict) else None
     ts = (data.get("timestamp") or data.get("start_Time")) if isinstance(data, dict) else None
@@ -66,22 +74,81 @@ def _daily_closes(dhan, sid: str) -> dict:
 
 
 def _clean(vals: list) -> list:
-    """Drop obvious data-glitch spikes (robust median / MAD) + listing edge."""
     if len(vals) < 10:
         return vals
-    vals = vals[3:]                    # trim early listing-illiquidity days
+    vals = vals[3:]
     med = statistics.median(vals)
     mad = statistics.median([abs(v - med) for v in vals]) or 1.0
     return [v for v in vals if abs(v - med) <= 12 * mad]
 
 
-def refresh_bands() -> int:
+# ───────────────────────── probability model ─────────────────────────
+def _backtest(vals: list) -> list[tuple]:
+    """Walk-forward (no lookahead). Returns [(abs_z, hit_bool, days)] for every
+    ±ENTRY_K σ event, hit = reverted to the rolling mean within MAXHOLD_DAYS."""
+    res = []
+    i = WINDOW
+    n = len(vals)
+    while i < n - 1:
+        win = vals[i - WINDOW:i]
+        m = statistics.mean(win)
+        sd = statistics.pstdev(win)
+        if sd <= 0:
+            i += 1
+            continue
+        z = (vals[i] - m) / sd
+        if abs(z) >= ENTRY_K:
+            target = m
+            short = z > 0
+            hit, j = False, 0
+            for j in range(1, MAXHOLD_DAYS + 1):
+                if i + j >= n:
+                    break
+                px = vals[i + j]
+                if (short and px <= target) or (not short and px >= target):
+                    hit = True
+                    break
+            res.append((abs(z), hit, j or 1))
+            i += (j or 1) + 1
+        else:
+            i += 1
+    return res
+
+
+def _aggregate(res: list[tuple]):
+    buckets = []
+    for zmin, zmax in Z_BUCKETS:
+        sel = [r for r in res if zmin <= r[0] < zmax]
+        if sel:
+            buckets.append({"zmin": zmin, "zmax": zmax,
+                            "rate": round(sum(1 for r in sel if r[1]) / len(sel) * 100, 1),
+                            "n": len(sel), "avg_days": round(statistics.mean([r[2] for r in sel]), 1)})
+        else:
+            buckets.append({"zmin": zmin, "zmax": zmax, "rate": None, "n": 0, "avg_days": None})
+    overall = None
+    if res:
+        overall = {"rate": round(sum(1 for r in res if r[1]) / len(res) * 100, 1),
+                   "n": len(res), "avg_days": round(statistics.mean([r[2] for r in res]), 1)}
+    return buckets, overall
+
+
+def _prob_for(model: dict, z: float):
+    az = abs(z)
+    for b in model.get("buckets", []):
+        if b["zmin"] <= az < b["zmax"]:
+            if b["n"] >= MIN_BUCKET_N and b["rate"] is not None:
+                return b["rate"], b["avg_days"]
+            break
+    ov = model.get("overall")
+    if ov and ov.get("rate") is not None:
+        return ov["rate"], ov["avg_days"]
+    return None, None
+
+
+def refresh_model() -> int:
     cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
     if not cross:
         return 0
-    # Only the FRONT-month pair per cross group — the liquid / actionable one.
-    # Keeps the daily Dhan historical pulls light (≈1 per group → no rate-limit).
-    from collections import defaultdict
     groups: dict = defaultdict(list)
     for p in cross:
         groups[p.get("label")].append(p)
@@ -89,7 +156,7 @@ def refresh_bands() -> int:
     try:
         dhan = _dhan()
     except Exception as e:
-        log.warning("signal refresh: dhan/token failed: %s", e)
+        log.warning("signal model: dhan/token failed: %s", e)
         return 0
 
     cache: dict[str, dict] = {}
@@ -97,8 +164,6 @@ def refresh_bands() -> int:
         sid = str(sid)
         if sid in cache:
             return cache[sid]
-        # Dhan rate-limits the historical API — pace calls + retry empties (a
-        # rate-limited response comes back without candle arrays → empty dict).
         c = {}
         for attempt in range(3):
             try:
@@ -110,7 +175,7 @@ def refresh_bands() -> int:
                 break
             time.sleep(1.0 + attempt)
         cache[sid] = c
-        time.sleep(0.45)            # pace between distinct contracts
+        time.sleep(0.45)
         return cache[sid]
 
     new: dict[str, dict] = {}
@@ -123,27 +188,29 @@ def refresh_bands() -> int:
         sm = MULTIPLIERS.get(p["small"], 1.0)
         days = sorted(set(big) & set(small))
         vals = _clean([round(big[d] * bm - small[d] * sm, 2) for d in days])
-        if len(vals) < WINDOW:
+        if len(vals) < WINDOW + 5:
             continue
         win = vals[-WINDOW:]
         mean = statistics.mean(win)
         sd = statistics.pstdev(win)
         if sd <= 0:
             continue
+        buckets, overall = _aggregate(_backtest(vals))
         new[p["name"]] = {
             "mean": round(mean, 1), "sd": round(sd, 1),
-            "upper": round(mean + ENTRY_K * sd, 1),
-            "lower": round(mean - ENTRY_K * sd, 1),
-            "target": round(mean, 1), "n": len(win),
+            "upper": round(mean + ENTRY_K * sd, 1), "lower": round(mean - ENTRY_K * sd, 1),
+            "target": round(mean, 1), "n": len(vals),
+            "buckets": buckets, "overall": overall,
         }
-    _bands.clear()
-    _bands.update(new)
+    _model.clear()
+    _model.update(new)
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
-    _state["bands"] = len(new)
-    log.info("Signal bands refreshed: %d cross pairs", len(new))
+    _state["models"] = len(new)
+    log.info("Signal model refreshed: %d pairs (history+probability)", len(new))
     return len(new)
 
 
+# ───────────────────────── live state machine (single writer) ─────────────────────────
 def _mid(snap):
     dec, inc = snap.get("decrease_spread"), snap.get("increase_spread")
     if dec is None or inc is None:
@@ -151,114 +218,209 @@ def _mid(snap):
     return (dec + inc) / 2.0
 
 
-def _sig_dict(name, s, a, band, now):
+def _load_open():
+    db = SessionLocal()
+    try:
+        for r in db.query(Signal).filter(Signal.status == "open").all():
+            _active[r.pair_name] = {
+                "id": r.id, "direction": r.direction, "entry": r.entry_spread,
+                "target": r.target_spread, "probability": r.probability,
+                "z_at_entry": r.z_at_entry, "expected_days": r.expected_days,
+                "label": r.label, "expiry_label": r.expiry_label,
+                "started": r.fired_at.timestamp() if r.fired_at else time.time(),
+            }
+    finally:
+        db.close()
+
+
+def _tick():
+    """Single-threaded writer: fire new signals + resolve open ones. ~3s cadence."""
+    from app.services.spread_engine import compute_all
+    snaps = {s["name"]: s for s in compute_all() if s.get("type") == "cross"}
+    now = time.time()
+    db = None
+    try:
+        for name, model in _model.items():
+            s = snaps.get(name)
+            mid = _mid(s) if s else None
+            a = _active.get(name)
+
+            if a:  # track open signal → resolve
+                hit = mid is not None and (
+                    (a["direction"] == "narrow" and mid <= a["target"]) or
+                    (a["direction"] == "widen" and mid >= a["target"]))
+                expired = (now - a["started"]) > MAX_AGE_SECONDS
+                if hit or expired:
+                    db = db or SessionLocal()
+                    row = db.get(Signal, a["id"])
+                    if row and row.status == "open":
+                        row.status = "hit" if hit else "expired"
+                        row.exit_spread = round(mid, 1) if mid is not None else None
+                        row.resolved_at = datetime.utcnow()
+                        row.days_held = round((now - a["started"]) / 86400.0, 2)
+                    _active.pop(name, None)
+                continue
+
+            # no open signal → debounce + fire
+            if mid is None:
+                _pending.pop(name, None)
+                continue
+            direction = "narrow" if mid >= model["upper"] else "widen" if mid <= model["lower"] else None
+            if direction is None:
+                _pending.pop(name, None)
+                continue
+            p = _pending.get(name)
+            if p and p["direction"] == direction:
+                if now - p["since"] >= DEBOUNCE_SECONDS:
+                    sd = model["sd"] or 1.0
+                    z = (mid - model["mean"]) / sd
+                    prob, exp_days = _prob_for(model, z)
+                    db = db or SessionLocal()
+                    row = Signal(
+                        pair_name=name, label=s.get("label"), expiry_label=s.get("expiry_label"),
+                        direction=direction, entry_spread=round(mid, 1), target_spread=model["target"],
+                        probability=prob, z_at_entry=round(z, 2), expected_days=exp_days, status="open")
+                    db.add(row)
+                    db.flush()
+                    _active[name] = {
+                        "id": row.id, "direction": direction, "entry": round(mid, 1),
+                        "target": model["target"], "probability": prob, "z_at_entry": round(z, 2),
+                        "expected_days": exp_days, "label": s.get("label"),
+                        "expiry_label": s.get("expiry_label"), "started": now}
+                    _pending.pop(name, None)
+            else:
+                _pending[name] = {"direction": direction, "since": now}
+
+        # expire orphan open signals whose pair is gone (rolled expiry)
+        for name in list(_active):
+            if name not in _model and (now - _active[name]["started"]) > MAX_AGE_SECONDS:
+                db = db or SessionLocal()
+                row = db.get(Signal, _active[name]["id"])
+                if row and row.status == "open":
+                    row.status = "expired"
+                    row.resolved_at = datetime.utcnow()
+                    row.days_held = round((now - _active[name]["started"]) / 86400.0, 2)
+                _active.pop(name, None)
+
+        if db:
+            db.commit()
+    finally:
+        if db:
+            db.close()
+
+
+# ───────────────────────── read-only display ─────────────────────────
+def _disp(name, s, a, cur, z):
+    entry, target = a["entry"], a["target"]
+    span = (entry - target) or 1
+    progress = max(0, min(100, round((entry - cur) / span * 100))) if cur is not None else 0
     return {
-        "name": name, "label": s.get("label"), "expiry_label": s.get("expiry_label"),
-        "direction": a["direction"], "entry": a["entry"], "target": a["target"],
-        "current": a["current"], "z": a["z"],
-        "age_min": int((now - a["started"]) / 60),
-        "mean": band["mean"], "upper": band["upper"], "lower": band["lower"],
+        "id": a.get("id"), "name": name, "label": a.get("label") or s.get("label"),
+        "expiry_label": a.get("expiry_label") or s.get("expiry_label"),
+        "direction": a["direction"], "entry": entry, "target": target,
+        "probability": a.get("probability"), "expected_days": a.get("expected_days"),
+        "current": cur if cur is not None else entry, "z": z,
+        "z_at_entry": a.get("z_at_entry"),
+        "age_min": int((time.time() - a["started"]) / 60), "progress_pct": progress,
     }
 
 
 def evaluate_all(snaps: list[dict]) -> dict:
-    """Stateful, sticky signal lifecycle (kills tick-to-tick flicker):
-
-      open : mid must hold beyond ±ENTRY_K σ for DEBOUNCE_SECONDS  → signal fires
-      hold : stays active (entry/target fixed) until mid reverts to the target
-             (the mean) — NOT cleared by a momentary dip back inside the band, and
-             held through illiquid ticks where the live mid is briefly missing
-      close: target reached, or MAX_AGE_SECONDS elapsed
-    """
-    out: dict[str, dict] = {}
-    now = time.time()
-    present = set()
+    """Read-only: decorate live snaps with the frozen open signal (if any)."""
+    out = {}
     for s in snaps:
         if s.get("type") != "cross":
             continue
         name = s.get("name")
-        band = _bands.get(name)
-        if not band:
-            continue
-        present.add(name)
-        mid = _mid(s)
-        sd = band["sd"] or 1.0
         a = _active.get(name)
-
-        if a:  # ── active signal: hold until target / expiry ──
-            if mid is not None:
-                hit = ((a["direction"] == "narrow" and mid <= a["target"]) or
-                       (a["direction"] == "widen" and mid >= a["target"]))
-                if hit or (now - a["started"]) > MAX_AGE_SECONDS:
-                    _active.pop(name, None)
-                    continue
-                a["current"] = round(mid, 1)
-                a["z"] = round((mid - band["mean"]) / sd, 2)
-            # mid is None → hold last known values (illiquid tick)
-            out[name] = _sig_dict(name, s, a, band, now)
+        if not a:
             continue
-
-        # ── no active signal: detect + debounce a new one ──
-        if mid is None:
-            _pending.pop(name, None)
-            continue
-        direction = "narrow" if mid >= band["upper"] else "widen" if mid <= band["lower"] else None
-        if direction is None:
-            _pending.pop(name, None)
-            continue
-        p = _pending.get(name)
-        if p and p["direction"] == direction:
-            if now - p["since"] >= DEBOUNCE_SECONDS:
-                a = {"direction": direction, "entry": round(mid, 1), "target": band["target"],
-                     "started": now, "current": round(mid, 1),
-                     "z": round((mid - band["mean"]) / sd, 2)}
-                _active[name] = a
-                _pending.pop(name, None)
-                out[name] = _sig_dict(name, s, a, band, now)
+        model = _model.get(name) or {}
+        mid = _mid(s)
+        if mid is not None and model.get("sd"):
+            cur, z = round(mid, 1), round((mid - model["mean"]) / model["sd"], 2)
         else:
-            _pending[name] = {"direction": direction, "since": now}
-
-    # prune state for pairs no longer present (e.g. rolled expiry / band removed)
-    for d in (_active, _pending):
-        for name in list(d):
-            if name not in present:
-                d.pop(name, None)
+            cur, z = a["entry"], a.get("z_at_entry")
+        out[name] = _disp(name, s, a, cur, z)
     return out
 
 
 def get_active_signals() -> list[dict]:
     from app.services.spread_engine import compute_all
     sigs = evaluate_all(compute_all())
-    return sorted(sigs.values(), key=lambda x: -abs(x["z"]))
+    return sorted(sigs.values(), key=lambda x: -(x["probability"] or 0))
+
+
+def get_history(limit: int = 100) -> list[dict]:
+    db = SessionLocal()
+    try:
+        rows = (db.query(Signal).filter(Signal.status != "open")
+                .order_by(Signal.resolved_at.desc()).limit(limit).all())
+        return [{
+            "id": r.id, "label": r.label, "expiry_label": r.expiry_label, "direction": r.direction,
+            "entry": r.entry_spread, "target": r.target_spread, "exit": r.exit_spread,
+            "probability": r.probability, "z_at_entry": r.z_at_entry,
+            "outcome": "right" if r.status == "hit" else "wrong",
+            "days_held": r.days_held,
+            "fired_at": r.fired_at.isoformat() if r.fired_at else None,
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        } for r in rows]
+    finally:
+        db.close()
+
+
+def get_accuracy() -> dict:
+    db = SessionLocal()
+    try:
+        resolved = db.query(Signal).filter(Signal.status != "open").all()
+        total = len(resolved)
+        hits = sum(1 for r in resolved if r.status == "hit")
+        by = defaultdict(lambda: [0, 0])
+        for r in resolved:
+            by[r.label][0] += 1
+            if r.status == "hit":
+                by[r.label][1] += 1
+        by_pair = [{"label": k, "total": v[0], "right": v[1],
+                    "accuracy_pct": round(v[1] / v[0] * 100, 1) if v[0] else None}
+                   for k, v in sorted(by.items())]
+        return {
+            "total": total, "right": hits, "wrong": total - hits,
+            "accuracy_pct": round(hits / total * 100, 1) if total else None,
+            "open": len(_active), "by_pair": by_pair,
+        }
+    finally:
+        db.close()
 
 
 def status() -> dict:
-    return {"bands": _state["bands"], "last_refresh": _state["last_refresh"],
-            "active": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K}
+    return {"models": _state["models"], "last_refresh": _state["last_refresh"],
+            "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
+            "maxhold_days": MAXHOLD_DAYS}
 
 
+# ───────────────────────── background loop ─────────────────────────
 def _loop() -> None:
-    # Wait until the feed has resolved pairs (token also becomes available).
     for _ in range(60):
         if pair_registry.get_pairs():
             break
         time.sleep(5)
     time.sleep(5)
-    last_date = None
+    try:
+        _load_open()
+    except Exception as e:
+        log.warning("load open signals failed: %s", e)
+    last_model_date = None
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
-            if today != last_date and _bands_ready_or_retry():
-                last_date = today
+            if today != last_model_date:
+                if refresh_model() > 0:
+                    last_model_date = today
+            if _model:
+                _tick()
         except Exception as e:
             log.exception("signal loop: %s", e)
-        time.sleep(300)
-
-
-def _bands_ready_or_retry() -> bool:
-    """Refresh bands; return True only if at least one band was built (so a
-    failed/empty pull retries on the next tick instead of waiting a full day)."""
-    return refresh_bands() > 0
+        time.sleep(TICK_SECONDS)
 
 
 def start_in_background() -> threading.Thread:

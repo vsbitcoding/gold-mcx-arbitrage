@@ -65,7 +65,7 @@ export default function LiveSpreadTable({ rows }) {
     for (const [name, dir] of cur) {
       if (sigSeen.current.get(name) !== dir) {
         const r = signalRows.find((x) => x.name === name);
-        if (r) toast.info(`⚡ ${r.label} ${r.expiry_label}: ${dir === "narrow" ? "NARROW ▼" : "WIDEN ▲"} → target ${r.signal.target}`);
+        if (r) toast.info(`⚡ ${r.label} ${r.expiry_label}: ${dir === "narrow" ? "NARROW ▼" : "WIDEN ▲"} → target ${r.signal.target}${r.signal.probability != null ? ` · ${r.signal.probability}% chance` : ""}`);
       }
     }
     sigSeen.current = cur;

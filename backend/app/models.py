@@ -151,3 +151,29 @@ class ActivityLog(Base):
     actor = Column(String(16), default="user")       # user | system | auto
     summary = Column(String(255), nullable=True)     # human-readable line
     details = Column(Text, nullable=True)            # JSON blob with extra context
+
+
+class Signal(Base):
+    """A FROZEN, fire-once mean-reversion signal on a cross spread.
+
+    Once written, entry/target/probability never change. Outcome is tracked:
+    status moves open → hit (reached target) | expired (didn't, within max-hold).
+    This builds a verifiable accuracy track record.
+    """
+    __tablename__ = "signals"
+
+    id = Column(Integer, primary_key=True)
+    pair_name = Column(String(64), nullable=False, index=True)
+    label = Column(String(64), nullable=True)         # e.g. "PETAL / GUINEA"
+    expiry_label = Column(String(48), nullable=True)
+    direction = Column(String(8), nullable=False)     # narrow | widen
+    entry_spread = Column(Float, nullable=False)       # FROZEN at fire
+    target_spread = Column(Float, nullable=False)      # FROZEN at fire (the mean)
+    probability = Column(Float, nullable=True)         # % chance to hit target (from history)
+    z_at_entry = Column(Float, nullable=True)          # how stretched at fire (σ)
+    expected_days = Column(Float, nullable=True)       # historical avg days to target
+    fired_at = Column(DateTime, default=datetime.utcnow, index=True)
+    status = Column(String(12), default="open", index=True)  # open | hit | expired
+    exit_spread = Column(Float, nullable=True)         # spread when resolved
+    resolved_at = Column(DateTime, nullable=True)
+    days_held = Column(Float, nullable=True)           # calendar days open→resolve
