@@ -234,7 +234,11 @@ def _too_noisy(s, sd):
 def _load_open():
     db = SessionLocal()
     try:
+        changed = False
         for r in db.query(Signal).filter(Signal.status == "open").all():
+            if r.stop_spread is None and r.entry_spread is not None and r.target_spread is not None:
+                r.stop_spread = round(2 * r.entry_spread - r.target_spread, 1)   # backfill 1:1 stop
+                changed = True
             _active[r.pair_name] = {
                 "id": r.id, "direction": r.direction, "entry": r.entry_spread,
                 "target": r.target_spread, "stop": r.stop_spread, "probability": r.probability,
@@ -242,6 +246,8 @@ def _load_open():
                 "label": r.label, "expiry_label": r.expiry_label,
                 "started": r.fired_at.timestamp() if r.fired_at else time.time(),
             }
+        if changed:
+            db.commit()
     finally:
         db.close()
 
