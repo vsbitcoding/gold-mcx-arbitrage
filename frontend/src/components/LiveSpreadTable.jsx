@@ -11,16 +11,24 @@ import { useToast } from "./Toast.jsx";
 export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, priceData }) {
   const toast = useToast();
   const sigSeen = useRef(null);
+  const seeded = useRef(false);
   const [page, setPage] = useState(1);
 
   const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
   const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
   const signalRows = useMemo(() => rows.filter((r) => r.signal), [rows]);
 
-  // In-app alert: toast when a NEW signal appears (skip the first load).
+  // In-app alert: toast ONLY when a genuinely new signal appears. The baseline
+  // is set once the live data has first loaded, so existing signals never
+  // re-notify on a page refresh / reconnect.
   useEffect(() => {
+    if (!rows.length) return;                       // wait for the first live snapshot
     const cur = new Map(signalRows.map((r) => [r.name, r.signal.direction]));
-    if (sigSeen.current === null) { sigSeen.current = cur; return; }
+    if (!seeded.current) {                          // first loaded snapshot → baseline only
+      seeded.current = true;
+      sigSeen.current = cur;
+      return;
+    }
     for (const [name, dir] of cur) {
       if (sigSeen.current.get(name) !== dir) {
         const r = signalRows.find((x) => x.name === name);
@@ -28,7 +36,7 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
       }
     }
     sigSeen.current = cur;
-  }, [signalRows, toast]);
+  }, [rows, signalRows, toast]);
 
   const isSpread = tab === "cross" || tab === "calendar";
   const tabRows = tab === "cross" ? crossRows : calendarRows;

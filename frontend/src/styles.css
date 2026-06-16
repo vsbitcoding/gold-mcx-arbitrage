@@ -158,7 +158,7 @@ body {
   background: #f59e0b; color: #fff; border-radius: 100px; font-size: 9.5px; font-weight: 800; padding: 0 4px;
 }
 .nav-tab-signals.active { background: #f59e0b; border-color: #f59e0b; }
-.nav-tab-signals.active .nav-count { background: rgba(255,255,255,.3); }
+.nav-tab-signals.active .nav-count { background: #fff; color: #d97706; }
 .header-right { display: flex; align-items: center; gap: 8px; }
 
 .username-chip {
@@ -4017,15 +4017,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sig-foot b { color: var(--text-secondary); font-weight: 800; }
 .sig-meta { flex: none; }
 
-/* top bar: Open/History toggle + accuracy */
-.sig-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.sig-toggle { display: inline-flex; background: var(--bg-surface-alt); border-radius: 8px; padding: 2px; }
+/* top bar: Open/History toggle + accuracy (never clips — wraps cleanly) */
+.sig-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.sig-toggle { display: inline-flex; background: var(--bg-surface-alt); border-radius: 8px; padding: 2px; flex: none; }
 .sig-toggle button { border: none; background: none; cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-secondary); padding: 5px 12px; border-radius: 6px; }
 .sig-toggle button.active { background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 .sig-toggle .count { font-size: 10px; background: #f59e0b; color: #fff; border-radius: 100px; padding: 0 5px; margin-left: 4px; }
-.sig-acc { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
-.sig-acc-pct { font-size: 16px; font-weight: 900; color: var(--green); }
-.sig-acc-sub { margin-left: 8px; font-size: 11px; color: var(--text-muted); }
+.sig-acc { flex: none; display: inline-flex; align-items: baseline; gap: 8px; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 100px; padding: 5px 14px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.sig-acc-pct { font-size: 15px; font-weight: 900; color: var(--green); }
+.sig-acc-sub { font-size: 11px; color: var(--text-muted); }
 
 /* history cards (same card grid as Open) */
 .signal-card.hist-right { border-left: 5px solid var(--green); }
