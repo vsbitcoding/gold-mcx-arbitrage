@@ -237,7 +237,7 @@ def _load_open():
         for r in db.query(Signal).filter(Signal.status == "open").all():
             _active[r.pair_name] = {
                 "id": r.id, "direction": r.direction, "entry": r.entry_spread,
-                "target": r.target_spread, "probability": r.probability,
+                "target": r.target_spread, "stop": r.stop_spread, "probability": r.probability,
                 "z_at_entry": r.z_at_entry, "expected_days": r.expected_days,
                 "label": r.label, "expiry_label": r.expiry_label,
                 "started": r.fired_at.timestamp() if r.fired_at else time.time(),
@@ -258,20 +258,24 @@ def _tick():
             mid = _mid(s) if s else None
             a = _active.get(name)
 
-            if a:  # track open signal → resolve
+            if a:  # track open signal → resolve (target = win, stop = loss, timeout)
                 hit = mid is not None and (
                     (a["direction"] == "narrow" and mid <= a["target"]) or
                     (a["direction"] == "widen" and mid >= a["target"]))
+                stop = a.get("stop")
+                stopped = mid is not None and stop is not None and (
+                    (a["direction"] == "narrow" and mid >= stop) or
+                    (a["direction"] == "widen" and mid <= stop))
                 expired = (now - a["started"]) > MAX_AGE_SECONDS
-                if hit or expired:
+                if hit or stopped or expired:
                     db = db or SessionLocal()
                     row = db.get(Signal, a["id"])
                     dur = now - a["started"]
                     if row and row.status == "open":
-                        if hit and dur < MIN_HOLD_SECONDS:
-                            db.delete(row)       # hit target too fast → noise, discard (not counted)
+                        if (hit or stopped) and dur < MIN_HOLD_SECONDS:
+                            db.delete(row)       # resolved too fast → noise, discard (not counted)
                         else:
-                            row.status = "hit" if hit else "expired"
+                            row.status = "hit" if hit else ("stopped" if stopped else "expired")
                             row.exit_spread = round(mid, 1) if mid is not None else None
                             row.resolved_at = datetime.utcnow()
                             row.days_held = round(dur / 86400.0, 2)
@@ -293,18 +297,21 @@ def _tick():
                     sd = model["sd"] or 1.0
                     z = (mid - model["mean"]) / sd
                     prob, exp_days = _prob_for(model, z)
+                    entry = round(mid, 1)
+                    target = model["target"]
+                    stop = round(2 * entry - target, 1)   # 1:1 — stop as far past entry as target is before it
                     db = db or SessionLocal()
                     row = Signal(
                         pair_name=name, label=s.get("label"), expiry_label=s.get("expiry_label"),
-                        direction=direction, entry_spread=round(mid, 1), target_spread=model["target"],
+                        direction=direction, entry_spread=entry, target_spread=target, stop_spread=stop,
                         probability=prob, z_at_entry=round(z, 2), expected_days=exp_days, status="open")
                     db.add(row)
                     db.flush()
                     rid = row.id
                     db.commit()              # persist BEFORE adding to memory
                     _active[name] = {
-                        "id": rid, "direction": direction, "entry": round(mid, 1),
-                        "target": model["target"], "probability": prob, "z_at_entry": round(z, 2),
+                        "id": rid, "direction": direction, "entry": entry,
+                        "target": target, "stop": stop, "probability": prob, "z_at_entry": round(z, 2),
                         "expected_days": exp_days, "label": s.get("label"),
                         "expiry_label": s.get("expiry_label"), "started": now}
                     _pending.pop(name, None)
@@ -340,6 +347,7 @@ def _disp(name, s, a, cur, z):
         "id": a.get("id"), "name": name, "label": a.get("label") or s.get("label"),
         "expiry_label": a.get("expiry_label") or s.get("expiry_label"),
         "direction": a["direction"], "entry": entry, "target": target,
+        "stop": a.get("stop"), "rr": "1:1",
         "probability": a.get("probability"), "expected_days": a.get("expected_days"),
         "current": cur if cur is not None else entry, "z": z,
         "z_at_entry": a.get("z_at_entry"),
@@ -383,9 +391,9 @@ def get_history(limit: int = 100) -> list[dict]:
                 .order_by(Signal.resolved_at.desc()).limit(limit).all())
         return [{
             "id": r.id, "label": r.label, "expiry_label": r.expiry_label, "direction": r.direction,
-            "entry": r.entry_spread, "target": r.target_spread, "exit": r.exit_spread,
+            "entry": r.entry_spread, "target": r.target_spread, "stop": r.stop_spread, "exit": r.exit_spread,
             "probability": r.probability, "z_at_entry": r.z_at_entry,
-            "outcome": "right" if r.status == "hit" else "wrong",
+            "outcome": "right" if r.status == "hit" else ("timeout" if r.status == "expired" else "wrong"),
             "days_held": r.days_held,
             "fired_at": r.fired_at.isoformat() if r.fired_at else None,
             "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
@@ -398,19 +406,22 @@ def get_accuracy() -> dict:
     db = SessionLocal()
     try:
         resolved = db.query(Signal).filter(Signal.status != "open").all()
-        total = len(resolved)
         hits = sum(1 for r in resolved if r.status == "hit")
-        by = defaultdict(lambda: [0, 0])
+        stopped = sum(1 for r in resolved if r.status == "stopped")
+        timeout = sum(1 for r in resolved if r.status == "expired")
+        decisive = hits + stopped                      # target-or-stop trades (1:1 win-rate)
+        by = defaultdict(lambda: [0, 0])               # label -> [decisive, hits]
         for r in resolved:
-            by[r.label][0] += 1
-            if r.status == "hit":
-                by[r.label][1] += 1
+            if r.status in ("hit", "stopped"):
+                by[r.label][0] += 1
+                if r.status == "hit":
+                    by[r.label][1] += 1
         by_pair = [{"label": k, "total": v[0], "right": v[1],
                     "accuracy_pct": round(v[1] / v[0] * 100, 1) if v[0] else None}
                    for k, v in sorted(by.items())]
         return {
-            "total": total, "right": hits, "wrong": total - hits,
-            "accuracy_pct": round(hits / total * 100, 1) if total else None,
+            "total": len(resolved), "right": hits, "wrong": stopped, "timeout": timeout,
+            "accuracy_pct": round(hits / decisive * 100, 1) if decisive else None,
             "open": len(_active), "by_pair": by_pair,
         }
     finally:

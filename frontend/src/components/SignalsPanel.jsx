@@ -71,7 +71,7 @@ export default function SignalsPanel({ signals }) {
         {acc && acc.total > 0 && (
           <div className="sig-acc" title="Track record of resolved signals">
             <b className="sig-acc-pct">{acc.accuracy_pct}%</b> accurate
-            <span className="sig-acc-sub">{acc.right}/{acc.total} right · {acc.open} open</span>
+            <span className="sig-acc-sub">{acc.right} hit · {acc.wrong} stopped{acc.timeout ? ` · ${acc.timeout} timed-out` : ""} · {acc.open} open</span>
           </div>
         )}
       </div>
@@ -94,14 +94,14 @@ export default function SignalsPanel({ signals }) {
                     <span className={`sig-dir sig-dir-${s.direction}`}>{narrow ? "▼ NARROW" : "▲ WIDEN"}</span>
                   </div>
                   <div className="sig-exp2">{r.expiry_label}</div>
-                  <div className="sig-flow big">
+                  <div className="sig-flow big sig-flow3">
                     <span><span className="sig-lbl">now</span><b>{r0(s.current)}</b></span>
-                    <span className="sig-flow-arrow">{narrow ? "↓" : "↑"}</span>
-                    <span><span className="sig-lbl">target</span><b className="sig-tgt">{r0(s.target)}</b></span>
+                    <span><span className="sig-lbl">target ✓</span><b className="sig-tgt">{r0(s.target)}</b></span>
+                    <span><span className="sig-lbl">stop ✗</span><b className="sig-stop">{r0(s.stop)}</b></span>
                   </div>
                   <div className="sig-prog"><div className="sig-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
                   <div className="sig-foot">
-                    <span><b>{s.progress_pct || 0}%</b> to target</span>
+                    <span><b>{s.progress_pct || 0}%</b> to target · <b>{s.rr || "1:1"}</b></span>
                     <span className="sig-meta">running {fmtMin(s.age_min)}</span>
                   </div>
                   <div className="sig-foot sig-sub">
@@ -120,11 +120,12 @@ export default function SignalsPanel({ signals }) {
           <div className="signal-list">
             {history.map((h) => {
               const narrow = h.direction === "narrow";
+              const oLabel = h.outcome === "right" ? "✓ RIGHT" : h.outcome === "wrong" ? "✗ STOPPED" : "⏱ TIMED-OUT";
               return (
                 <div className={`signal-card hist-${h.outcome}`} key={h.id}>
                   <div className="sig-top">
                     <span className="sig-pair">{h.label}</span>
-                    <span className={`sig-out sig-out-${h.outcome}`}>{h.outcome === "right" ? "✓ RIGHT" : "✗ WRONG"}</span>
+                    <span className={`sig-out sig-out-${h.outcome}`}>{oLabel}</span>
                   </div>
                   <div className="sig-exp2">{h.expiry_label} · {narrow ? "▼ NARROW" : "▲ WIDEN"}</div>
                   <div className="sig-flow">

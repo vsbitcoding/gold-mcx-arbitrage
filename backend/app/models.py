@@ -169,6 +169,7 @@ class Signal(Base):
     direction = Column(String(8), nullable=False)     # narrow | widen
     entry_spread = Column(Float, nullable=False)       # FROZEN at fire
     target_spread = Column(Float, nullable=False)      # FROZEN at fire (the mean)
+    stop_spread = Column(Float, nullable=True)         # FROZEN at fire (1:1 disaster stop)
     probability = Column(Float, nullable=True)         # % chance to hit target (from history)
     z_at_entry = Column(Float, nullable=True)          # how stretched at fire (σ)
     expected_days = Column(Float, nullable=True)       # historical avg days to target

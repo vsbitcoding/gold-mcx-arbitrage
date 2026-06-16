@@ -49,6 +49,9 @@ _REQUIRED_COLUMNS = {
     "positions": [
         ("ladder_rule_id", "INTEGER"),
     ],
+    "signals": [
+        ("stop_spread", "FLOAT"),
+    ],
 }
 
 

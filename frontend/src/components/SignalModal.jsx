@@ -38,6 +38,9 @@ export default function SignalModal({ row, onClose }) {
         <div className="sigm-prog"><div className="sigm-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
         <div className="sigm-meta">
           <div><span>Entry (fired at)</span><b>{r0(s.entry)}</b></div>
+          <div><span>Target (profit)</span><b className="sigm-tgt">{r0(s.target)}</b></div>
+          <div><span>Stop (loss)</span><b style={{ color: "var(--red)" }}>{r0(s.stop)}</b></div>
+          <div><span>Risk : Reward</span><b>{s.rr || "1:1"}</b></div>
           <div><span>Progress</span><b>{s.progress_pct || 0}% to target</b></div>
           <div><span>Fired</span><b>{s.fired_at || "—"}</b></div>
           <div><span>Running</span><b>{fmtMin(s.age_min)}</b></div>
