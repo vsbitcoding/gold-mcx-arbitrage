@@ -87,6 +87,11 @@ export default function SignalsPanel({ signals }) {
             {[...signals].sort((a, b) => sigRank(a.label) - sigRank(b.label)).map((r) => {
               const s = r.signal;
               const narrow = s.direction === "narrow";
+              const frac = (s.stop != null && s.target != null && s.stop !== s.target)
+                ? (s.current - s.stop) / (s.target - s.stop) : 0.5;
+              const pos = Math.max(3, Math.min(97, frac * 100));   // marker position on track
+              const scalePct = Math.round((frac - 0.5) * 200);     // −100 (stop) .. 0 (entry) .. +100 (target)
+              const toTgt = scalePct >= 0;
               return (
                 <div className={`signal-card sig-${s.direction}`} key={r.name}>
                   <div className="sig-top">
@@ -94,19 +99,27 @@ export default function SignalsPanel({ signals }) {
                     <span className={`sig-dir sig-dir-${s.direction}`}>{narrow ? "▼ NARROW" : "▲ WIDEN"}</span>
                   </div>
                   <div className="sig-exp2">{r.expiry_label}</div>
-                  <div className="sig-flow big sig-flow3">
-                    <span><span className="sig-lbl">now</span><b>{r0(s.current)}</b></span>
-                    <span><span className="sig-lbl">target ✓</span><b className="sig-tgt">{r0(s.target)}</b></span>
-                    <span><span className="sig-lbl">stop ✗</span><b className="sig-stop">{r0(s.stop)}</b></span>
+                  <div className="sig-nowline">
+                    <span className="sig-nowlbl">NOW</span>
+                    <b className="sig-nowval">{r0(s.current)}</b>
+                    <span className={`sig-scalepct ${toTgt ? "pos" : "neg"}`}>{toTgt ? "+" : ""}{scalePct}%</span>
                   </div>
-                  <div className="sig-prog"><div className="sig-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
+                  <div className="sig-gauge">
+                    <div className="sig-gauge-track">
+                      <div className={`sig-gauge-fill ${toTgt ? "pos" : "neg"}`}
+                           style={{ left: `${Math.min(pos, 50)}%`, width: `${Math.abs(pos - 50)}%` }} />
+                      <div className="sig-gauge-mid" />
+                      <div className="sig-gauge-dot" style={{ left: `${pos}%` }} />
+                    </div>
+                    <div className="sig-gauge-ends">
+                      <span className="sig-end stop">✗ stop {r0(s.stop)}</span>
+                      <span className="sig-end mid">0%</span>
+                      <span className="sig-end tgt">target {r0(s.target)} ✓</span>
+                    </div>
+                  </div>
                   <div className="sig-foot">
-                    <span><b>{s.progress_pct || 0}%</b> to target · <b>{s.rr || "1:1"}</b></span>
+                    <span><b>{s.rr || "1:1"}</b>{s.expected_days != null ? ` · usually ~${s.expected_days}d` : ""}</span>
                     <span className="sig-meta">running {fmtMin(s.age_min)}</span>
-                  </div>
-                  <div className="sig-foot sig-sub">
-                    <span className="sig-expires">⏳ expires in {fmtMin(s.time_left_min)}</span>
-                    {s.expected_days != null && <span className="sig-meta">usually ~{s.expected_days}d</span>}
                   </div>
                 </div>
               );

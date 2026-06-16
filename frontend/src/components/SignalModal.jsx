@@ -20,6 +20,11 @@ export default function SignalModal({ row, onClose }) {
   }, [onClose]);
   if (!s) return null;
   const narrow = s.direction === "narrow";
+  const frac = (s.stop != null && s.target != null && s.stop !== s.target)
+    ? (s.current - s.stop) / (s.target - s.stop) : 0.5;
+  const pos = Math.max(3, Math.min(97, frac * 100));
+  const scalePct = Math.round((frac - 0.5) * 200);
+  const toTgt = scalePct >= 0;
 
   return (
     <div className="sigm-overlay" onClick={onClose}>
@@ -30,21 +35,31 @@ export default function SignalModal({ row, onClose }) {
         <div className={`sigm-dir sigm-dir-${s.direction}`}>
           {narrow ? "▼ NARROW — spread likely to fall" : "▲ WIDEN — spread likely to rise"}
         </div>
-        <div className="sigm-flow">
-          <div><span className="sigm-lbl">now</span><b>{r0(s.current)}</b></div>
-          <span className="sigm-arrow">{narrow ? "↓" : "↑"}</span>
-          <div><span className="sigm-lbl">target</span><b className="sigm-tgt">{r0(s.target)}</b></div>
+        <div className="sig-nowline" style={{ justifyContent: "center", gap: 10 }}>
+          <span className="sig-nowlbl">NOW</span>
+          <b className="sig-nowval">{r0(s.current)}</b>
+          <span className={`sig-scalepct ${toTgt ? "pos" : "neg"}`} style={{ marginLeft: 4 }}>{toTgt ? "+" : ""}{scalePct}%</span>
         </div>
-        <div className="sigm-prog"><div className="sigm-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
+        <div className="sig-gauge" style={{ margin: "4px 0 14px" }}>
+          <div className="sig-gauge-track">
+            <div className={`sig-gauge-fill ${toTgt ? "pos" : "neg"}`}
+                 style={{ left: `${Math.min(pos, 50)}%`, width: `${Math.abs(pos - 50)}%` }} />
+            <div className="sig-gauge-mid" />
+            <div className="sig-gauge-dot" style={{ left: `${pos}%` }} />
+          </div>
+          <div className="sig-gauge-ends">
+            <span className="sig-end stop">✗ stop {r0(s.stop)}</span>
+            <span className="sig-end mid">0%</span>
+            <span className="sig-end tgt">target {r0(s.target)} ✓</span>
+          </div>
+        </div>
         <div className="sigm-meta">
           <div><span>Entry (fired at)</span><b>{r0(s.entry)}</b></div>
           <div><span>Target (profit)</span><b className="sigm-tgt">{r0(s.target)}</b></div>
           <div><span>Stop (loss)</span><b style={{ color: "var(--red)" }}>{r0(s.stop)}</b></div>
           <div><span>Risk : Reward</span><b>{s.rr || "1:1"}</b></div>
-          <div><span>Progress</span><b>{s.progress_pct || 0}% to target</b></div>
           <div><span>Fired</span><b>{s.fired_at || "—"}</b></div>
           <div><span>Running</span><b>{fmtMin(s.age_min)}</b></div>
-          <div><span>Expires in</span><b>{fmtMin(s.time_left_min)}</b></div>
           <div><span>Status</span><b>Open{s.expected_days ? ` · usually hits in ~${s.expected_days}d` : ""}</b></div>
         </div>
       </div>

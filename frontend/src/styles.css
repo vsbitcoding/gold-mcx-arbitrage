@@ -4050,6 +4050,27 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sig-sub { margin-top: 2px; }
 .sig-expires { color: #d97706; font-weight: 800; }
 
+/* Open card: NOW value + signed scale % */
+.sig-nowline { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 9px; }
+.sig-nowlbl { font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.sig-nowval { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 23px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.sig-scalepct { margin-left: auto; font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.sig-scalepct.pos { color: var(--green); }
+.sig-scalepct.neg { color: var(--red); }
+
+/* Trade gauge: stop (left) — 0%/entry (center) — target (right) */
+.sig-gauge { margin: 2px 0 11px; }
+.sig-gauge-track { position: relative; height: 9px; background: var(--bg-surface-alt); border: 1px solid var(--border-light); border-radius: 100px; }
+.sig-gauge-fill { position: absolute; top: 0; bottom: 0; border-radius: 100px; transition: left .4s ease, width .4s ease; }
+.sig-gauge-fill.pos { background: var(--green); }
+.sig-gauge-fill.neg { background: var(--red); }
+.sig-gauge-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--text-muted); border-radius: 2px; transform: translateX(-1px); opacity: .55; }
+.sig-gauge-dot { position: absolute; top: 50%; width: 15px; height: 15px; border-radius: 50%; background: var(--bg-surface); border: 3px solid var(--accent); transform: translate(-50%, -50%); box-shadow: 0 1px 5px rgba(0,0,0,.28); transition: left .4s ease; z-index: 2; }
+.sig-gauge-ends { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sig-end.stop { color: var(--red); }
+.sig-end.mid { color: var(--text-muted); font-weight: 700; }
+.sig-end.tgt { color: var(--accent); }
+
 /* top bar: Open/History toggle + accuracy (never clips — wraps cleanly) */
 /* centered segmented toggle, accuracy pill on the right */
 .sig-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 16px; }
