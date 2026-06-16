@@ -1,19 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import SpreadCards from "./spread/SpreadCards.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
 import MetalSpread, { otherCommColorKey } from "./MetalSpread.jsx";
 import PriceTable from "./PriceTable.jsx";
+import SignalsPanel from "./SignalsPanel.jsx";
+import { useToast } from "./Toast.jsx";
 import { api } from "../api/client.js";
 
 // Tabs that show their own watch-only cards (no search/filter/pagination).
-const WATCH_TABS = ["metals", "price", "othercomm"];
+const WATCH_TABS = ["signals", "metals", "price", "othercomm"];
 
 export default function LiveSpreadTable({ rows }) {
+  const toast = useToast();
+  const sigSeen = useRef(null);
   const [search, setSearch] = useState("");
   const [expiryFilter, setExpiryFilter] = useState("all");
   const [tab, setTab] = useState(() => {
     const t = localStorage.getItem("arbi_spread_tab");
-    return ["cross", "calendar", "metals", "price", "othercomm"].includes(t) ? t : "cross";
+    return ["signals", "cross", "calendar", "metals", "price", "othercomm"].includes(t) ? t : "cross";
   });
   useEffect(() => { localStorage.setItem("arbi_spread_tab", tab); }, [tab]);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
@@ -51,7 +55,21 @@ export default function LiveSpreadTable({ rows }) {
 
   const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
   const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
+  const signalRows = useMemo(() => rows.filter((r) => r.signal), [rows]);
   const tabRows = tab === "cross" ? crossRows : calendarRows;
+
+  // In-app alert: toast when a NEW signal appears (skip the first load).
+  useEffect(() => {
+    const cur = new Map(signalRows.map((r) => [r.name, r.signal.direction]));
+    if (sigSeen.current === null) { sigSeen.current = cur; return; }
+    for (const [name, dir] of cur) {
+      if (sigSeen.current.get(name) !== dir) {
+        const r = signalRows.find((x) => x.name === name);
+        if (r) toast.info(`⚡ ${r.label} ${r.expiry_label}: ${dir === "narrow" ? "NARROW ▼" : "WIDEN ▲"} → target ${r.signal.target}`);
+      }
+    }
+    sigSeen.current = cur;
+  }, [signalRows, toast]);
 
   const expiryOptions = useMemo(() => {
     const seen = new Set();
@@ -142,6 +160,9 @@ export default function LiveSpreadTable({ rows }) {
             )}
         </div>
         <div className="pair-tabs">
+          <button className={`pair-tab pair-tab-signals ${tab === "signals" ? "active" : ""}`} onClick={() => setTab("signals")}>
+            ⚡ Signals <span className="count">{signalRows.length}</span>
+          </button>
           <button className={`pair-tab ${tab === "cross" ? "active" : ""}`} onClick={() => setTab("cross")}>
             Cross Pairs <span className="count">{crossRows.length}</span>
           </button>
@@ -160,6 +181,7 @@ export default function LiveSpreadTable({ rows }) {
         </div>
       </div>
 
+      {tab === "signals" && <SignalsPanel signals={signalRows} />}
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
       {tab === "price" && <PriceTable data={priceData} embedded />}
       {tab === "othercomm" && (

@@ -8,12 +8,13 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, calculator, feed, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, price as price_route, public_v1, ws as ws_route
+from app.routes import auth, calculator, feed, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, price as price_route, public_v1, signals as signals_route, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
 from app.services.maintenance import start_in_background as start_maintenance
 from app.services.market_data import quote_store
+from app.services.signal_service import start_in_background as start_signals
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +39,7 @@ app.include_router(options_route.router)
 app.include_router(metals_route.router)
 app.include_router(othercomm_route.router)
 app.include_router(price_route.router)
+app.include_router(signals_route.router)
 app.include_router(ws_route.router)
 app.include_router(public_v1.router)
 
@@ -69,6 +71,7 @@ async def startup() -> None:
     broadcaster.bind_loop(loop)
     start_feed_in_background(loop)
     start_maintenance()
+    start_signals()
 
 
 @app.get("/api/health")

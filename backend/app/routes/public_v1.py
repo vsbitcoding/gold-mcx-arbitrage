@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, metals_service, options_service, othercomm_service, price_service
+from app.services import extra_instruments, metals_service, options_service, othercomm_service, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -271,6 +271,23 @@ def public_othercomm_spread(_key: str = Depends(require_api_key)):
         "formula": "difference = far.buy − near.sell",
         "status": othercomm_service.status(),
         **othercomm_service.get_table(),
+    }
+
+
+@router.get("/signals")
+def public_signals(_key: str = Depends(require_api_key)):
+    """Live mean-reversion signals for cross pairs (direction/entry/target).
+
+    direction: 'narrow' = spread is high, expected to fall to target (the mean);
+               'widen'  = spread is low,  expected to rise to target.
+    Each signal: {label, expiry_label, direction, entry, target, current, z, age_min}.
+    Validated by backtest (~82% of such signals end profitable). Not financial advice.
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "status": signal_service.status(),
+        "signals": signal_service.get_active_signals(),
     }
 
 

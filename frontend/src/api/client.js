@@ -109,6 +109,8 @@ export const api = {
   otherCommSpread: () => request("/api/othercomm/spread"),
   // Live Buyer/Seller price table (gold & silver active contracts)
   priceTable: () => request("/api/price/table"),
+  // Live mean-reversion signals (cross pairs)
+  signals: () => request("/api/signals"),
   // Account config
   getAccount: () => request("/api/config/account"),
   updateAccount: (body) => request("/api/config/account", {

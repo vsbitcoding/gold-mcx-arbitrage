@@ -3930,6 +3930,43 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sc-front { color: #f59e0b; flex: none; }
 .sc-open { font-size: 9px; font-weight: 800; background: var(--accent); color: #fff; border-radius: 100px; padding: 1px 5px; flex: none; }
 .sc-open.orphan { background: #f59e0b; }
+/* Live mean-reversion signal chip on a cross-card row */
+.sc-sig {
+  flex: none; margin-left: 4px; padding: 0 5px; border-radius: 100px;
+  font-size: 10px; font-weight: 800; line-height: 1.7;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sc-sig-narrow { color: #fff; background: var(--red); }     /* spread high → expect fall */
+.sc-sig-widen  { color: #fff; background: var(--green); }   /* spread low  → expect rise */
+.sc-has-signal { background: rgba(245,158,11,0.10); box-shadow: inset 2px 0 0 #f59e0b; }
+body.dark .sc-has-signal { background: rgba(245,158,11,0.14); }
+
+/* ===== Signals tab ===== */
+.pair-tab-signals.active { color: #b45309; }
+.pair-tab-signals .count { background: #f59e0b; color: #fff; }
+.signal-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;
+}
+.signal-card {
+  background: var(--bg-surface); border: 1px solid var(--border-light);
+  border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.signal-card.sig-narrow { border-left: 4px solid var(--red); }
+.signal-card.sig-widen  { border-left: 4px solid var(--green); }
+.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sig-pair { font-weight: 800; font-size: 13px; color: var(--text-primary); }
+.sig-exp { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sig-dir { margin-left: auto; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 100px; }
+.sig-dir-narrow { color: #fff; background: var(--red); }
+.sig-dir-widen  { color: #fff; background: var(--green); }
+.sig-body { display: flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.sig-leg { color: var(--text-secondary); }
+.sig-leg b { color: var(--text-primary); font-family: 'Roboto Mono', ui-monospace, monospace; }
+.sig-target b { color: var(--accent); }
+.sig-arrow { color: var(--text-muted); }
+.sig-meta { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.sig-age { margin-left: auto; }
+@media (max-width: 560px) { .signal-list { grid-template-columns: 1fr; } }
 
 .sc-dec, .sc-inc { justify-self: center; min-width: 58px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 5px; }
 .sc-dec { color: var(--red); background: rgba(220,38,38,.07); }

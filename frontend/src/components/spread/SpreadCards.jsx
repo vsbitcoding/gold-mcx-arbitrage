@@ -80,10 +80,18 @@ export default function SpreadCards({ groups }) {
               {isCalendar && <span className="sc-c">%</span>}
             </div>
             {rows.map((row, i) => (
-              <div className="sc-row" key={row.name}>
+              <div className={`sc-row${row.signal ? " sc-has-signal" : ""}`} key={row.name}>
                 <span className="sc-exp">
                   <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
                   {i === 0 && <span className="sc-front" title="Front month">★</span>}
+                  {row.signal && (
+                    <span
+                      className={`sc-sig sc-sig-${row.signal.direction}`}
+                      title={`Signal: spread likely to ${row.signal.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${row.signal.target} (entry ${row.signal.entry})`}
+                    >
+                      ⚡{row.signal.direction === "narrow" ? "▼" : "▲"}{row.signal.target}
+                    </span>
+                  )}
                 </span>
                 <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
                 <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
