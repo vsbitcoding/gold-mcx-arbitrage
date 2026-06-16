@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { key: "signals", label: "⚡ Signals" },
@@ -24,6 +24,17 @@ export default function Header({
   onNavigate,
   counts = {},
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Close drawer on Escape; lock page scroll while open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e) { if (e.key === "Escape") setMenuOpen(false); }
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [menuOpen]);
+
   // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
   const dhanMode = feedStatus?.mode;
   const tickAge = feedStatus?.last_tick_age_seconds;
@@ -70,9 +81,13 @@ export default function Header({
         `Last tick: ${tickAge === null ? "never" : tickAge + "s ago"}`,
       ].join("\n")
     : "Connecting...";
+
+  const go = (key) => { onNavigate(key); setMenuOpen(false); };
+
   return (
     <div className="header">
       <div className="header-left">
+        <button className="nav-hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">☰</button>
         <div className="brand">
           <img src="/favicon.svg" className="brand-logo" alt="Arbi" width="26" height="26" />
           <span className="accent">Arbi</span>
@@ -97,12 +112,44 @@ export default function Header({
           <span className="health-label">{label}</span>
           {extra && <span className="health-meta">{extra}</span>}
         </span>
-        <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+        <button className="theme-toggle hide-mobile" onClick={onToggleTheme} title="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
-        <span className="username-chip">{user || "User"}</span>
-        <button className="btn btn-secondary" onClick={onLogout}>Logout</button>
+        <span className="username-chip hide-mobile">{user || "User"}</span>
+        <button className="btn btn-secondary hide-mobile" onClick={onLogout}>Logout</button>
       </div>
+
+      {/* Mobile slide-in navigation drawer */}
+      {menuOpen && (
+        <>
+          <div className="nav-drawer-overlay" onClick={() => setMenuOpen(false)} />
+          <nav className="nav-drawer">
+            <div className="nav-drawer-head">
+              <span className="brand"><span className="accent">Arbi</span> <span>Dash</span></span>
+              <button className="nav-drawer-x" onClick={() => setMenuOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="nav-drawer-list">
+              {NAV_ITEMS.map((it) => (
+                <button
+                  key={it.key}
+                  className={`nav-drawer-item ${page === it.key ? "active" : ""}`}
+                  onClick={() => go(it.key)}
+                >
+                  <span>{it.label}</span>
+                  {counts[it.key] != null && <span className="nav-drawer-count">{counts[it.key]}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="nav-drawer-foot">
+              <span className="username-chip">{user || "User"}</span>
+              <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+                {theme === "dark" ? "☀" : "☾"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => { setMenuOpen(false); onLogout(); }}>Logout</button>
+            </div>
+          </nav>
+        </>
+      )}
     </div>
   );
 }
