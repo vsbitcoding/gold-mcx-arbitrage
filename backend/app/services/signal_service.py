@@ -200,6 +200,7 @@ def refresh_model() -> int:
             continue
         buckets, overall = _aggregate(_backtest(vals))
         new[p["name"]] = {
+            "label": p.get("label"),
             "mean": round(mean, 1), "sd": round(sd, 1),
             "upper": round(mean + ENTRY_K * sd, 1), "lower": round(mean - ENTRY_K * sd, 1),
             "target": round(mean, 1), "n": len(vals),
@@ -419,7 +420,8 @@ def get_accuracy() -> dict:
 def status() -> dict:
     return {"models": _state["models"], "last_refresh": _state["last_refresh"],
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
-            "maxhold_days": MAXHOLD_DAYS}
+            "maxhold_days": MAXHOLD_DAYS,
+            "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")})}
 
 
 # ───────────────────────── background loop ─────────────────────────
