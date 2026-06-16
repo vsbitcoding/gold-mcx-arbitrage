@@ -23,6 +23,17 @@ function fmtDur(fromISO, toISO) {
   return ms >= 0 ? fmtMin(Math.floor(ms / 60000)) : "—";
 }
 
+// Client's signal-study sequence (order the open signals are listed in).
+const SIGNAL_ORDER = [
+  "GUINEA / TEN", "GUINEA / MINI", "PETAL / GUINEA", "PETAL / TEN", "PETAL / MINI",
+  "SILVER MIC / SILVER MINI", "MINI / GOLD", "SILVER MINI / SILVER", "TEN / MINI",
+  "SILVER 100 / SILVER MIC", "SILVER 100 / SILVER MINI",
+];
+function sigRank(label) {
+  const i = SIGNAL_ORDER.indexOf(String(label || "").toUpperCase().trim());
+  return i === -1 ? 999 : i;
+}
+
 // Fire-once signals (direction + target) + accuracy track record. No % shown.
 export default function SignalsPanel({ signals }) {
   const [view, setView] = useState("open");
@@ -73,7 +84,7 @@ export default function SignalsPanel({ signals }) {
           </div>
         ) : (
           <div className="signal-list">
-            {signals.map((r) => {
+            {[...signals].sort((a, b) => sigRank(a.label) - sigRank(b.label)).map((r) => {
               const s = r.signal;
               const narrow = s.direction === "narrow";
               return (
