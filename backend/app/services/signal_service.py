@@ -344,6 +344,8 @@ def _disp(name, s, a, cur, z):
         "z_at_entry": a.get("z_at_entry"),
         "fired_at": datetime.fromtimestamp(a["started"]).strftime("%d %b %Y, %I:%M %p"),
         "age_min": int((time.time() - a["started"]) / 60), "progress_pct": progress,
+        "time_left_min": max(0, int((MAX_AGE_SECONDS - (time.time() - a["started"])) / 60)),
+        "limit_days": round(MAX_AGE_SECONDS / 86400),
     }
 
 

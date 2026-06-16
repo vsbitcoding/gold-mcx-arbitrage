@@ -93,6 +93,10 @@ export default function SignalsPanel({ signals }) {
                     <span><b>{s.progress_pct || 0}%</b> to target</span>
                     <span className="sig-meta">running {fmtMin(s.age_min)}</span>
                   </div>
+                  <div className="sig-foot sig-sub">
+                    <span className="sig-expires">⏳ expires in {fmtMin(s.time_left_min)}</span>
+                    {s.expected_days != null && <span className="sig-meta">usually ~{s.expected_days}d</span>}
+                  </div>
                 </div>
               );
             })}

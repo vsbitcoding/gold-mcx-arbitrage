@@ -37,10 +37,12 @@ export default function SignalModal({ row, onClose }) {
         </div>
         <div className="sigm-prog"><div className="sigm-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
         <div className="sigm-meta">
+          <div><span>Entry (fired at)</span><b>{r0(s.entry)}</b></div>
           <div><span>Progress</span><b>{s.progress_pct || 0}% to target</b></div>
           <div><span>Fired</span><b>{s.fired_at || "—"}</b></div>
           <div><span>Running</span><b>{fmtMin(s.age_min)}</b></div>
-          <div><span>Status</span><b>Open{s.expected_days ? ` · ~${s.expected_days}d expected` : ""}</b></div>
+          <div><span>Expires in</span><b>{fmtMin(s.time_left_min)}</b></div>
+          <div><span>Status</span><b>Open{s.expected_days ? ` · usually hits in ~${s.expected_days}d` : ""}</b></div>
         </div>
       </div>
     </div>
