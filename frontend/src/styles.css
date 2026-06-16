@@ -149,9 +149,14 @@ body {
   color: #fff;
   border-color: var(--accent);
 }
-.nav-count { font-size: 10px; font-weight: 800; background: var(--bg-surface-alt); color: var(--text-muted); border-radius: 100px; padding: 0 5px; font-variant-numeric: tabular-nums; }
-.nav-tab.active .nav-count { background: rgba(255,255,255,.25); color: #fff; }
-.nav-tab-signals .nav-count { background: #f59e0b; color: #fff; }
+/* regular tabs: subtle muted number (no heavy pill) */
+.nav-count { font-size: 11px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.nav-tab.active .nav-count { color: rgba(255,255,255,.82); }
+/* Signals: a small amber badge (it's the actionable count) */
+.nav-tab-signals .nav-count {
+  display: inline-flex; min-width: 16px; height: 16px; align-items: center; justify-content: center;
+  background: #f59e0b; color: #fff; border-radius: 100px; font-size: 9.5px; font-weight: 800; padding: 0 4px;
+}
 .nav-tab-signals.active { background: #f59e0b; border-color: #f59e0b; }
 .nav-tab-signals.active .nav-count { background: rgba(255,255,255,.3); }
 .header-right { display: flex; align-items: center; gap: 8px; }
