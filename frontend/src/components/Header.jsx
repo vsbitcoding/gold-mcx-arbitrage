@@ -1,5 +1,16 @@
 import React from "react";
 
+const NAV_ITEMS = [
+  { key: "signals", label: "⚡ Signals" },
+  { key: "cross", label: "Cross Pairs" },
+  { key: "calendar", label: "Calendar" },
+  { key: "metals", label: "Metal" },
+  { key: "price", label: "Price" },
+  { key: "othercomm", label: "Other Commodity" },
+  { key: "calculator", label: "Calculator" },
+  { key: "options", label: "Nifty / Sensex" },
+];
+
 export default function Header({
   user,
   onLogout,
@@ -11,6 +22,7 @@ export default function Header({
   wsState,
   page,
   onNavigate,
+  counts = {},
 }) {
   // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
   const dhanMode = feedStatus?.mode;
@@ -67,24 +79,16 @@ export default function Header({
           <span>Dash</span>
         </div>
         <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${page === "dashboard" ? "active" : ""}`}
-            onClick={() => onNavigate("dashboard")}
-          >
-            Dashboard
-          </button>
-          <button
-            className={`nav-tab ${page === "calculator" ? "active" : ""}`}
-            onClick={() => onNavigate("calculator")}
-          >
-            Calculator
-          </button>
-          <button
-            className={`nav-tab ${page === "options" ? "active" : ""}`}
-            onClick={() => onNavigate("options")}
-          >
-            Nifty / Sensex
-          </button>
+          {NAV_ITEMS.map((it) => (
+            <button
+              key={it.key}
+              className={`nav-tab ${page === it.key ? "active" : ""}${it.key === "signals" ? " nav-tab-signals" : ""}`}
+              onClick={() => onNavigate(it.key)}
+            >
+              {it.label}
+              {counts[it.key] != null && <span className="nav-count">{counts[it.key]}</span>}
+            </button>
+          ))}
         </nav>
       </div>
       <div className="header-right">

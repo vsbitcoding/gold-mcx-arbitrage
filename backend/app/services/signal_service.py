@@ -326,6 +326,7 @@ def _disp(name, s, a, cur, z):
         "probability": a.get("probability"), "expected_days": a.get("expected_days"),
         "current": cur if cur is not None else entry, "z": z,
         "z_at_entry": a.get("z_at_entry"),
+        "fired_at": datetime.fromtimestamp(a["started"]).strftime("%d %b %Y, %I:%M %p"),
         "age_min": int((time.time() - a["started"]) / 60), "progress_pct": progress,
     }
 
