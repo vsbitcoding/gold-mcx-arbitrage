@@ -36,8 +36,10 @@ WINDOW = 20                       # rolling days for mean / sd (the band)
 ENTRY_K = 1.5                     # fire threshold in σ
 LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
 MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
-DEBOUNCE_SECONDS = 20             # live mid must hold beyond band this long before firing
+DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
 MAX_AGE_SECONDS = 14 * 24 * 3600  # live signal expires (=wrong) if target not hit in ~10 trading days
+MIN_HOLD_SECONDS = 60 * 60        # a signal that hits target faster than this = noise → discarded
+LIQ_K = 1.0                       # skip firing if the spread's bid/ask width > LIQ_K × σ (illiquid)
 TICK_SECONDS = 3
 MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
 Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
@@ -218,6 +220,16 @@ def _mid(snap):
     return (dec + inc) / 2.0
 
 
+def _too_noisy(s, sd):
+    """Liquidity guard: True when the spread's bid/ask width (increase − decrease)
+    is wide vs the band's σ → illiquid pair, the mid is unreliable, so any signal
+    would be noise. Keeps the fast junk signals (e.g. Silver Mic/Mini) from firing."""
+    dec, inc = s.get("decrease_spread"), s.get("increase_spread")
+    if dec is None or inc is None:
+        return True
+    return bool(sd) and sd > 0 and (inc - dec) > LIQ_K * sd
+
+
 def _load_open():
     db = SessionLocal()
     try:
@@ -253,12 +265,16 @@ def _tick():
                 if hit or expired:
                     db = db or SessionLocal()
                     row = db.get(Signal, a["id"])
+                    dur = now - a["started"]
                     if row and row.status == "open":
-                        row.status = "hit" if hit else "expired"
-                        row.exit_spread = round(mid, 1) if mid is not None else None
-                        row.resolved_at = datetime.utcnow()
-                        row.days_held = round((now - a["started"]) / 86400.0, 2)
-                        db.commit()          # persist BEFORE dropping from memory
+                        if hit and dur < MIN_HOLD_SECONDS:
+                            db.delete(row)       # hit target too fast → noise, discard (not counted)
+                        else:
+                            row.status = "hit" if hit else "expired"
+                            row.exit_spread = round(mid, 1) if mid is not None else None
+                            row.resolved_at = datetime.utcnow()
+                            row.days_held = round(dur / 86400.0, 2)
+                        db.commit()              # persist BEFORE dropping from memory
                     _active.pop(name, None)
                 continue
 
@@ -267,8 +283,8 @@ def _tick():
                 _pending.pop(name, None)
                 continue
             direction = "narrow" if mid >= model["upper"] else "widen" if mid <= model["lower"] else None
-            if direction is None:
-                _pending.pop(name, None)
+            if direction is None or _too_noisy(s, model["sd"]):
+                _pending.pop(name, None)        # no extreme, or pair too illiquid → don't fire
                 continue
             p = _pending.get(name)
             if p and p["direction"] == direction:
