@@ -41,11 +41,17 @@ function fmtCalExpiry(label) {
  * row gets a colored tint + a ⚡ icon at the end — click it for the popup detail.
  */
 export default function SpreadCards({ groups }) {
-  const [selected, setSelected] = useState(null);
+  // Store only the row key, then re-resolve the live row each render so the
+  // popup updates in real time as new snapshots poll in (not a frozen snapshot).
+  const [selectedName, setSelectedName] = useState(null);
 
   if (!groups.length) {
     return <div className="empty-state">No pairs match.</div>;
   }
+
+  const selectedRow = selectedName
+    ? groups.flatMap((g) => g.rows).find((r) => r.name === selectedName && r.signal) || null
+    : null;
 
   const isCalendar = groups[0]?.rows?.[0]?.type === "calendar";
   const order = isCalendar ? CAL_ORDER : CROSS_ORDER;
@@ -92,7 +98,7 @@ export default function SpreadCards({ groups }) {
                         <button
                           className={`sc-sigbtn sc-sigbtn-${row.signal.direction}`}
                           title="View signal details"
-                          onClick={() => setSelected(row)}
+                          onClick={() => setSelectedName(row.name)}
                         >
                           ⚡
                         </button>
@@ -105,7 +111,7 @@ export default function SpreadCards({ groups }) {
           );
         })}
       </div>
-      {selected && <SignalModal row={selected} onClose={() => setSelected(null)} />}
+      {selectedRow && <SignalModal row={selectedRow} onClose={() => setSelectedName(null)} />}
     </>
   );
 }
