@@ -89,7 +89,7 @@ export default function SpreadCards({ groups }) {
                       className={`sc-sig sc-sig-${row.signal.direction}`}
                       title={`Signal: spread likely to ${row.signal.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${row.signal.target} (entry ${row.signal.entry})`}
                     >
-                      ⚡{row.signal.direction === "narrow" ? "▼" : "▲"}{row.signal.target}
+                      ⚡{row.signal.direction === "narrow" ? "▼" : "▲"}{Math.round(row.signal.target).toLocaleString("en-IN")}
                     </span>
                   )}
                 </span>

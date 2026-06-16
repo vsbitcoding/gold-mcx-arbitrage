@@ -3950,22 +3950,23 @@ body.dark .sc-has-signal { background: rgba(245,158,11,0.14); }
 .signal-card {
   background: var(--bg-surface); border: 1px solid var(--border-light);
   border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  display: flex; flex-direction: column; gap: 3px;
 }
 .signal-card.sig-narrow { border-left: 4px solid var(--red); }
 .signal-card.sig-widen  { border-left: 4px solid var(--green); }
-.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.sig-pair { font-weight: 800; font-size: 13px; color: var(--text-primary); }
-.sig-exp { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.sig-dir { margin-left: auto; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 100px; }
+/* Row 1: pair name (truncates) + direction badge — never wraps */
+.sig-r1 { display: flex; align-items: center; gap: 8px; }
+.sig-pair { font-weight: 800; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sig-dir { margin-left: auto; flex: none; font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 100px; letter-spacing: .3px; }
 .sig-dir-narrow { color: #fff; background: var(--red); }
 .sig-dir-widen  { color: #fff; background: var(--green); }
-.sig-body { display: flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
-.sig-leg { color: var(--text-secondary); }
-.sig-leg b { color: var(--text-primary); font-family: 'Roboto Mono', ui-monospace, monospace; }
-.sig-target b { color: var(--accent); }
+.sig-r2 { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sig-r3 { display: flex; align-items: baseline; gap: 7px; font-size: 12px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.sig-kv { color: var(--text-secondary); }
+.sig-kv b { color: var(--text-primary); font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; }
+.sig-kv b.sig-tgt { color: var(--accent); }
 .sig-arrow { color: var(--text-muted); }
-.sig-meta { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
-.sig-age { margin-left: auto; }
+.sig-meta { margin-left: auto; flex: none; font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
 @media (max-width: 560px) { .signal-list { grid-template-columns: 1fr; } }
 
 .sc-dec, .sc-inc { justify-self: center; min-width: 58px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 5px; }

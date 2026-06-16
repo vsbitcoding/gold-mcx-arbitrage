@@ -29,9 +29,12 @@ log = logging.getLogger("signal_service")
 WINDOW = 20            # rolling days for mean / sd
 ENTRY_K = 1.5          # entry threshold in σ (validated)
 LOOKBACK_DAYS = 120    # daily history to pull
+DEBOUNCE_SECONDS = 20  # spread must hold beyond the band this long before a signal opens
+MAX_AGE_SECONDS = 7 * 24 * 3600   # auto-expire a signal that never reverts
 
 _bands: dict[str, dict] = {}    # pair_name -> {mean, sd, upper, lower, target, n}
-_active: dict[str, dict] = {}   # pair_name -> {direction, entry, target, started}
+_active: dict[str, dict] = {}   # pair_name -> {direction, entry, target, started, current, z}
+_pending: dict[str, dict] = {}  # pair_name -> {direction, since}  (debounce buffer)
 _state: dict = {"last_refresh": None, "bands": 0}
 
 
@@ -148,11 +151,28 @@ def _mid(snap):
     return (dec + inc) / 2.0
 
 
+def _sig_dict(name, s, a, band, now):
+    return {
+        "name": name, "label": s.get("label"), "expiry_label": s.get("expiry_label"),
+        "direction": a["direction"], "entry": a["entry"], "target": a["target"],
+        "current": a["current"], "z": a["z"],
+        "age_min": int((now - a["started"]) / 60),
+        "mean": band["mean"], "upper": band["upper"], "lower": band["lower"],
+    }
+
+
 def evaluate_all(snaps: list[dict]) -> dict:
-    """Update active-signal state from live snaps; return {pair_name: signal}."""
+    """Stateful, sticky signal lifecycle (kills tick-to-tick flicker):
+
+      open : mid must hold beyond ±ENTRY_K σ for DEBOUNCE_SECONDS  → signal fires
+      hold : stays active (entry/target fixed) until mid reverts to the target
+             (the mean) — NOT cleared by a momentary dip back inside the band, and
+             held through illiquid ticks where the live mid is briefly missing
+      close: target reached, or MAX_AGE_SECONDS elapsed
+    """
     out: dict[str, dict] = {}
     now = time.time()
-    seen = set()
+    present = set()
     for s in snaps:
         if s.get("type") != "cross":
             continue
@@ -160,35 +180,49 @@ def evaluate_all(snaps: list[dict]) -> dict:
         band = _bands.get(name)
         if not band:
             continue
+        present.add(name)
         mid = _mid(s)
-        if mid is None:
-            continue
         sd = band["sd"] or 1.0
-        z = (mid - band["mean"]) / sd
-        direction = None
-        if mid >= band["upper"]:
-            direction = "narrow"
-        elif mid <= band["lower"]:
-            direction = "widen"
-        if direction is None:
-            _active.pop(name, None)
+        a = _active.get(name)
+
+        if a:  # ── active signal: hold until target / expiry ──
+            if mid is not None:
+                hit = ((a["direction"] == "narrow" and mid <= a["target"]) or
+                       (a["direction"] == "widen" and mid >= a["target"]))
+                if hit or (now - a["started"]) > MAX_AGE_SECONDS:
+                    _active.pop(name, None)
+                    continue
+                a["current"] = round(mid, 1)
+                a["z"] = round((mid - band["mean"]) / sd, 2)
+            # mid is None → hold last known values (illiquid tick)
+            out[name] = _sig_dict(name, s, a, band, now)
             continue
-        seen.add(name)
-        prev = _active.get(name)
-        if not prev or prev["direction"] != direction:
-            prev = {"direction": direction, "entry": round(mid, 1),
-                    "target": band["target"], "started": now}
-            _active[name] = prev
-        out[name] = {
-            "name": name, "label": s.get("label"), "expiry_label": s.get("expiry_label"),
-            "direction": direction, "entry": prev["entry"], "target": band["target"],
-            "current": round(mid, 1), "z": round(z, 2),
-            "age_min": int((now - prev["started"]) / 60),
-            "mean": band["mean"], "upper": band["upper"], "lower": band["lower"],
-        }
-    for name in list(_active):
-        if name not in seen:
-            _active.pop(name, None)
+
+        # ── no active signal: detect + debounce a new one ──
+        if mid is None:
+            _pending.pop(name, None)
+            continue
+        direction = "narrow" if mid >= band["upper"] else "widen" if mid <= band["lower"] else None
+        if direction is None:
+            _pending.pop(name, None)
+            continue
+        p = _pending.get(name)
+        if p and p["direction"] == direction:
+            if now - p["since"] >= DEBOUNCE_SECONDS:
+                a = {"direction": direction, "entry": round(mid, 1), "target": band["target"],
+                     "started": now, "current": round(mid, 1),
+                     "z": round((mid - band["mean"]) / sd, 2)}
+                _active[name] = a
+                _pending.pop(name, None)
+                out[name] = _sig_dict(name, s, a, band, now)
+        else:
+            _pending[name] = {"direction": direction, "since": now}
+
+    # prune state for pairs no longer present (e.g. rolled expiry / band removed)
+    for d in (_active, _pending):
+        for name in list(d):
+            if name not in present:
+                d.pop(name, None)
     return out
 
 
