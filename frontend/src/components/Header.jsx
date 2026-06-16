@@ -11,6 +11,23 @@ const NAV_ITEMS = [
   { key: "options", label: "Nifty / Sensex" },
 ];
 
+// Clean monochrome line icons (match the app's drawer look).
+function NavIcon({ name }) {
+  const c = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+    strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
+  switch (name) {
+    case "signals": return <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>;
+    case "cross": return <svg {...c}><path d="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12" /></svg>;
+    case "calendar": return <svg {...c}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>;
+    case "metals": return <svg {...c}><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5M3 17l9 5 9-5" /></svg>;
+    case "price": return <svg {...c}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></svg>;
+    case "othercomm": return <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z" /></svg>;
+    case "calculator": return <svg {...c}><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" /></svg>;
+    case "options": return <svg {...c}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
+    default: return null;
+  }
+}
+
 export default function Header({
   user,
   onLogout,
@@ -125,7 +142,13 @@ export default function Header({
           <div className="nav-drawer-overlay" onClick={() => setMenuOpen(false)} />
           <nav className="nav-drawer">
             <div className="nav-drawer-head">
-              <span className="brand"><span className="accent">Arbi</span> <span>Dash</span></span>
+              <div className="nav-drawer-brand">
+                <img src="/favicon.svg" width="32" height="32" alt="Arbi" />
+                <div>
+                  <div className="ndb-title"><span className="accent">Arbi</span></div>
+                  <div className="ndb-sub">Spread Monitor</div>
+                </div>
+              </div>
               <button className="nav-drawer-x" onClick={() => setMenuOpen(false)} aria-label="Close">×</button>
             </div>
             <div className="nav-drawer-list">
@@ -135,7 +158,8 @@ export default function Header({
                   className={`nav-drawer-item ${page === it.key ? "active" : ""}`}
                   onClick={() => go(it.key)}
                 >
-                  <span>{it.label}</span>
+                  <span className="nav-drawer-ic"><NavIcon name={it.key} /></span>
+                  <span className="nav-drawer-lbl">{it.label.replace(/^⚡\s*/, "")}</span>
                   {counts[it.key] != null && <span className="nav-drawer-count">{counts[it.key]}</span>}
                 </button>
               ))}
