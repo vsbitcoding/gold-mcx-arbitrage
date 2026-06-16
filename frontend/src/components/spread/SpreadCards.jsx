@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { fmtSpread } from "../../utils/format.js";
-import { STATUS_LABEL } from "./constants.js";
 
 // Price multiplier per instrument (mirror of backend config.MULTIPLIERS).
 // % = spread ÷ (near-leg price × multiplier) × 100  — per client:
@@ -45,22 +44,10 @@ function fmtCalExpiry(label) {
 }
 
 /**
- * Card view of cross / calendar pairs. One card per pair-group, all expiries
- * shown (spreads only). A gear icon per expiry opens a small menu with
- * Manage / Positions / History (the existing modals).
+ * Card view of cross / calendar pairs (WATCH-ONLY). One card per pair-group, all
+ * expiries shown — spreads (and calendar %) only. No trade actions.
  */
-export default function SpreadCards({ groups, onManage, onPositions, onHistory }) {
-  const [menuFor, setMenuFor] = useState(null); // row.name whose gear menu is open
-
-  useEffect(() => {
-    if (!menuFor) return;
-    function onDoc(e) {
-      if (!e.target.closest(".sc-gear-wrap")) setMenuFor(null);
-    }
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
-  }, [menuFor]);
-
+export default function SpreadCards({ groups }) {
   if (!groups.length) {
     return <div className="empty-state">No pairs match.</div>;
   }
@@ -91,26 +78,12 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
               <span className="sc-c">▼ Dec</span>
               <span className="sc-c">▲ Inc</span>
               {isCalendar && <span className="sc-c">%</span>}
-              <span />
-              {isCalendar && <span className="sc-tail" />}
             </div>
             {rows.map((row, i) => (
-              <div className={`sc-row status-${row.status}`} key={row.name}>
+              <div className="sc-row" key={row.name}>
                 <span className="sc-exp">
-                  <span
-                    className={`sc-dot sd-${row.status}`}
-                    title={STATUS_LABEL[row.status] || row.status}
-                  />
                   <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
                   {i === 0 && <span className="sc-front" title="Front month">★</span>}
-                  {row.open_positions_count > 0 && (
-                    <span
-                      className={`sc-open ${row.orphan_open_count > 0 ? "orphan" : ""}`}
-                      title={`${row.open_positions_count} open trade(s)`}
-                    >
-                      {row.open_positions_count}
-                    </span>
-                  )}
                 </span>
                 <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
                 <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
@@ -119,26 +92,6 @@ export default function SpreadCards({ groups, onManage, onPositions, onHistory }
                     {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
                   </span>
                 )}
-                <span className="sc-gear-wrap">
-                  <button
-                    className="sc-gear"
-                    title="Settings"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuFor(menuFor === row.name ? null : row.name);
-                    }}
-                  >
-                    ⚙
-                  </button>
-                  {menuFor === row.name && (
-                    <div className="sc-menu">
-                      <button onClick={() => { onManage(row.name); setMenuFor(null); }}>Manage</button>
-                      <button onClick={() => { onPositions(row.name); setMenuFor(null); }}>Positions</button>
-                      <button onClick={() => { onHistory(row.name); setMenuFor(null); }}>History</button>
-                    </div>
-                  )}
-                </span>
-                {isCalendar && <span className="sc-tail" />}
               </div>
             ))}
           </div>

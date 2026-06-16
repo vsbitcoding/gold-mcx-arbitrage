@@ -11,11 +11,11 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from sqlalchemy import text, update
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import SessionLocal, engine
-from app.models import ActivityLog, LadderRule, Position, TradeHistory
+from app.models import ActivityLog, TradeHistory
 from app.services import activity, extra_instruments, span_service
 
 log = logging.getLogger("maintenance")
@@ -54,28 +54,6 @@ def _prune_activity() -> int:
     db = SessionLocal()
     try:
         n = db.query(ActivityLog).filter(ActivityLog.timestamp < cutoff).delete()
-        db.commit()
-        return n
-    finally:
-        db.close()
-
-
-def _daily_clear_ladders() -> int:
-    """Delete all ladder rules. Open positions are left as-is (per client spec).
-    Nulls FKs on positions/history first so SQLite cannot recycle ladder IDs
-    and inherit a stale lifetime-fired counter."""
-    db = SessionLocal()
-    try:
-        db.execute(update(Position).where(Position.ladder_rule_id.isnot(None)).values(ladder_rule_id=None))
-        db.execute(update(TradeHistory).where(TradeHistory.ladder_rule_id.isnot(None)).values(ladder_rule_id=None))
-        n = db.query(LadderRule).delete()
-        if n > 0:
-            activity.log(
-                db, "daily_clear",
-                actor="system",
-                summary=f"Daily auto-clear: deleted {n} ladders at MCX close",
-                details={"deleted": n},
-            )
         db.commit()
         return n
     finally:
@@ -139,7 +117,7 @@ def _check_calculator_rollover(active: dict) -> None:
 
 
 def _loop() -> None:
-    # Track which day we last ran the daily clear (IST date) to avoid double-fire
+    # Track which day we last ran the nightly pruning (IST date) to avoid double-fire
     last_clear_date: str | None = None
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
@@ -154,19 +132,18 @@ def _loop() -> None:
         try:
             now = datetime.now()  # server runs in Asia/Kolkata → IST
             today_str = now.date().isoformat()
-            # Daily auto-clear window: at or after 23:35 IST on a fresh date
+            # Nightly retention prune: at or after 23:35 IST on a fresh date
             if (
                 last_clear_date != today_str
                 and (now.hour, now.minute) >= (CLEAR_HOUR_IST, CLEAR_MINUTE_IST)
             ):
-                cleared = _daily_clear_ladders()
                 pruned = _prune_history()
                 act_pruned = _prune_activity()
                 log.info(
-                    "Daily auto-clear: %d ladders, %d history rows, %d activity rows.",
-                    cleared, pruned, act_pruned,
+                    "Nightly prune: %d history rows, %d activity rows.",
+                    pruned, act_pruned,
                 )
-                if pruned > 0 or cleared > 0:
+                if pruned > 0:
                     _vacuum()
                 last_clear_date = today_str
 

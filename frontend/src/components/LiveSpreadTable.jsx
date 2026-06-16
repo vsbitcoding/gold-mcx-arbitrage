@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SpreadCards from "./spread/SpreadCards.jsx";
-import { LadderModal, PositionsModal, HistoryModal } from "./spread/Modals.jsx";
 import { PAIR_PAGE_SIZE } from "./spread/constants.js";
 import MetalSpread, { otherCommColorKey } from "./MetalSpread.jsx";
 import PriceTable from "./PriceTable.jsx";
@@ -9,19 +8,8 @@ import { api } from "../api/client.js";
 // Tabs that show their own watch-only cards (no search/filter/pagination).
 const WATCH_TABS = ["metals", "price", "othercomm"];
 
-function SkeletonRows({ count = 6 }) {
-  return Array.from({ length: count }).map((_, i) => (
-    <tr key={`skel:${i}`} className="skel-row">
-      {Array.from({ length: 8 }).map((__, j) => (
-        <td key={j}><div className="skel-bar" /></td>
-      ))}
-    </tr>
-  ));
-}
-
-export default function LiveSpreadTable({ rows, onSaved }) {
+export default function LiveSpreadTable({ rows }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
   const [expiryFilter, setExpiryFilter] = useState("all");
   const [tab, setTab] = useState(() => {
     const t = localStorage.getItem("arbi_spread_tab");
@@ -30,10 +18,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   useEffect(() => { localStorage.setItem("arbi_spread_tab", tab); }, [tab]);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [page, setPage] = useState(1);
-  const [openPair, setOpenPair] = useState(null);
-  const [openPositionsPair, setOpenPositionsPair] = useState(null);
-  const [openHistoryPair, setOpenHistoryPair] = useState(null);
-  const [expandedGroups, setExpandedGroups] = useState({});
   const [metalData, setMetalData] = useState(null);
   const [otherCommData, setOtherCommData] = useState(null);
   const [priceData, setPriceData] = useState(null);
@@ -65,10 +49,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     return () => { alive = false; stop(); document.removeEventListener("visibilitychange", onVis); };
   }, []);
 
-  function toggleGroup(label) {
-    setExpandedGroups((g) => ({ ...g, [label]: !g[label] }));
-  }
-
   const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
   const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
   const tabRows = tab === "cross" ? crossRows : calendarRows;
@@ -86,13 +66,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
     return opts;
   }, [tabRows]);
 
-  const counts = useMemo(() => ({
-    all: tabRows.length,
-    armed: tabRows.filter((r) => r.status === "armed").length,
-    in_position: tabRows.filter((r) => r.status === "in_position").length,
-    idle: tabRows.filter((r) => r.status === "idle").length,
-  }), [tabRows]);
-
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     return tabRows.filter((r) => {
@@ -104,10 +77,9 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         if (!hit) return false;
       }
       if (expiryFilter !== "all" && r.expiry_label !== expiryFilter) return false;
-      if (filter === "all") return true;
-      return r.status === filter;
+      return true;
     });
-  }, [tabRows, search, filter, expiryFilter]);
+  }, [tabRows, search, expiryFilter]);
 
   const sortedRows = useMemo(() => {
     if (!sort.field) return filtered;
@@ -119,9 +91,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
         case "expiry": return r.big_expiry || r.expiry_label || "";
         case "decrease_spread": return r.decrease_spread ?? -Infinity;
         case "increase_spread": return r.increase_spread ?? -Infinity;
-        case "status": return r.status || "";
-        case "decrease_count": return r.decrease_ladders.length;
-        case "increase_count": return r.increase_ladders.length;
         default: return 0;
       }
     }
@@ -148,15 +117,10 @@ export default function LiveSpreadTable({ rows, onSaved }) {
   const start = (safePage - 1) * PAIR_PAGE_SIZE;
   const sliceGroups = groupedRows.slice(start, start + PAIR_PAGE_SIZE);
 
-  useEffect(() => { setPage(1); }, [tab, filter, search, expiryFilter, sort.field, sort.dir]);
-
-  const openRow = openPair ? rows.find((r) => r.name === openPair) : null;
-  const positionsRow = openPositionsPair ? rows.find((r) => r.name === openPositionsPair) : null;
-  const historyRow = openHistoryPair ? rows.find((r) => r.name === openHistoryPair) : null;
+  useEffect(() => { setPage(1); }, [tab, search, expiryFilter, sort.field, sort.dir]);
 
   function resetFilters() {
     setSearch("");
-    setFilter("all");
     setExpiryFilter("all");
     setSort({ field: null, dir: "asc" });
   }
@@ -173,21 +137,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
               <option value="all">All expiries</option>
               {expiryOptions.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
             </select>
-            <div className="filter-tabs">
-              <button className={`filter-tab ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
-                All <span className="count">{counts.all}</span>
-              </button>
-              <button className={`filter-tab ${filter === "armed" ? "active" : ""}`} onClick={() => setFilter("armed")}>
-                Armed <span className="count">{counts.armed}</span>
-              </button>
-              <button className={`filter-tab ${filter === "in_position" ? "active" : ""}`} onClick={() => setFilter("in_position")}>
-                In Position <span className="count">{counts.in_position}</span>
-              </button>
-              <button className={`filter-tab ${filter === "idle" ? "active" : ""}`} onClick={() => setFilter("idle")}>
-                Idle <span className="count">{counts.idle}</span>
-              </button>
-            </div>
-            {(search || filter !== "all" || expiryFilter !== "all" || sort.field) && (
+            {(search || expiryFilter !== "all" || sort.field) && (
               <button className="btn btn-secondary btn-sm" onClick={resetFilters} title="Clear filters & sort">Reset</button>
             )}
         </div>
@@ -227,12 +177,7 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           <div className="empty-state" style={{ padding: "24px 16px" }}>Loading…</div>
         ) : (
           <>
-            <SpreadCards
-              groups={sliceGroups}
-              onManage={(n) => setOpenPair(n)}
-              onPositions={(n) => setOpenPositionsPair(n)}
-              onHistory={(n) => setOpenHistoryPair(n)}
-            />
+            <SpreadCards groups={sliceGroups} />
             {groupedRows.length > PAIR_PAGE_SIZE && (
               <div className="pagination-controls">
                 <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
@@ -248,10 +193,6 @@ export default function LiveSpreadTable({ rows, onSaved }) {
           </>
         )
       )}
-
-      {openRow && <LadderModal row={openRow} onClose={() => setOpenPair(null)} onChange={onSaved} />}
-      {positionsRow && <PositionsModal row={positionsRow} onClose={() => setOpenPositionsPair(null)} />}
-      {historyRow && <HistoryModal row={historyRow} onClose={() => setOpenHistoryPair(null)} />}
     </div>
   );
 }

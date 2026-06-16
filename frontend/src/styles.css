@@ -3901,7 +3901,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 .sc-row {
   display: grid;
-  grid-template-columns: 100px 1fr 1fr 24px;   /* fixed expiry → rows align; Dec/Inc share rest, centered */
+  grid-template-columns: 100px 1fr 1fr;   /* fixed expiry → rows align; Dec/Inc share rest, centered */
   align-items: center; gap: 6px;
   padding: 5px 11px;
   border-bottom: 1px dashed var(--border-light);
@@ -3911,7 +3911,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    date always shows); Dec/Inc/% are compact + fixed. Columns: Expiry | Dec | Inc | % | gear */
 /* Columns FILL the card width evenly: expiry gets the most (min for the full date),
    Dec/Inc/% share the rest → no inter-column gap and no wasted trailing space. */
-.sc-cal .sc-row { grid-template-columns: minmax(176px, 1.6fr) 1fr 1fr 0.9fr 26px; }
+.sc-cal .sc-row { grid-template-columns: minmax(176px, 1.6fr) 1fr 1fr 0.9fr; }
 .sc-cal .sc-exp { font-size: 11px; }
 .sc-cal .sc-exp-txt { overflow: visible; }   /* never clip the date */
 .sc-tail { display: none; }                  /* spacer no longer needed — columns fill */
@@ -3962,8 +3962,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 720px)  {
   .spread-cards.sc-cal { grid-template-columns: 1fr; gap: 10px; }
   /* phone: expiry flexes, drop the trailing spacer, allow the date to wrap */
-  .sc-cal .sc-row { grid-template-columns: 1fr 56px 56px 44px 20px; }
-  .sc-cal .sc-tail { display: none; }
+  .sc-cal .sc-row { grid-template-columns: 1fr 56px 56px 44px; }
   .sc-cal .sc-exp { white-space: normal; }
   .sc-cal .sc-exp-txt { white-space: normal; }
 }

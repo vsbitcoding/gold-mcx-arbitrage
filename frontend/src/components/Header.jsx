@@ -85,18 +85,6 @@ export default function Header({
           >
             Nifty / Sensex
           </button>
-          <button
-            className={`nav-tab ${page === "settings" ? "active" : ""}`}
-            onClick={() => onNavigate("settings")}
-          >
-            Settings
-          </button>
-          <button
-            className={`nav-tab ${page === "activity" ? "active" : ""}`}
-            onClick={() => onNavigate("activity")}
-          >
-            Activity
-          </button>
         </nav>
       </div>
       <div className="header-right">

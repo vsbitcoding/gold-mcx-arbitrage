@@ -2,9 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
-import Activity from "./components/Activity.jsx";
 import Calculator from "./components/Calculator.jsx";
-import Settings from "./components/Settings.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
@@ -12,7 +10,7 @@ import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
 import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
-const VALID_PAGES = ["dashboard", "activity", "calculator", "options", "settings"];
+const VALID_PAGES = ["dashboard", "calculator", "options"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -28,9 +26,6 @@ function getStoredPage() {
 function Dashboard() {
   const confirm = useConfirm();
   const [pairs, setPairs] = useState([]);
-  const [positions, setPositions] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [account, setAccount] = useState(null);
   const [feedStatus, setFeedStatus] = useState(null);
   const [wsState, setWsState] = useState("connecting");
   const [theme, setTheme] = useState(getStoredTheme());
@@ -75,28 +70,10 @@ function Dashboard() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Slow-cadence fetch for things WS doesn't push (positions, history, feed status).
-  // Account is fetched on a slower, separate cadence (rarely changes).
+  // Slow-cadence fetch for feed status (the only thing WS doesn't push).
   const refreshSlow = useCallback(async () => {
     try {
-      const [op, h, fs] = await Promise.all([
-        api.positions(),
-        api.history(7),
-        api.feedStatus().catch(() => null),
-      ]);
-      if (op && Array.isArray(op.positions)) setPositions(op.positions);
-      else setPositions(op || []);
-      if (h && Array.isArray(h.trades)) setHistory(h.trades);
-      else setHistory(h || []);
-      setFeedStatus(fs);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  const refreshAccount = useCallback(async () => {
-    try {
-      setAccount(await api.getAccount().catch(() => null));
+      setFeedStatus(await api.feedStatus().catch(() => null));
     } catch (e) {
       console.error(e);
     }
@@ -114,25 +91,18 @@ function Dashboard() {
 
   useEffect(() => {
     refreshSlow();
-    refreshAccount();
     refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
 
-    // Slow REST cadence: positions/history/feed + account every 10s (account on
-    // its own timer so its slower-changing data can later be dialed back).
-    // Paused entirely while the tab is hidden (no point polling a tab nobody sees).
+    // Slow REST cadence: feed status every 10s. Paused while the tab is hidden.
     let slowTimer = setInterval(refreshSlow, 10000);
-    let acctTimer = setInterval(refreshAccount, 10000);
 
     function onVisibility() {
       if (document.hidden) {
         clearInterval(slowTimer); slowTimer = null;
-        clearInterval(acctTimer); acctTimer = null;
       } else {
-        // Came back into view → refresh immediately so numbers aren't stale.
+        // Came back into view → refresh immediately so status isn't stale.
         refreshSlow();
-        refreshAccount();
         if (!slowTimer) slowTimer = setInterval(refreshSlow, 10000);
-        if (!acctTimer) acctTimer = setInterval(refreshAccount, 10000);
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
@@ -151,12 +121,11 @@ function Dashboard() {
 
     return () => {
       clearInterval(slowTimer);
-      clearInterval(acctTimer);
       document.removeEventListener("visibilitychange", onVisibility);
       stopFallback();
       sock.close();
     };
-  }, [refreshSlow, refreshAccount, refreshPairsFallback]);
+  }, [refreshSlow, refreshPairsFallback]);
 
   // Engage REST fallback only if WS keeps failing
   useEffect(() => {
@@ -193,11 +162,6 @@ function Dashboard() {
     setDensity((d) => (d === "compact" ? "comfortable" : "compact"));
   }
 
-  const onLocalSaved = () => {
-    refreshSlow();
-    refreshAccount();
-  };
-
   return (
     <div className="app">
       <Header
@@ -213,13 +177,9 @@ function Dashboard() {
         onNavigate={setPage}
       />
       <div className="container">
-        {page === "dashboard" && (
-          <LiveSpreadTable rows={pairs} onSaved={onLocalSaved} />
-        )}
-        {page === "activity" && <Activity />}
+        {page === "dashboard" && <LiveSpreadTable rows={pairs} />}
         {page === "calculator" && <Calculator />}
         {page === "options" && <OptionsSpread />}
-        {page === "settings" && <Settings />}
       </div>
     </div>
   );

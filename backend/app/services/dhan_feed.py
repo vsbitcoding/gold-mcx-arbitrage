@@ -22,7 +22,6 @@ from app.services import dhan_auth, pair_registry
 from app.services.broadcaster import broadcaster
 from app.services.market_data import quote_store
 from app.services.snapshot import build_live_payload
-from app.services.trade_engine import evaluate
 
 log = logging.getLogger("dhan_feed")
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -75,16 +74,13 @@ def _set_state(**kwargs) -> None:
 
 
 def _eval_and_broadcast() -> None:
-    db = SessionLocal()
+    # Watch-only: no trade evaluation — just broadcast the live spread snapshot.
     try:
-        evaluate(db)
         if broadcaster.client_count > 0:
-            payload = build_live_payload(db)
+            payload = build_live_payload()
             broadcaster.push_threadsafe({"type": "snapshot", "data": payload})
     except Exception as e:
-        log.exception("evaluate() failed: %s", e)
-    finally:
-        db.close()
+        log.exception("broadcast failed: %s", e)
 
 
 _last_reconnect_epoch: float = 0.0
