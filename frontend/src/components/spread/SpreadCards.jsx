@@ -67,12 +67,23 @@ export default function SpreadCards({ groups }) {
           )
         );
         const isSilver = String(g.label || "").toUpperCase().includes("SILVER");
+        const sig = rows.find((r) => r.signal)?.signal;
         return (
-          <div className={`sc-card ${isSilver ? "sc-silver" : "sc-gold"}`} key={g.label}>
+          <div className={`sc-card ${isSilver ? "sc-silver" : "sc-gold"}${sig ? " sc-card-signal" : ""}`} key={g.label}>
             <div className="sc-card-head">
               <span className="sc-pair">{g.label}</span>
               <span className="sc-count">{rows.length} exp</span>
             </div>
+            {sig && (
+              <div
+                className={`sc-banner sc-banner-${sig.direction}`}
+                title={`Signal: spread likely to ${sig.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${sig.target}${sig.probability != null ? ` · ${sig.probability}% chance` : ""}`}
+              >
+                <span className="sc-banner-dir">⚡ {sig.direction === "narrow" ? "▼ NARROW" : "▲ WIDEN"}</span>
+                <span className="sc-banner-tgt">→ {Math.round(sig.target).toLocaleString("en-IN")}</span>
+                {sig.probability != null && <span className="sc-banner-prob">{sig.probability}%</span>}
+              </div>
+            )}
             <div className="sc-row sc-colhead">
               <span>Expiry</span>
               <span className="sc-c">▼ Dec</span>
@@ -80,31 +91,19 @@ export default function SpreadCards({ groups }) {
               {isCalendar && <span className="sc-c">%</span>}
             </div>
             {rows.map((row, i) => (
-              <React.Fragment key={row.name}>
-                <div className={`sc-row${row.signal ? " sc-has-signal" : ""}`}>
-                  <span className="sc-exp">
-                    <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
-                    {i === 0 && <span className="sc-front" title="Front month">★</span>}
+              <div className={`sc-row${row.signal ? " sc-has-signal" : ""}`} key={row.name}>
+                <span className="sc-exp">
+                  <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
+                  {i === 0 && <span className="sc-front" title="Front month">★</span>}
+                </span>
+                <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
+                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
+                {isCalendar && (
+                  <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
+                    {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
                   </span>
-                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
-                  <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
-                  {isCalendar && (
-                    <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
-                      {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
-                    </span>
-                  )}
-                </div>
-                {row.signal && (
-                  <div
-                    className={`sc-sigline sc-sigline-${row.signal.direction}`}
-                    title={`Signal: spread likely to ${row.signal.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${row.signal.target}${row.signal.probability != null ? ` · ${row.signal.probability}% chance` : ""}`}
-                  >
-                    <span>⚡ {row.signal.direction === "narrow" ? "▼ NARROW" : "▲ WIDEN"}</span>
-                    <span className="sc-sigline-tgt">→ {Math.round(row.signal.target).toLocaleString("en-IN")}</span>
-                    {row.signal.probability != null && <span className="sc-sigline-prob">{row.signal.probability}%</span>}
-                  </div>
                 )}
-              </React.Fragment>
+              </div>
             ))}
           </div>
         );

@@ -3930,18 +3930,19 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sc-front { color: #f59e0b; flex: none; }
 .sc-open { font-size: 9px; font-weight: 800; background: var(--accent); color: #fff; border-radius: 100px; padding: 1px 5px; flex: none; }
 .sc-open.orphan { background: #f59e0b; }
-/* Live signal: the expiry row stays full; the signal shows on its OWN line just
-   below, with a direction colour — never hides the expiry. */
-.sc-has-signal { box-shadow: inset 3px 0 0 #f59e0b; }
-.sc-sigline {
+/* Live signal: a clean colored BANNER under the card header. Expiry rows stay
+   pristine; the signaled (front-month) row gets only a thin accent edge. */
+.sc-card-signal { box-shadow: 0 2px 10px rgba(0,0,0,.08), 0 0 0 1.5px var(--accent); }
+.sc-has-signal { box-shadow: inset 3px 0 0 var(--accent); }
+.sc-banner {
   display: flex; align-items: center; gap: 7px;
-  padding: 2px 11px 5px; font-size: 10.5px; font-weight: 800;
-  font-variant-numeric: tabular-nums; border-bottom: 1px dashed var(--border-light);
+  padding: 5px 12px; font-size: 11px; font-weight: 800;
+  font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--border-light);
 }
-.sc-sigline-narrow { color: var(--red);   background: rgba(220,38,38,.07); box-shadow: inset 3px 0 0 var(--red); }
-.sc-sigline-widen  { color: var(--green); background: rgba(22,163,74,.07); box-shadow: inset 3px 0 0 var(--green); }
-.sc-sigline-tgt { color: var(--text-secondary); font-family: 'Roboto Mono', ui-monospace, monospace; }
-.sc-sigline-prob { margin-left: auto; color: var(--accent); font-weight: 900; }
+.sc-banner-tgt { color: var(--text-secondary); font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 700; }
+.sc-banner-prob { margin-left: auto; font-size: 12.5px; font-weight: 900; }
+.sc-banner-widen  { background: rgba(22,163,74,.12); color: var(--green); }
+.sc-banner-narrow { background: rgba(220,38,38,.12); color: var(--red); }
 
 /* ===== Signals tab ===== */
 .pair-tab-signals.active { color: #b45309; }
