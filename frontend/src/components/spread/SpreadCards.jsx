@@ -80,27 +80,31 @@ export default function SpreadCards({ groups }) {
               {isCalendar && <span className="sc-c">%</span>}
             </div>
             {rows.map((row, i) => (
-              <div className={`sc-row${row.signal ? " sc-has-signal" : ""}`} key={row.name}>
-                <span className="sc-exp">
-                  <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
-                  {i === 0 && <span className="sc-front" title="Front month">★</span>}
-                  {row.signal && (
-                    <span
-                      className={`sc-sig sc-sig-${row.signal.direction}`}
-                      title={`Signal: spread likely to ${row.signal.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${row.signal.target}${row.signal.probability != null ? ` · ${row.signal.probability}% chance` : ""}`}
-                    >
-                      ⚡{row.signal.direction === "narrow" ? "▼" : "▲"}{row.signal.probability != null ? `${row.signal.probability}%` : Math.round(row.signal.target).toLocaleString("en-IN")}
+              <React.Fragment key={row.name}>
+                <div className={`sc-row${row.signal ? " sc-has-signal" : ""}`}>
+                  <span className="sc-exp">
+                    <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
+                    {i === 0 && <span className="sc-front" title="Front month">★</span>}
+                  </span>
+                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
+                  <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
+                  {isCalendar && (
+                    <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
+                      {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
                     </span>
                   )}
-                </span>
-                <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
-                <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
-                {isCalendar && (
-                  <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
-                    {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
-                  </span>
+                </div>
+                {row.signal && (
+                  <div
+                    className={`sc-sigline sc-sigline-${row.signal.direction}`}
+                    title={`Signal: spread likely to ${row.signal.direction === "narrow" ? "NARROW (fall)" : "WIDEN (rise)"} → target ${row.signal.target}${row.signal.probability != null ? ` · ${row.signal.probability}% chance` : ""}`}
+                  >
+                    <span>⚡ {row.signal.direction === "narrow" ? "▼ NARROW" : "▲ WIDEN"}</span>
+                    <span className="sc-sigline-tgt">→ {Math.round(row.signal.target).toLocaleString("en-IN")}</span>
+                    {row.signal.probability != null && <span className="sc-sigline-prob">{row.signal.probability}%</span>}
+                  </div>
                 )}
-              </div>
+              </React.Fragment>
             ))}
           </div>
         );

@@ -146,6 +146,7 @@ def _prob_for(model: dict, z: float):
 
 
 def refresh_model() -> int:
+    global _model
     cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
     if not cross:
         return 0
@@ -202,8 +203,7 @@ def refresh_model() -> int:
             "target": round(mean, 1), "n": len(vals),
             "buckets": buckets, "overall": overall,
         }
-    _model.clear()
-    _model.update(new)
+    _model = new   # atomic reference swap — readers never see a half-built map
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
     log.info("Signal model refreshed: %d pairs (history+probability)", len(new))
@@ -258,6 +258,7 @@ def _tick():
                         row.exit_spread = round(mid, 1) if mid is not None else None
                         row.resolved_at = datetime.utcnow()
                         row.days_held = round((now - a["started"]) / 86400.0, 2)
+                        db.commit()          # persist BEFORE dropping from memory
                     _active.pop(name, None)
                 continue
 
@@ -282,8 +283,10 @@ def _tick():
                         probability=prob, z_at_entry=round(z, 2), expected_days=exp_days, status="open")
                     db.add(row)
                     db.flush()
+                    rid = row.id
+                    db.commit()              # persist BEFORE adding to memory
                     _active[name] = {
-                        "id": row.id, "direction": direction, "entry": round(mid, 1),
+                        "id": rid, "direction": direction, "entry": round(mid, 1),
                         "target": model["target"], "probability": prob, "z_at_entry": round(z, 2),
                         "expected_days": exp_days, "label": s.get("label"),
                         "expiry_label": s.get("expiry_label"), "started": now}
@@ -300,10 +303,12 @@ def _tick():
                     row.status = "expired"
                     row.resolved_at = datetime.utcnow()
                     row.days_held = round((now - _active[name]["started"]) / 86400.0, 2)
+                    db.commit()
                 _active.pop(name, None)
-
+    except Exception:
         if db:
-            db.commit()
+            db.rollback()
+        raise
     finally:
         if db:
             db.close()
