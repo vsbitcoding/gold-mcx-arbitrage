@@ -1,6 +1,14 @@
 import React, { useEffect } from "react";
 
 const r0 = (v) => (v == null ? "—" : Math.round(v).toLocaleString("en-IN"));
+function fmtMin(mins) {
+  if (mins == null || mins < 0) return "—";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24), hh = h % 24;
+  return hh ? `${d}d ${hh}h` : `${d}d`;
+}
 
 // Popup with full signal details (no probability — direction + target focus).
 export default function SignalModal({ row, onClose }) {
@@ -31,6 +39,7 @@ export default function SignalModal({ row, onClose }) {
         <div className="sigm-meta">
           <div><span>Progress</span><b>{s.progress_pct || 0}% to target</b></div>
           <div><span>Fired</span><b>{s.fired_at || "—"}</b></div>
+          <div><span>Running</span><b>{fmtMin(s.age_min)}</b></div>
           <div><span>Status</span><b>Open{s.expected_days ? ` · ~${s.expected_days}d expected` : ""}</b></div>
         </div>
       </div>

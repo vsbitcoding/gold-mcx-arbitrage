@@ -8,6 +8,20 @@ const dshort = (iso) => {
     return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
   } catch { return "—"; }
 };
+// human-readable duration from minutes, e.g. 75 → "1h 15m", 1500 → "1d 1h"
+function fmtMin(mins) {
+  if (mins == null || mins < 0) return "—";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24), hh = h % 24;
+  return hh ? `${d}d ${hh}h` : `${d}d`;
+}
+function fmtDur(fromISO, toISO) {
+  if (!fromISO || !toISO) return "—";
+  const ms = new Date(toISO) - new Date(fromISO);
+  return ms >= 0 ? fmtMin(Math.floor(ms / 60000)) : "—";
+}
 
 // Fire-once signals (direction + target) + accuracy track record. No % shown.
 export default function SignalsPanel({ signals }) {
@@ -77,7 +91,7 @@ export default function SignalsPanel({ signals }) {
                   <div className="sig-prog"><div className="sig-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
                   <div className="sig-foot">
                     <span><b>{s.progress_pct || 0}%</b> to target</span>
-                    <span className="sig-meta">fired {s.fired_at || "—"}</span>
+                    <span className="sig-meta">running {fmtMin(s.age_min)}</span>
                   </div>
                 </div>
               );
@@ -105,7 +119,7 @@ export default function SignalsPanel({ signals }) {
                   </div>
                   <div className="sig-foot">
                     <span>fired {dshort(h.fired_at)} → closed {dshort(h.resolved_at)}</span>
-                    <span className="sig-meta">{h.days_held != null ? `${h.days_held}d` : ""}</span>
+                    <span className="sig-meta">ran {fmtDur(h.fired_at, h.resolved_at)}</span>
                   </div>
                 </div>
               );
