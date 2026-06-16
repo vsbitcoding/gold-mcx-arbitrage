@@ -57,23 +57,29 @@ export default function SignalsPanel({ signals }) {
             {signals.map((r) => {
               const s = r.signal;
               const narrow = s.direction === "narrow";
+              const pq = s.probability == null ? "" : s.probability >= 65 ? "good" : s.probability >= 50 ? "ok" : "low";
               return (
                 <div className={`signal-card sig-${s.direction}`} key={r.name}>
-                  <div className="sig-r1">
-                    <span className="sig-pair" title={r.label}>{r.label}</span>
-                    <span className="sig-prob" title="Historical chance to reach target">{pct(s.probability)}</span>
+                  <div className="sig-top">
+                    <span className="sig-pair">{r.label}</span>
                     <span className={`sig-dir sig-dir-${s.direction}`}>{narrow ? "▼ NARROW" : "▲ WIDEN"}</span>
                   </div>
-                  <div className="sig-r2">{r.expiry_label}</div>
-                  <div className="sig-r3">
-                    <span className="sig-kv">now <b>{r0(s.current)}</b></span>
-                    <span className="sig-arrow">→</span>
-                    <span className="sig-kv">target <b className="sig-tgt">{r0(s.target)}</b></span>
+                  <div className="sig-exp2">{r.expiry_label}</div>
+                  <div className="sig-mid">
+                    <div className="sig-probbox">
+                      <span className={`sig-probbig p-${pq}`}>{pct(s.probability)}</span>
+                      <span className="sig-problbl">chance to hit</span>
+                    </div>
+                    <div className="sig-flow">
+                      <span><span className="sig-lbl">now</span><b>{r0(s.current)}</b></span>
+                      <span className="sig-flow-arrow">{narrow ? "↓" : "↑"}</span>
+                      <span><span className="sig-lbl">target</span><b className="sig-tgt">{r0(s.target)}</b></span>
+                    </div>
                   </div>
                   <div className="sig-prog"><div className="sig-prog-bar" style={{ width: `${s.progress_pct || 0}%` }} /></div>
-                  <div className="sig-r4">
-                    <span>{s.progress_pct || 0}% to target</span>
-                    <span className="sig-meta">{s.age_min}m{s.expected_days ? ` · ~${s.expected_days}d exp` : ""}</span>
+                  <div className="sig-foot">
+                    <span><b>{s.progress_pct || 0}%</b> to target</span>
+                    <span className="sig-meta">{s.expected_days ? `~${s.expected_days}d` : ""} · {s.age_min}m ago</span>
                   </div>
                 </div>
               );
