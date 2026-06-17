@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # If unset OR fetch fails, the engine falls back to calibrated margin %.
     SPAN_MARGIN_FEED_URL: str = ""
 
+    # Firebase Cloud Messaging — absolute path to the service-account JSON key.
+    # Empty = push disabled (the register API still stores device tokens).
+    FCM_KEY_PATH: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

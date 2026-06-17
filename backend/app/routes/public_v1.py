@@ -11,9 +11,10 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, metals_service, options_service, othercomm_service, price_service, signal_service
+from app.services import extra_instruments, fcm_service, metals_service, options_service, othercomm_service, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -304,6 +305,24 @@ def public_signals_accuracy(_key: str = Depends(require_api_key)):
     """Overall + per-pair signal accuracy (the verifiable track record)."""
     return {"server_time": datetime.now(timezone.utc).isoformat(),
             **signal_service.get_accuracy()}
+
+
+class DeviceRegister(BaseModel):
+    token: str | None = None
+    device_id: str | None = None
+    platform: str | None = "android"        # "android" | "ios"
+
+
+@router.post("/devices/register")
+def register_device(payload: DeviceRegister, _key: str = Depends(require_api_key)):
+    """Register a device for push notifications.
+
+    Body: { "token": "<FCM token>", "device_id": "<id>", "platform": "android"|"ios" }
+    Identity is `device_id` — sending again just updates that device's token.
+    A BLANK token never overwrites a previously-saved token (kept by request).
+    Returns { ok, saved } — saved=false when a blank token was ignored.
+    """
+    return fcm_service.register_device(payload.token, payload.device_id, payload.platform)
 
 
 @router.get("/price-table")

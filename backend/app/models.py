@@ -178,3 +178,21 @@ class Signal(Base):
     exit_spread = Column(Float, nullable=True)         # spread when resolved
     resolved_at = Column(DateTime, nullable=True)
     days_held = Column(Float, nullable=True)           # calendar days open→resolve
+
+
+class DeviceToken(Base):
+    """A mobile device registered for push notifications (FCM).
+
+    The app POSTs {token, device_id, platform} to /api/v1/devices/register.
+    Identity is device_id (one row per device); `token` is the current FCM
+    registration token. A blank token never overwrites a saved one.
+    """
+    __tablename__ = "device_tokens"
+
+    id = Column(Integer, primary_key=True)
+    device_id = Column(String(255), unique=True, index=True, nullable=False)
+    token = Column(Text, nullable=False)
+    platform = Column(String(16), default="android")  # android | ios
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

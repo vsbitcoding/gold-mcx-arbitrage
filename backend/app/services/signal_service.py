@@ -321,6 +321,14 @@ def _tick():
                         "expected_days": exp_days, "label": s.get("label"),
                         "expiry_label": s.get("expiry_label"), "started": now}
                     _pending.pop(name, None)
+                    try:                                   # fire a push to all registered devices (non-blocking)
+                        from app.services import fcm_service
+                        fcm_service.notify_new_signal({
+                            "label": s.get("label"), "direction": direction,
+                            "entry": entry, "target": target, "stop": stop,
+                            "expiry_label": s.get("expiry_label")})
+                    except Exception as e:
+                        log.warning("signal push dispatch failed: %s", e)
             else:
                 _pending[name] = {"direction": direction, "since": now}
 
