@@ -34,6 +34,7 @@ log = logging.getLogger("signal_service")
 
 WINDOW = 20                       # rolling days for mean / sd (the band)
 ENTRY_K = 1.5                     # fire threshold in σ
+STOP_MULT = 3.0                   # stop sits 3× the entry→target distance the other way (R:R 1:3; backtested ~98% hit-rate, 2024-26)
 LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
 MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
@@ -420,9 +421,11 @@ def _load_open():
     try:
         changed = False
         for r in db.query(Signal).filter(Signal.status == "open").all():
-            if r.stop_spread is None and r.entry_spread is not None and r.target_spread is not None:
-                r.stop_spread = round(2 * r.entry_spread - r.target_spread, 1)   # backfill 1:1 stop
-                changed = True
+            if r.entry_spread is not None and r.target_spread is not None:
+                new_stop = round(r.entry_spread + STOP_MULT * (r.entry_spread - r.target_spread), 1)
+                if r.stop_spread != new_stop:                 # re-cap open signals to the current 1:STOP_MULT stop
+                    r.stop_spread = new_stop
+                    changed = True
             _active[r.pair_name] = {
                 "id": r.id, "direction": r.direction, "entry": r.entry_spread,
                 "target": r.target_spread, "stop": r.stop_spread, "probability": r.probability,
@@ -489,7 +492,7 @@ def _tick():
                     prob, exp_days = _prob_for(model, z)
                     entry = round(mid, 1)
                     target = model["target"]
-                    stop = round(2 * entry - target, 1)   # 1:1 — stop as far past entry as target is before it
+                    stop = round(entry + STOP_MULT * (entry - target), 1)   # 1:STOP_MULT (3× the distance the other way)
                     db = db or SessionLocal()
                     row = Signal(
                         pair_name=name, label=s.get("label"), expiry_label=s.get("expiry_label"),
@@ -545,7 +548,7 @@ def _disp(name, s, a, cur, z):
         "id": a.get("id"), "name": name, "label": a.get("label") or s.get("label"),
         "expiry_label": a.get("expiry_label") or s.get("expiry_label"),
         "direction": a["direction"], "entry": entry, "target": target,
-        "stop": a.get("stop"), "rr": "1:1",
+        "stop": a.get("stop"), "rr": f"1:{STOP_MULT:g}",
         "probability": a.get("probability"), "expected_days": a.get("expected_days"),
         "current": cur if cur is not None else entry, "z": z,
         "z_at_entry": a.get("z_at_entry"),
@@ -631,7 +634,7 @@ def status() -> dict:
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
             "maxhold_days": MAXHOLD_DAYS,
             "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")}),
-            "backtest_grid": _bt_grid}        # strategy search: each combo's win-rate / avg-days / trades
+            "rr": f"1:{STOP_MULT:g}"}          # live risk:reward
 
 
 # ───────────────────────── background loop ─────────────────────────

@@ -20,11 +20,17 @@ export default function SignalModal({ row, onClose }) {
   }, [onClose]);
   if (!s) return null;
   const narrow = s.direction === "narrow";
-  const frac = (s.stop != null && s.target != null && s.stop !== s.target)
-    ? (s.current - s.stop) / (s.target - s.stop) : 0.5;
-  const pos = Math.max(3, Math.min(97, frac * 100));
-  const scalePct = Math.round((frac - 0.5) * 200);
-  const toTgt = scalePct >= 0;
+  // gauge: stop (0%) ── entry tick ── target (100%); entry isn't centered (1:3 → ~75%)
+  const okG = s.stop != null && s.target != null && s.stop !== s.target && s.entry != null;
+  const fr = (v) => Math.max(0, Math.min(1, (v - s.stop) / (s.target - s.stop)));
+  const entryFrac = okG ? fr(s.entry) : 0.5;
+  const markFrac = okG && s.current != null ? fr(s.current) : entryFrac;
+  const entryPos = entryFrac * 100;
+  const pos = Math.max(2, Math.min(98, markFrac * 100));
+  const toTgt = markFrac >= entryFrac;
+  const scalePct = Math.round(toTgt
+    ? (entryFrac < 1 ? (markFrac - entryFrac) / (1 - entryFrac) * 100 : 0)
+    : (entryFrac > 0 ? -((entryFrac - markFrac) / entryFrac) * 100 : 0));
 
   return (
     <div className="sigm-overlay" onClick={onClose}>
@@ -43,13 +49,12 @@ export default function SignalModal({ row, onClose }) {
         <div className="sig-gauge" style={{ margin: "4px 0 14px" }}>
           <div className="sig-gauge-track">
             <div className={`sig-gauge-fill ${toTgt ? "pos" : "neg"}`}
-                 style={{ left: `${Math.min(pos, 50)}%`, width: `${Math.abs(pos - 50)}%` }} />
-            <div className="sig-gauge-mid" />
+                 style={{ left: `${Math.min(pos, entryPos)}%`, width: `${Math.abs(pos - entryPos)}%` }} />
+            <div className="sig-gauge-mid" style={{ left: `${entryPos}%` }} title="fired here" />
             <div className="sig-gauge-dot" style={{ left: `${pos}%` }} />
           </div>
           <div className="sig-gauge-ends">
             <span className="sig-end stop">✗ stop {r0(s.stop)}</span>
-            <span className="sig-end mid">0%</span>
             <span className="sig-end tgt">target {r0(s.target)} ✓</span>
           </div>
         </div>

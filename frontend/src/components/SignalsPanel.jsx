@@ -87,11 +87,17 @@ export default function SignalsPanel({ signals }) {
             {[...signals].sort((a, b) => sigRank(a.label) - sigRank(b.label)).map((r) => {
               const s = r.signal;
               const narrow = s.direction === "narrow";
-              const frac = (s.stop != null && s.target != null && s.stop !== s.target)
-                ? (s.current - s.stop) / (s.target - s.stop) : 0.5;
-              const pos = Math.max(3, Math.min(97, frac * 100));   // marker position on track
-              const scalePct = Math.round((frac - 0.5) * 200);     // −100 (stop) .. 0 (entry) .. +100 (target)
-              const toTgt = scalePct >= 0;
+              // gauge: stop (0%) ── entry tick ── target (100%); entry isn't centered (1:3 → ~75%)
+              const okG = s.stop != null && s.target != null && s.stop !== s.target && s.entry != null;
+              const fr = (v) => Math.max(0, Math.min(1, (v - s.stop) / (s.target - s.stop)));
+              const entryFrac = okG ? fr(s.entry) : 0.5;
+              const markFrac = okG && s.current != null ? fr(s.current) : entryFrac;
+              const entryPos = entryFrac * 100;
+              const pos = Math.max(2, Math.min(98, markFrac * 100));   // NOW marker
+              const toTgt = markFrac >= entryFrac;                     // moving toward target?
+              const scalePct = Math.round(toTgt
+                ? (entryFrac < 1 ? (markFrac - entryFrac) / (1 - entryFrac) * 100 : 0)
+                : (entryFrac > 0 ? -((entryFrac - markFrac) / entryFrac) * 100 : 0));  // 0 entry · +100 target · −100 stop
               return (
                 <div className={`signal-card sig-${s.direction}`} key={r.name}>
                   <div className="sig-top">
@@ -107,13 +113,12 @@ export default function SignalsPanel({ signals }) {
                   <div className="sig-gauge">
                     <div className="sig-gauge-track">
                       <div className={`sig-gauge-fill ${toTgt ? "pos" : "neg"}`}
-                           style={{ left: `${Math.min(pos, 50)}%`, width: `${Math.abs(pos - 50)}%` }} />
-                      <div className="sig-gauge-mid" />
+                           style={{ left: `${Math.min(pos, entryPos)}%`, width: `${Math.abs(pos - entryPos)}%` }} />
+                      <div className="sig-gauge-mid" style={{ left: `${entryPos}%` }} title="fired here" />
                       <div className="sig-gauge-dot" style={{ left: `${pos}%` }} />
                     </div>
                     <div className="sig-gauge-ends">
                       <span className="sig-end stop">✗ stop {r0(s.stop)}</span>
-                      <span className="sig-end mid">0%</span>
                       <span className="sig-end tgt">target {r0(s.target)} ✓</span>
                     </div>
                   </div>
