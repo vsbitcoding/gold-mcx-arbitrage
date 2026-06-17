@@ -9,12 +9,14 @@ GET  https://arbitrage.bitcoding.ai/api/v1/options-spread?side=above
 Header:  X-API-Key: <your key>
 ```
 
-| `side`  | Shows                          | Rows |
-|---------|--------------------------------|------|
-| `below` | ATM + 9 **lower** strikes      | 10   |
-| `above` | ATM + 14 **higher** strikes    | 15   |
+| `side`       | Tab name        | Shows                       | Rows | Legs used (spread)              |
+|--------------|-----------------|-----------------------------|------|---------------------------------|
+| `below`      | Below ATM       | ATM + 9 **lower** strikes   | 10   | Nifty **bid** / Sensex **ask**  |
+| `above`      | Above ATM       | ATM + 14 **higher** strikes | 15   | Nifty **bid** / Sensex **ask**  |
+| `squareoff`  | Square off ITM  | same as Above (ITM)         | 15   | Nifty **ask** / Sensex **bid**  |
 
-- Make **two tabs** in the app; call the same endpoint with `side=below` / `side=above`.
+- Make **three tabs** in the app; call the same endpoint with `side=below` / `side=above` / `side=squareoff`.
+- For the leg-price columns use `nifty_leg` / `sensex_leg` (already the correct bid/ask for that side). Header labels: below/above → "N bid" / "S ask"; squareoff → "N ask" / "S bid".
 - **Poll every 1–2 s** while the screen is open (no WebSocket for options).
 - Render row count from `weeks[i].rows.length` (10 or 15) — don't hard-code.
 
@@ -40,10 +42,12 @@ Header:  X-API-Key: <your key>
           "sensex_strike": 77200,
           "nifty_pe":   176.80,   // Nifty PE LTP  (info only)
           "sensex_pe":  659.60,   // Sensex PE LTP (info only)
-          "nifty_bid":  176.45,   // used in spread  (SELL Nifty PE @ bid)
-          "sensex_ask": 664.35,   // used in spread  (BUY  Sensex PE @ ask)
-          "nifty_value":  57346.25,  // = nifty_bid  × 325
-          "sensex_value": 66435.00,  // = sensex_ask × 100
+          "nifty_bid":  176.45, "nifty_ask":  187.35,   // both legs always present
+          "sensex_bid": 690.30, "sensex_ask": 664.35,
+          "nifty_leg":  176.45,   // ← show this in the N column (= bid for below/above, ask for squareoff)
+          "sensex_leg": 664.35,   // ← show this in the S column (= ask for below/above, bid for squareoff)
+          "nifty_value":  57346.25,  // = nifty_leg  × 325
+          "sensex_value": 66435.00,  // = sensex_leg × 100
           "spread":      -9088.75    // = nifty_value − sensex_value   ← THE cell value
         }
         // ... 10 rows (below) or 15 rows (above)
