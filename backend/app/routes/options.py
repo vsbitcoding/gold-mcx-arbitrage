@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/options", tags=["options"])
 
 @router.get("/spread")
 def get_spread(side: str = "below", user: str = Depends(get_current_user)):
-    """side = 'below' (ATM + 9 lower, 10 rows) | 'above' (ATM + 15 higher, 16 rows)."""
+    """side = 'below' (ATM + 9 lower, 10 rows) | 'above' (ATM + 14 higher, 15 rows)."""
     side = "above" if side == "above" else "below"
     return {
         "status": options_service.status(),

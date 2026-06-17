@@ -60,8 +60,8 @@ WEEK_COUNT = 3
 # Display window: ATM + 9 OTM = 10 strikes per expiry (the "below" tab)
 DISPLAY_STRIKES = 10
 DISPLAY_BELOW = 9   # 9 strikes below ATM (OTM puts) + ATM itself = 10
-# "above" tab (positive side): ATM + 15 higher strikes = 16 rows
-ABOVE_ROWS = 16
+# "above" tab (positive side): ATM + 14 higher strikes = 15 rows
+ABOVE_ROWS = 15
 
 # Subscription buffer (subscribe wider than display so the dynamic ATM stays
 # covered all day WITHOUT re-subscribing mid-session — Dhan rate-limits hard on
@@ -312,7 +312,7 @@ def get_spread_table(side: str = "below") -> dict:
     """Compute the live spread table (3 weeks) using current quotes.
 
     side="below" (default): ATM + 9 lower strikes  = 10 rows (OTM puts).
-    side="above"          : ATM + 15 higher strikes = 16 rows (the positive side).
+    side="above"          : ATM + 14 higher strikes = 15 rows (the positive side).
 
     Returns:
       {
@@ -342,7 +342,7 @@ def get_spread_table(side: str = "below") -> dict:
     sensex_atm_live = sensex_atm(sensex_spot_for_calc) if sensex_spot_for_calc else _state.get("sensex_anchor")
 
     above = side == "above"
-    count = ABOVE_ROWS if above else DISPLAY_STRIKES   # 16 above (ATM+15) | 10 below (ATM+9)
+    count = ABOVE_ROWS if above else DISPLAY_STRIKES   # 15 above (ATM+14) | 10 below (ATM+9)
     step_sign = 1 if above else -1                     # walk up for "above", down for "below"
 
     weeks_out = []

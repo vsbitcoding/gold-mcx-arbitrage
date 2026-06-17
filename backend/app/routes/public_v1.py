@@ -215,7 +215,7 @@ def public_calculator(_key: str = Depends(require_api_key)):
 
 @router.get("/options-spread")
 def public_options_spread(
-    side: str = Query("below", description="below = ATM + 9 lower (10 rows) | above = ATM + 15 higher (16 rows)"),
+    side: str = Query("below", description="below = ATM + 9 lower (10 rows) | above = ATM + 14 higher (15 rows)"),
     _key: str = Depends(require_api_key),
 ):
     """Live Nifty / Sensex PE-options spread table (3 weeks × 10 strikes).

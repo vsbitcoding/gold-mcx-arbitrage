@@ -30,7 +30,7 @@ function itmCls(v) {
 export default function OptionsSpread() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [side, setSide] = useState("below");   // "below" = ATM+9 (10 rows) | "above" = ATM+15 (16 rows)
+  const [side, setSide] = useState("below");   // "below" = ATM+9 (10 rows) | "above" = ATM+14 (15 rows)
 
   useEffect(() => {
     let alive = true;
@@ -92,7 +92,7 @@ export default function OptionsSpread() {
             ▼ Below ATM <span className="opt-side-sub">10</span>
           </button>
           <button className={side === "above" ? "active" : ""} onClick={() => setSide("above")}>
-            ▲ Above ATM <span className="opt-side-sub">16</span>
+            ▲ Above ATM <span className="opt-side-sub">15</span>
           </button>
         </div>
       </div>
