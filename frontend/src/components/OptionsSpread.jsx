@@ -32,8 +32,10 @@ export default function OptionsSpread() {
   const [err, setErr] = useState(null);
   // remember the chosen tab across refreshes
   const [side, setSide] = useState(() => {
-    try { return localStorage.getItem("opt_side") === "above" ? "above" : "below"; }
-    catch { return "below"; }
+    try {
+      const s = localStorage.getItem("opt_side");
+      return ["above", "squareoff", "below"].includes(s) ? s : "below";
+    } catch { return "below"; }
   });
   useEffect(() => {
     try { localStorage.setItem("opt_side", side); } catch { /* ignore */ }
@@ -62,8 +64,9 @@ export default function OptionsSpread() {
         const r = wk.rows[idx];
         return r ? {
           spread: r.spread,
-          niftyBid: r.nifty_bid ?? r.nifty_pe,
-          sensexAsk: r.sensex_ask ?? r.sensex_pe,
+          // leg the backend used for THIS side (below/above: N bid·S ask; squareoff: N ask·S bid)
+          niftyLeg: r.nifty_leg ?? r.nifty_bid ?? r.nifty_pe,
+          sensexLeg: r.sensex_leg ?? r.sensex_ask ?? r.sensex_pe,
         } : null;
       });
       const niftyItm = (baseRow.nifty_strike != null && niftySpot != null)
@@ -89,6 +92,9 @@ export default function OptionsSpread() {
   }, [data]);
 
   const weeks = data?.weeks || [];
+  // column labels flip for the square-off (exit) side
+  const legNLabel = side === "squareoff" ? "N ask" : "N bid";
+  const legSLabel = side === "squareoff" ? "S bid" : "S ask";
 
   return (
     <div className="opt-page">
@@ -100,6 +106,9 @@ export default function OptionsSpread() {
           </button>
           <button className={side === "above" ? "active" : ""} onClick={() => setSide("above")}>
             ▲ Above ATM <span className="opt-side-sub">15</span>
+          </button>
+          <button className={side === "squareoff" ? "active" : ""} onClick={() => setSide("squareoff")}>
+            ⤢ Square off ITM <span className="opt-side-sub">15</span>
           </button>
         </div>
       </div>
@@ -166,8 +175,8 @@ export default function OptionsSpread() {
                   const wk = `opt-wk-${w.week_index + 1}`;
                   return (
                     <React.Fragment key={w.week_index}>
-                      <th className={`opt-subcol opt-subcol-ask ${wk}`}>N bid</th>
-                      <th className={`opt-subcol opt-subcol-bid ${wk}`}>S ask</th>
+                      <th className={`opt-subcol opt-subcol-ask ${wk}`}>{legNLabel}</th>
+                      <th className={`opt-subcol opt-subcol-bid ${wk}`}>{legSLabel}</th>
                       <th className={`opt-subcol opt-subcol-spread ${wk}`}>Spread</th>
                     </React.Fragment>
                   );
@@ -207,12 +216,12 @@ export default function OptionsSpread() {
                       <React.Fragment key={i}>
                         <td className={`opt-subcol opt-subcol-ask ${wk}`}>
                           <span className="opt-leg-num">
-                            {c && c.niftyBid != null ? fmtNum(c.niftyBid, 2) : "—"}
+                            {c && c.niftyLeg != null ? fmtNum(c.niftyLeg, 2) : "—"}
                           </span>
                         </td>
                         <td className={`opt-subcol opt-subcol-bid ${wk}`}>
                           <span className="opt-leg-num">
-                            {c && c.sensexAsk != null ? fmtNum(c.sensexAsk, 2) : "—"}
+                            {c && c.sensexLeg != null ? fmtNum(c.sensexLeg, 2) : "—"}
                           </span>
                         </td>
                         <td className={`opt-subcol opt-subcol-spread opt-cell ${wk} ${c ? spreadCls(c.spread) : "neutral"}`}>

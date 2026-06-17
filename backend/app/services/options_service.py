@@ -311,8 +311,9 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
 def get_spread_table(side: str = "below") -> dict:
     """Compute the live spread table (3 weeks) using current quotes.
 
-    side="below" (default): ATM + 9 lower strikes  = 10 rows (OTM puts).
-    side="above"          : ATM + 14 higher strikes = 15 rows (the positive side).
+    side="below" (default): ATM + 9 lower strikes  = 10 rows (OTM puts).  Legs: Nifty BID / Sensex ASK.
+    side="above"          : ATM + 14 higher strikes = 15 rows (ITM puts). Legs: Nifty BID / Sensex ASK.
+    side="squareoff"      : same ITM strikes as "above" but EXIT legs — Nifty ASK / Sensex BID.
 
     Returns:
       {
@@ -341,9 +342,10 @@ def get_spread_table(side: str = "below") -> dict:
     nifty_atm_live = nifty_atm(nifty_spot_for_calc) if nifty_spot_for_calc else _state.get("nifty_anchor")
     sensex_atm_live = sensex_atm(sensex_spot_for_calc) if sensex_spot_for_calc else _state.get("sensex_anchor")
 
-    above = side == "above"
+    squareoff = side == "squareoff"
+    above = side == "above" or squareoff               # square-off uses the same ITM (above) strikes
     count = ABOVE_ROWS if above else DISPLAY_STRIKES   # 15 above (ATM+14) | 10 below (ATM+9)
-    step_sign = 1 if above else -1                     # walk up for "above", down for "below"
+    step_sign = 1 if above else -1                     # walk up for above/square-off, down for below
 
     weeks_out = []
     nifty_weeks = _state.get("nifty_weeks") or []
@@ -364,10 +366,15 @@ def get_spread_table(side: str = "below") -> dict:
             s_info = _state["options"].get(("SENSEX", wk_i, sensex_strike, "PE")) if sensex_strike else None
             n_bid, n_ask, n_ltp = _live_pe(n_info["security_id"] if n_info else None)
             s_bid, s_ask, s_ltp = _live_pe(s_info["security_id"] if s_info else None)
-            # Executable spread per client: SELL Nifty PE at BID, BUY Sensex PE at ASK.
-            # Fall back to LTP if bid/ask not present.
-            n_price = n_bid if n_bid else n_ltp
-            s_price = s_ask if s_ask else s_ltp
+            # Entry (below/above): SELL Nifty PE @ BID, BUY Sensex PE @ ASK.
+            # Square-off (exit): BUY back Nifty PE @ ASK, SELL Sensex PE @ BID.
+            # Fall back to LTP if the needed bid/ask is missing.
+            if squareoff:
+                n_price = n_ask if n_ask else n_ltp
+                s_price = s_bid if s_bid else s_ltp
+            else:
+                n_price = n_bid if n_bid else n_ltp
+                s_price = s_ask if s_ask else s_ltp
             n_value = (n_price * NIFTY_MULT) if n_price else None
             s_value = (s_price * SENSEX_MULT) if s_price else None
             spread = (n_value - s_value) if (n_value is not None and s_value is not None) else None
@@ -376,8 +383,12 @@ def get_spread_table(side: str = "below") -> dict:
                 "sensex_strike": sensex_strike,
                 "nifty_pe": n_ltp,         # LTP (informational)
                 "sensex_pe": s_ltp,
-                "nifty_bid": n_bid,        # used for spread (sell side)
-                "sensex_ask": s_ask,       # used for spread (buy side)
+                "nifty_bid": n_bid, "nifty_ask": n_ask,
+                "sensex_bid": s_bid, "sensex_ask": s_ask,
+                # the leg actually used for THIS side's spread (what the column shows):
+                #   below/above → nifty_bid & sensex_ask ; square-off → nifty_ask & sensex_bid
+                "nifty_leg": round(n_price, 2) if n_price else None,
+                "sensex_leg": round(s_price, 2) if s_price else None,
                 "nifty_value": round(n_value, 2) if n_value is not None else None,
                 "sensex_value": round(s_value, 2) if s_value is not None else None,
                 "spread": round(spread, 2) if spread is not None else None,
