@@ -57,9 +57,11 @@ SENSEX_MULT = 100
 # How many weekly expiries to track (current + next + next-next)
 WEEK_COUNT = 3
 
-# Display window: ATM + 9 OTM = 10 strikes per expiry
+# Display window: ATM + 9 OTM = 10 strikes per expiry (the "below" tab)
 DISPLAY_STRIKES = 10
 DISPLAY_BELOW = 9   # 9 strikes below ATM (OTM puts) + ATM itself = 10
+# "above" tab (positive side): ATM + 15 higher strikes = 16 rows
+ABOVE_ROWS = 16
 
 # Subscription buffer (subscribe wider than display so the dynamic ATM stays
 # covered all day WITHOUT re-subscribing mid-session — Dhan rate-limits hard on
@@ -306,8 +308,11 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     return instruments, meta
 
 
-def get_spread_table() -> dict:
-    """Compute the live spread table (3 weeks × 10 strikes) using current quotes.
+def get_spread_table(side: str = "below") -> dict:
+    """Compute the live spread table (3 weeks) using current quotes.
+
+    side="below" (default): ATM + 9 lower strikes  = 10 rows (OTM puts).
+    side="above"          : ATM + 15 higher strikes = 16 rows (the positive side).
 
     Returns:
       {
@@ -336,6 +341,10 @@ def get_spread_table() -> dict:
     nifty_atm_live = nifty_atm(nifty_spot_for_calc) if nifty_spot_for_calc else _state.get("nifty_anchor")
     sensex_atm_live = sensex_atm(sensex_spot_for_calc) if sensex_spot_for_calc else _state.get("sensex_anchor")
 
+    above = side == "above"
+    count = ABOVE_ROWS if above else DISPLAY_STRIKES   # 16 above (ATM+15) | 10 below (ATM+9)
+    step_sign = 1 if above else -1                     # walk up for "above", down for "below"
+
     weeks_out = []
     nifty_weeks = _state.get("nifty_weeks") or []
     sensex_weeks = _state.get("sensex_weeks") or []
@@ -344,8 +353,8 @@ def get_spread_table() -> dict:
     # ±1-2 day difference between Nifty & Sensex weekly is OK.
     for wk_i in range(min(len(nifty_weeks), len(sensex_weeks))):
         rows = []
-        for offset in range(0, DISPLAY_STRIKES):  # 0..9, with 0=ATM, 1..9 below
-            nifty_strike = nifty_atm_live - offset * NIFTY_STEP if nifty_atm_live else None
+        for offset in range(0, count):  # 0=ATM, then up (above) or down (below)
+            nifty_strike = nifty_atm_live + step_sign * offset * NIFTY_STEP if nifty_atm_live else None
             sensex_strike = (
                 pair_sensex_strike(nifty_strike, nifty_spot_for_calc, sensex_spot_for_calc)
                 if (nifty_strike and nifty_spot_for_calc and sensex_spot_for_calc)
@@ -381,6 +390,7 @@ def get_spread_table() -> dict:
         })
 
     return {
+        "side": side,
         "nifty_spot": nifty_spot,
         "sensex_spot": sensex_spot,
         "nifty_atm": nifty_atm_live,

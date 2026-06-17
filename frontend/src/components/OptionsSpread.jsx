@@ -30,19 +30,20 @@ function itmCls(v) {
 export default function OptionsSpread() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [side, setSide] = useState("below");   // "below" = ATM+9 (10 rows) | "above" = ATM+15 (16 rows)
 
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const r = await api.optionsSpread();
+        const r = await api.optionsSpread(side);
         if (alive) { setData(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
     const t = setInterval(load, 2000);
     return () => { alive = false; clearInterval(t); };
-  }, []);
+  }, [side]);
 
   const matrix = useMemo(() => {
     if (!data?.weeks?.length) return null;
@@ -86,6 +87,14 @@ export default function OptionsSpread() {
     <div className="opt-page">
       <div className="opt-head">
         <h2>Nifty / Sensex — PE Options Spread</h2>
+        <div className="opt-side-toggle" role="tablist">
+          <button className={side === "below" ? "active" : ""} onClick={() => setSide("below")}>
+            ▼ Below ATM <span className="opt-side-sub">10</span>
+          </button>
+          <button className={side === "above" ? "active" : ""} onClick={() => setSide("above")}>
+            ▲ Above ATM <span className="opt-side-sub">16</span>
+          </button>
+        </div>
       </div>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}

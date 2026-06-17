@@ -101,8 +101,8 @@ export const api = {
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
   // Calculator
   calcQuotes: () => request("/api/calculator/quotes"),
-  // Options spread (Nifty / Sensex PE)
-  optionsSpread: () => request("/api/options/spread"),
+  // Options spread (Nifty / Sensex PE) — side: "below" (ATM+9) | "above" (ATM+15)
+  optionsSpread: (side) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : "")),
   // Base-metal calendar spreads (Metal tab)
   metalsSpread: () => request("/api/metals/spread"),
   // Other-commodity calendar spreads (Crude / NatGas / Electricity)

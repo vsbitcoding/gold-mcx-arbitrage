@@ -1361,7 +1361,15 @@ body.dark .ldr-lock-note { color: #fcd34d; background: rgba(251,191,36,0.18); }
 
 /* ===== Options Spread page (Nifty / Sensex) ===== */
 .opt-page { padding: 0; }
+.opt-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .opt-head h2 { margin: 0 0 4px; font-size: 22px; }
+/* Below ATM / Above ATM segmented toggle */
+.opt-side-toggle { display: inline-flex; background: var(--bg-surface-alt); border: 1px solid var(--border-light); border-radius: 10px; padding: 3px; flex: none; }
+.opt-side-toggle button { border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-secondary); padding: 7px 16px; border-radius: 8px; transition: color .15s, background .15s; white-space: nowrap; }
+.opt-side-toggle button:hover { color: var(--text-primary); }
+.opt-side-toggle button.active { background: var(--bg-surface); color: var(--text-primary); font-weight: 800; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.opt-side-sub { font-size: 10px; background: var(--bg-surface-alt); color: var(--text-muted); border-radius: 100px; padding: 1px 6px; margin-left: 5px; font-weight: 800; }
+.opt-side-toggle button.active .opt-side-sub { background: var(--accent); color: #fff; }
 .opt-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 13px; line-height: 1.5; max-width: 920px; }
 .opt-sub code { background: var(--bg-surface-alt); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }
 
