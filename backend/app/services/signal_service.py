@@ -47,18 +47,13 @@ Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 # Strategy search grid for "short + accurate + frequent". Each combo:
 #   k = entry threshold (σ) · t = target distance from entry (σ) · s = stop distance (σ)
 #   mean=True → target is the rolling mean (full reversion), stop 1:1 = the CURRENT live strategy
-STRAT_GRID = [
-    {"name": "CURRENT (1.5σ in · full revert · 1:1)", "k": 1.5, "mean": True},
-    {"name": "prev best: 1.25σ in · 1.0σ tgt · 2.0σ stop", "k": 1.25, "t": 1.0, "s": 2.0},
-    {"name": "1.5σ in · 0.5σ tgt · 2.5σ stop",  "k": 1.5,  "t": 0.5,  "s": 2.5},
-    {"name": "1.5σ in · 0.75σ tgt · 2.5σ stop", "k": 1.5,  "t": 0.75, "s": 2.5},
-    {"name": "1.5σ in · 1.0σ tgt · 2.5σ stop",  "k": 1.5,  "t": 1.0,  "s": 2.5},
-    {"name": "1.5σ in · 1.0σ tgt · 3.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 3.0},
-    {"name": "1.25σ in · 0.5σ tgt · 2.5σ stop", "k": 1.25, "t": 0.5,  "s": 2.5},
-    {"name": "1.25σ in · 0.75σ tgt · 2.5σ stop","k": 1.25, "t": 0.75, "s": 2.5},
-    {"name": "1.25σ in · 1.0σ tgt · 2.5σ stop", "k": 1.25, "t": 1.0,  "s": 2.5},
-    {"name": "1.75σ in · 1.0σ tgt · 2.0σ stop", "k": 1.75, "t": 1.0,  "s": 2.0},
-    {"name": "1.75σ in · 1.0σ tgt · 2.5σ stop", "k": 1.75, "t": 1.0,  "s": 2.5},
+# FULL parameter sweep: every entry × target × stop combination (+ the current baseline).
+_GK = [1.0, 1.25, 1.5, 1.75, 2.0]            # entry threshold (σ)
+_GT = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]      # target distance from entry (σ)
+_GS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]    # stop distance from entry (σ)
+STRAT_GRID = [{"name": "CURRENT (1.5σ in · full revert · 1:1)", "k": 1.5, "mean": True}] + [
+    {"name": f"{k}σ in · {t}σ tgt · {s}σ stop", "k": k, "t": t, "s": s}
+    for k in _GK for t in _GT for s in _GS
 ]
 
 _model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
@@ -266,6 +261,8 @@ def refresh_model() -> int:
 
     new: dict[str, dict] = {}
     grid_acc = [[0, 0, 0, []] for _ in STRAT_GRID]   # per-combo (win, loss, timeout, days)
+    bars: list[int] = []
+    dmin, dmax = None, None
     for p in pairs:
         big = closes(p["big_security_id"])
         small = closes(p["small_security_id"])
@@ -290,25 +287,45 @@ def refresh_model() -> int:
             "target": round(mean, 1), "n": len(vals),
             "buckets": buckets, "overall": overall,
         }
-        # strategy-grid backtest (CPU only on the already-fetched vals — no extra Dhan calls)
+        bars.append(len(vals))
+        if days:
+            dmin = days[0] if dmin is None else min(dmin, days[0])
+            dmax = days[-1] if dmax is None else max(dmax, days[-1])
+        # full grid backtest (CPU only on the already-fetched vals — no extra Dhan calls)
         for gi, g in enumerate(STRAT_GRID):
             w, l, t, d = _combo_bt(vals, g["k"], g.get("t"), g.get("s"), g.get("mean", False))
             a = grid_acc[gi]
             a[0] += w; a[1] += l; a[2] += t; a[3].extend(d)
     _model = new   # atomic reference swap — readers never see a half-built map
-    grid_out = []
+
+    results = []
     for gi, g in enumerate(STRAT_GRID):
-        sm = _summarize_bt(*grid_acc[gi])
-        sm["name"] = g["name"]
+        r = _summarize_bt(*grid_acc[gi])
+        r["name"] = g["name"]
         if not g.get("mean") and g.get("t") and g.get("s"):
-            wr = (sm["win_rate"] or 0) / 100.0
-            sm["rr"] = f"{g['t']}:{g['s']}"
-            sm["expectancy_sigma"] = round(wr * g["t"] - (1 - wr) * g["s"], 3)  # avg σ gained per trade
-        grid_out.append(sm)
-    _bt_grid = grid_out
+            wr = (r["win_rate"] or 0) / 100.0
+            r.update(k=g["k"], t=g["t"], s=g["s"], rr=f"{g['t']}:{g['s']}",
+                     expectancy_sigma=round(wr * g["t"] - (1 - wr) * g["s"], 3))
+        results.append(r)
+    # "real" = resolves reliably, profitable, decent sample (filters degenerate tiny-target combos)
+    real = [r for r in results if r.get("expectancy_sigma") is not None
+            and (r.get("timeout_pct") or 100) <= 12 and r["trades"] >= 100 and r["expectancy_sigma"] > 0]
+    top_acc = sorted(real, key=lambda r: (-(r["win_rate"] or 0), -(r["expectancy_sigma"] or 0)))[:15]
+    best_bal = sorted([r for r in real if (r["win_rate"] or 0) >= 88],
+                      key=lambda r: -(r["expectancy_sigma"] or 0))[:6]
+    _bt_grid = {
+        "tested": len(STRAT_GRID),
+        "data": {"pairs": len(bars), "total_bars": sum(bars),
+                 "min_bars": min(bars) if bars else 0, "max_bars": max(bars) if bars else 0,
+                 "from": dmin, "to": dmax},
+        "current": next((r for r in results if r["name"].startswith("CURRENT")), None),
+        "top_accuracy": top_acc,
+        "best_balanced": best_bal,
+    }
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
-    log.info("Signal model refreshed: %d pairs. Strategy grid backtested (%d combos).", len(new), len(STRAT_GRID))
+    log.info("Signal model refreshed: %d pairs. Grid sweep %d combos over %d pairs (%d–%d bars, %s→%s).",
+             len(new), len(STRAT_GRID), len(bars), min(bars) if bars else 0, max(bars) if bars else 0, dmin, dmax)
     return len(new)
 
 
