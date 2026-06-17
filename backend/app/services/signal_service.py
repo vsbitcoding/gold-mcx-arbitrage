@@ -49,15 +49,16 @@ Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 #   mean=True → target is the rolling mean (full reversion), stop 1:1 = the CURRENT live strategy
 STRAT_GRID = [
     {"name": "CURRENT (1.5σ in · full revert · 1:1)", "k": 1.5, "mean": True},
-    {"name": "1.5σ in · 1.0σ tgt · 1.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 1.0},
-    {"name": "1.5σ in · 0.75σ tgt · 0.75σ stop", "k": 1.5, "t": 0.75, "s": 0.75},
-    {"name": "1.5σ in · 0.75σ tgt · 1.5σ stop", "k": 1.5,  "t": 0.75, "s": 1.5},
-    {"name": "1.5σ in · 1.0σ tgt · 2.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 2.0},
-    {"name": "1.25σ in · 0.75σ tgt · 1.5σ stop", "k": 1.25, "t": 0.75, "s": 1.5},
-    {"name": "1.25σ in · 1.0σ tgt · 2.0σ stop", "k": 1.25, "t": 1.0,  "s": 2.0},
-    {"name": "1.0σ in · 0.75σ tgt · 1.5σ stop", "k": 1.0,  "t": 0.75, "s": 1.5},
-    {"name": "1.0σ in · 1.0σ tgt · 2.0σ stop",  "k": 1.0,  "t": 1.0,  "s": 2.0},
-    {"name": "1.25σ in · 0.75σ tgt · 0.75σ stop", "k": 1.25, "t": 0.75, "s": 0.75},
+    {"name": "prev best: 1.25σ in · 1.0σ tgt · 2.0σ stop", "k": 1.25, "t": 1.0, "s": 2.0},
+    {"name": "1.5σ in · 0.5σ tgt · 2.5σ stop",  "k": 1.5,  "t": 0.5,  "s": 2.5},
+    {"name": "1.5σ in · 0.75σ tgt · 2.5σ stop", "k": 1.5,  "t": 0.75, "s": 2.5},
+    {"name": "1.5σ in · 1.0σ tgt · 2.5σ stop",  "k": 1.5,  "t": 1.0,  "s": 2.5},
+    {"name": "1.5σ in · 1.0σ tgt · 3.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 3.0},
+    {"name": "1.25σ in · 0.5σ tgt · 2.5σ stop", "k": 1.25, "t": 0.5,  "s": 2.5},
+    {"name": "1.25σ in · 0.75σ tgt · 2.5σ stop","k": 1.25, "t": 0.75, "s": 2.5},
+    {"name": "1.25σ in · 1.0σ tgt · 2.5σ stop", "k": 1.25, "t": 1.0,  "s": 2.5},
+    {"name": "1.75σ in · 1.0σ tgt · 2.0σ stop", "k": 1.75, "t": 1.0,  "s": 2.0},
+    {"name": "1.75σ in · 1.0σ tgt · 2.5σ stop", "k": 1.75, "t": 1.0,  "s": 2.5},
 ]
 
 _model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
@@ -207,9 +208,11 @@ def _combo_bt(vals: list, k: float, t: float | None = None,
 
 def _summarize_bt(win: int, loss: int, timeout: int, days: list) -> dict:
     decisive = win + loss
+    total = win + loss + timeout
     return {
-        "trades": win + loss + timeout, "win": win, "loss": loss, "timeout": timeout,
+        "trades": total, "win": win, "loss": loss, "timeout": timeout,
         "win_rate": round(win / decisive * 100, 1) if decisive else None,
+        "timeout_pct": round(timeout / total * 100, 1) if total else None,
         "avg_days": round(statistics.mean(days), 1) if days else None,
     }
 
