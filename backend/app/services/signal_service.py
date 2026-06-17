@@ -44,10 +44,14 @@ TICK_SECONDS = 3
 MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
 Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 
+TARGET_CAP_TEST = 500             # backtest comparison: cap target distance at this many points
+
 _model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
 _active: dict[str, dict] = {}     # pair_name -> open frozen signal (mirrors DB open row)
 _pending: dict[str, dict] = {}    # pair_name -> {direction, since}  (debounce buffer)
 _state: dict = {"last_refresh": None, "models": 0}
+_bt_full: dict | None = None      # backtest of current 1:1 strategy (target = full mean reversion)
+_bt_cap: dict | None = None       # backtest of 1:1 strategy with target distance capped at TARGET_CAP_TEST
 
 
 # ───────────────────────── Dhan history ─────────────────────────
@@ -134,6 +138,66 @@ def _aggregate(res: list[tuple]):
     return buckets, overall
 
 
+def _rr_backtest(vals: list, cap: float | None = None) -> tuple:
+    """Walk-forward 1:1 stop-aware backtest (no lookahead).
+
+    cap=None  → target is the rolling mean (full reversion).
+    cap=N     → target is the entry moved toward the mean by AT MOST N points;
+                the 1:1 stop sits the same distance the other way.
+    Returns (wins, losses, timeouts, [days_to_win]).
+    """
+    win = loss = timeout = 0
+    days: list[int] = []
+    i, n = WINDOW, len(vals)
+    while i < n - 1:
+        w = vals[i - WINDOW:i]
+        m = statistics.mean(w)
+        sd = statistics.pstdev(w)
+        if sd <= 0:
+            i += 1
+            continue
+        z = (vals[i] - m) / sd
+        if abs(z) >= ENTRY_K:
+            entry = vals[i]
+            short = z > 0                                  # spread high → target below
+            if cap is None:
+                target = m
+            else:
+                d = min(abs(m - entry), cap)
+                target = entry - d if short else entry + d
+            stop = 2 * entry - target                      # 1:1
+            outcome, j = None, 0
+            for j in range(1, MAXHOLD_DAYS + 1):
+                if i + j >= n:
+                    break
+                px = vals[i + j]
+                if short:
+                    if px <= target: outcome = "win"; break
+                    if px >= stop:   outcome = "loss"; break
+                else:
+                    if px >= target: outcome = "win"; break
+                    if px <= stop:   outcome = "loss"; break
+            if outcome == "win":
+                win += 1; days.append(j)
+            elif outcome == "loss":
+                loss += 1
+            else:
+                timeout += 1
+            i += (j or 1) + 1
+        else:
+            i += 1
+    return win, loss, timeout, days
+
+
+def _summarize_bt(win: int, loss: int, timeout: int, days: list) -> dict:
+    decisive = win + loss
+    return {
+        "trades": win + loss + timeout, "win": win, "loss": loss, "timeout": timeout,
+        "win_rate": round(win / decisive * 100, 1) if decisive else None,
+        "avg_days": round(statistics.mean(days), 1) if days else None,
+    }
+
+
 def _prob_for(model: dict, z: float):
     az = abs(z)
     for b in model.get("buckets", []):
@@ -148,7 +212,7 @@ def _prob_for(model: dict, z: float):
 
 
 def refresh_model() -> int:
-    global _model
+    global _model, _bt_full, _bt_cap
     cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
     if not cross:
         return 0
@@ -182,6 +246,9 @@ def refresh_model() -> int:
         return cache[sid]
 
     new: dict[str, dict] = {}
+    f_tot = [0, 0, 0, []]              # full-reversion backtest accumulators (win, loss, timeout, days)
+    c_tot = [0, 0, 0, []]             # 500-capped backtest accumulators
+    by_pair_bt: list[dict] = []
     for p in pairs:
         big = closes(p["big_security_id"])
         small = closes(p["small_security_id"])
@@ -206,10 +273,25 @@ def refresh_model() -> int:
             "target": round(mean, 1), "n": len(vals),
             "buckets": buckets, "overall": overall,
         }
+        # backtest comparison: full reversion vs 500-capped target (1:1 stop both)
+        fw, fl, ft, fd = _rr_backtest(vals)
+        cw, cl, ct, cd = _rr_backtest(vals, TARGET_CAP_TEST)
+        for acc, (w, l, t, d) in ((f_tot, (fw, fl, ft, fd)), (c_tot, (cw, cl, ct, cd))):
+            acc[0] += w; acc[1] += l; acc[2] += t; acc[3].extend(d)
+        by_pair_bt.append({
+            "label": p.get("label"), "sigma": round(sd, 1),
+            "full": _summarize_bt(fw, fl, ft, fd),
+            "cap": _summarize_bt(cw, cl, ct, cd),
+        })
     _model = new   # atomic reference swap — readers never see a half-built map
+    _bt_full = _summarize_bt(*f_tot)
+    _bt_cap = _summarize_bt(*c_tot)
+    _bt_cap["by_pair"] = by_pair_bt
+    _bt_cap["cap_distance"] = TARGET_CAP_TEST
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
-    log.info("Signal model refreshed: %d pairs (history+probability)", len(new))
+    log.info("Signal model refreshed: %d pairs. Backtest full=%s | cap%d=%s",
+             len(new), _bt_full, TARGET_CAP_TEST, {k: _bt_cap[k] for k in ("win_rate", "avg_days", "trades")})
     return len(new)
 
 
@@ -446,7 +528,9 @@ def status() -> dict:
     return {"models": _state["models"], "last_refresh": _state["last_refresh"],
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
             "maxhold_days": MAXHOLD_DAYS,
-            "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")})}
+            "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")}),
+            "backtest_full": _bt_full,        # current strategy (target = full mean reversion)
+            "backtest_cap": _bt_cap}          # target distance capped at TARGET_CAP_TEST (500)
 
 
 # ───────────────────────── background loop ─────────────────────────
