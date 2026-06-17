@@ -30,7 +30,14 @@ function itmCls(v) {
 export default function OptionsSpread() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [side, setSide] = useState("below");   // "below" = ATM+9 (10 rows) | "above" = ATM+14 (15 rows)
+  // remember the chosen tab across refreshes
+  const [side, setSide] = useState(() => {
+    try { return localStorage.getItem("opt_side") === "above" ? "above" : "below"; }
+    catch { return "below"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("opt_side", side); } catch { /* ignore */ }
+  }, [side]);
 
   useEffect(() => {
     let alive = true;
