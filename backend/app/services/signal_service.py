@@ -207,6 +207,47 @@ def _combo_bt(vals: list, k: float, t: float | None = None, s: float | None = No
     return win, loss, timeout, days
 
 
+def _yearly_bt(vals: list, dates: list, stop_mult: float) -> dict:
+    """Current strategy (1.5σ entry → target = mean) at the given stop multiple,
+    bucketed by the YEAR of each entry. Returns {year: [win, loss, timeout]}."""
+    by_year: dict[str, list] = {}
+    i, n = WINDOW, len(vals)
+    while i < n - 1:
+        w = vals[i - WINDOW:i]
+        m = statistics.mean(w)
+        sd = statistics.pstdev(w)
+        if sd <= 0:
+            i += 1
+            continue
+        z = (vals[i] - m) / sd
+        if abs(z) >= ENTRY_K:
+            entry = vals[i]
+            short = z > 0
+            target = m
+            d = abs(entry - m)
+            stop = entry + stop_mult * d if short else entry - stop_mult * d
+            outcome, j = None, 0
+            for j in range(1, MAXHOLD_DAYS + 1):
+                if i + j >= n:
+                    break
+                px = vals[i + j]
+                if short:
+                    if px <= target: outcome = "win"; break
+                    if px >= stop:   outcome = "loss"; break
+                else:
+                    if px >= target: outcome = "win"; break
+                    if px <= stop:   outcome = "loss"; break
+            yr = (dates[i] or "????")[:4]
+            b = by_year.setdefault(yr, [0, 0, 0])
+            if outcome == "win":    b[0] += 1
+            elif outcome == "loss": b[1] += 1
+            else:                   b[2] += 1
+            i += (j or 1) + 1
+        else:
+            i += 1
+    return by_year
+
+
 def _summarize_bt(win: int, loss: int, timeout: int, days: list) -> dict:
     decisive = win + loss
     total = win + loss + timeout
@@ -267,6 +308,7 @@ def refresh_model() -> int:
 
     new: dict[str, dict] = {}
     grid_acc = [[0, 0, 0, []] for _ in STRAT_GRID]   # per-combo (win, loss, timeout, days)
+    year_acc: dict[str, dict[str, list]] = {"1:1": {}, "1:3": {}}
     bars: list[int] = []
     dmin, dmax = None, None
     for p in pairs:
@@ -277,7 +319,15 @@ def refresh_model() -> int:
         bm = MULTIPLIERS.get(p["big"], 1.0)
         sm = MULTIPLIERS.get(p["small"], 1.0)
         days = sorted(set(big) & set(small))
-        vals = _clean([round(big[d] * bm - small[d] * sm, 2) for d in days])
+        # cleaned series WITH dates (mirror of _clean: trim 3 + drop 12-MAD outliers)
+        ser = [(d, round(big[d] * bm - small[d] * sm, 2)) for d in days]
+        if len(ser) >= 10:
+            ser = ser[3:]
+            _med = statistics.median([v for _, v in ser])
+            _mad = statistics.median([abs(v - _med) for _, v in ser]) or 1.0
+            ser = [(d, v) for d, v in ser if abs(v - _med) <= 12 * _mad]
+        cdates = [d for d, _ in ser]
+        vals = [v for _, v in ser]
         if len(vals) < WINDOW + 5:
             continue
         win = vals[-WINDOW:]
@@ -303,6 +353,11 @@ def refresh_model() -> int:
                                    g.get("mean", False), g.get("sm", 1.0))
             a = grid_acc[gi]
             a[0] += w; a[1] += l; a[2] += t; a[3].extend(d)
+        # per-year robustness for the current strategy at 1:1 and 1:3
+        for lbl, smult in (("1:1", 1.0), ("1:3", 3.0)):
+            for yr, (w, l, t) in _yearly_bt(vals, cdates, smult).items():
+                b = year_acc[lbl].setdefault(yr, [0, 0, 0])
+                b[0] += w; b[1] += l; b[2] += t
     _model = new   # atomic reference swap — readers never see a half-built map
 
     results = []
@@ -318,12 +373,22 @@ def refresh_model() -> int:
         else:
             r.update(rr=f"{g['t']}:{g['s']}", expectancy=round(wr * g["t"] - (1 - wr) * g["s"], 3))
         results.append(r)
+    def _year_rows(acc: dict) -> list:
+        rows = []
+        for yr in sorted(acc):
+            w, l, t = acc[yr]
+            dec = w + l
+            rows.append({"year": yr, "win": w, "loss": l, "timeout": t,
+                         "trades": w + l + t,
+                         "win_rate": round(w / dec * 100, 1) if dec else None})
+        return rows
     _bt_grid = {
         "tested": len(STRAT_GRID),
         "data": {"pairs": len(bars), "total_bars": sum(bars),
                  "min_bars": min(bars) if bars else 0, "max_bars": max(bars) if bars else 0,
                  "from": dmin, "to": dmax},
         "combos": results,
+        "yearly": {lbl: _year_rows(acc) for lbl, acc in year_acc.items()},
     }
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
