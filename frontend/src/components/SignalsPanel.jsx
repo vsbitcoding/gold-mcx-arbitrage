@@ -118,7 +118,7 @@ export default function SignalsPanel({ signals }) {
                     </div>
                   </div>
                   <div className="sig-foot">
-                    <span><b>{s.rr || "1:1"}</b>{s.expected_days != null ? ` · usually ~${s.expected_days}d` : ""}</span>
+                    <span className="sig-fire">⚡ fired @ <b>{r0(s.entry)}</b></span>
                     <span className="sig-meta">running {fmtMin(s.age_min)}</span>
                   </div>
                 </div>

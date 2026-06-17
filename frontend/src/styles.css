@@ -4049,6 +4049,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sig-meta { flex: none; }
 .sig-sub { margin-top: 2px; }
 .sig-expires { color: #d97706; font-weight: 800; }
+/* fired-at spread on the open card foot — the spread value where the signal fired */
+.sig-fire { color: var(--text-muted); font-weight: 700; }
+.sig-fire b { color: var(--text-primary); font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 800; }
 
 /* Open card: NOW value + signed scale % */
 .sig-nowline { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 9px; }
