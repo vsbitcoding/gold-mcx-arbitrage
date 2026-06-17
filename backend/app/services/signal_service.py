@@ -44,14 +44,27 @@ TICK_SECONDS = 3
 MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
 Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 
-TARGET_CAP_TEST = 500             # backtest comparison: cap target distance at this many points
+# Strategy search grid for "short + accurate + frequent". Each combo:
+#   k = entry threshold (σ) · t = target distance from entry (σ) · s = stop distance (σ)
+#   mean=True → target is the rolling mean (full reversion), stop 1:1 = the CURRENT live strategy
+STRAT_GRID = [
+    {"name": "CURRENT (1.5σ in · full revert · 1:1)", "k": 1.5, "mean": True},
+    {"name": "1.5σ in · 1.0σ tgt · 1.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 1.0},
+    {"name": "1.5σ in · 0.75σ tgt · 0.75σ stop", "k": 1.5, "t": 0.75, "s": 0.75},
+    {"name": "1.5σ in · 0.75σ tgt · 1.5σ stop", "k": 1.5,  "t": 0.75, "s": 1.5},
+    {"name": "1.5σ in · 1.0σ tgt · 2.0σ stop",  "k": 1.5,  "t": 1.0,  "s": 2.0},
+    {"name": "1.25σ in · 0.75σ tgt · 1.5σ stop", "k": 1.25, "t": 0.75, "s": 1.5},
+    {"name": "1.25σ in · 1.0σ tgt · 2.0σ stop", "k": 1.25, "t": 1.0,  "s": 2.0},
+    {"name": "1.0σ in · 0.75σ tgt · 1.5σ stop", "k": 1.0,  "t": 0.75, "s": 1.5},
+    {"name": "1.0σ in · 1.0σ tgt · 2.0σ stop",  "k": 1.0,  "t": 1.0,  "s": 2.0},
+    {"name": "1.25σ in · 0.75σ tgt · 0.75σ stop", "k": 1.25, "t": 0.75, "s": 0.75},
+]
 
 _model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
 _active: dict[str, dict] = {}     # pair_name -> open frozen signal (mirrors DB open row)
 _pending: dict[str, dict] = {}    # pair_name -> {direction, since}  (debounce buffer)
 _state: dict = {"last_refresh": None, "models": 0}
-_bt_full: dict | None = None      # backtest of current 1:1 strategy (target = full mean reversion)
-_bt_cap: dict | None = None       # backtest of 1:1 strategy with target distance capped at TARGET_CAP_TEST
+_bt_grid: list | None = None      # backtest of every STRAT_GRID combo over ~1yr history
 
 
 # ───────────────────────── Dhan history ─────────────────────────
@@ -138,12 +151,15 @@ def _aggregate(res: list[tuple]):
     return buckets, overall
 
 
-def _rr_backtest(vals: list, cap: float | None = None) -> tuple:
-    """Walk-forward 1:1 stop-aware backtest (no lookahead).
+def _combo_bt(vals: list, k: float, t: float | None = None,
+              s: float | None = None, target_mean: bool = False) -> tuple:
+    """Walk-forward backtest of one strategy combo (no lookahead).
 
-    cap=None  → target is the rolling mean (full reversion).
-    cap=N     → target is the entry moved toward the mean by AT MOST N points;
-                the 1:1 stop sits the same distance the other way.
+    Fire when |z| ≥ k. Then:
+      target_mean=True → target = rolling mean (full reversion), stop 1:1 (2*entry−mean).
+      else             → target = entry moved `t`·σ toward the mean;
+                         stop   = entry moved `s`·σ away from the mean.
+    Win = target reached before stop within MAXHOLD_DAYS.
     Returns (wins, losses, timeouts, [days_to_win]).
     """
     win = loss = timeout = 0
@@ -157,15 +173,15 @@ def _rr_backtest(vals: list, cap: float | None = None) -> tuple:
             i += 1
             continue
         z = (vals[i] - m) / sd
-        if abs(z) >= ENTRY_K:
+        if abs(z) >= k:
             entry = vals[i]
             short = z > 0                                  # spread high → target below
-            if cap is None:
+            if target_mean:
                 target = m
+                stop = 2 * entry - m
             else:
-                d = min(abs(m - entry), cap)
-                target = entry - d if short else entry + d
-            stop = 2 * entry - target                      # 1:1
+                target = entry - t * sd if short else entry + t * sd
+                stop = entry + s * sd if short else entry - s * sd
             outcome, j = None, 0
             for j in range(1, MAXHOLD_DAYS + 1):
                 if i + j >= n:
@@ -212,7 +228,7 @@ def _prob_for(model: dict, z: float):
 
 
 def refresh_model() -> int:
-    global _model, _bt_full, _bt_cap
+    global _model, _bt_grid
     cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
     if not cross:
         return 0
@@ -246,9 +262,7 @@ def refresh_model() -> int:
         return cache[sid]
 
     new: dict[str, dict] = {}
-    f_tot = [0, 0, 0, []]              # full-reversion backtest accumulators (win, loss, timeout, days)
-    c_tot = [0, 0, 0, []]             # 500-capped backtest accumulators
-    by_pair_bt: list[dict] = []
+    grid_acc = [[0, 0, 0, []] for _ in STRAT_GRID]   # per-combo (win, loss, timeout, days)
     for p in pairs:
         big = closes(p["big_security_id"])
         small = closes(p["small_security_id"])
@@ -273,25 +287,25 @@ def refresh_model() -> int:
             "target": round(mean, 1), "n": len(vals),
             "buckets": buckets, "overall": overall,
         }
-        # backtest comparison: full reversion vs 500-capped target (1:1 stop both)
-        fw, fl, ft, fd = _rr_backtest(vals)
-        cw, cl, ct, cd = _rr_backtest(vals, TARGET_CAP_TEST)
-        for acc, (w, l, t, d) in ((f_tot, (fw, fl, ft, fd)), (c_tot, (cw, cl, ct, cd))):
-            acc[0] += w; acc[1] += l; acc[2] += t; acc[3].extend(d)
-        by_pair_bt.append({
-            "label": p.get("label"), "sigma": round(sd, 1),
-            "full": _summarize_bt(fw, fl, ft, fd),
-            "cap": _summarize_bt(cw, cl, ct, cd),
-        })
+        # strategy-grid backtest (CPU only on the already-fetched vals — no extra Dhan calls)
+        for gi, g in enumerate(STRAT_GRID):
+            w, l, t, d = _combo_bt(vals, g["k"], g.get("t"), g.get("s"), g.get("mean", False))
+            a = grid_acc[gi]
+            a[0] += w; a[1] += l; a[2] += t; a[3].extend(d)
     _model = new   # atomic reference swap — readers never see a half-built map
-    _bt_full = _summarize_bt(*f_tot)
-    _bt_cap = _summarize_bt(*c_tot)
-    _bt_cap["by_pair"] = by_pair_bt
-    _bt_cap["cap_distance"] = TARGET_CAP_TEST
+    grid_out = []
+    for gi, g in enumerate(STRAT_GRID):
+        sm = _summarize_bt(*grid_acc[gi])
+        sm["name"] = g["name"]
+        if not g.get("mean") and g.get("t") and g.get("s"):
+            wr = (sm["win_rate"] or 0) / 100.0
+            sm["rr"] = f"{g['t']}:{g['s']}"
+            sm["expectancy_sigma"] = round(wr * g["t"] - (1 - wr) * g["s"], 3)  # avg σ gained per trade
+        grid_out.append(sm)
+    _bt_grid = grid_out
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
-    log.info("Signal model refreshed: %d pairs. Backtest full=%s | cap%d=%s",
-             len(new), _bt_full, TARGET_CAP_TEST, {k: _bt_cap[k] for k in ("win_rate", "avg_days", "trades")})
+    log.info("Signal model refreshed: %d pairs. Strategy grid backtested (%d combos).", len(new), len(STRAT_GRID))
     return len(new)
 
 
@@ -529,8 +543,7 @@ def status() -> dict:
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
             "maxhold_days": MAXHOLD_DAYS,
             "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")}),
-            "backtest_full": _bt_full,        # current strategy (target = full mean reversion)
-            "backtest_cap": _bt_cap}          # target distance capped at TARGET_CAP_TEST (500)
+            "backtest_grid": _bt_grid}        # strategy search: each combo's win-rate / avg-days / trades
 
 
 # ───────────────────────── background loop ─────────────────────────
