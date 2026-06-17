@@ -47,13 +47,16 @@ Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 # Strategy search grid for "short + accurate + frequent". Each combo:
 #   k = entry threshold (σ) · t = target distance from entry (σ) · s = stop distance (σ)
 #   mean=True → target is the rolling mean (full reversion), stop 1:1 = the CURRENT live strategy
-# FULL parameter sweep: every entry × target × stop combination (+ the current baseline).
-_GK = [1.0, 1.25, 1.5, 1.75, 2.0]            # entry threshold (σ)
-_GT = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]      # target distance from entry (σ)
-_GS = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]    # stop distance from entry (σ)
-STRAT_GRID = [{"name": "CURRENT (1.5σ in · full revert · 1:1)", "k": 1.5, "mean": True}] + [
-    {"name": f"{k}σ in · {t}σ tgt · {s}σ stop", "k": k, "t": t, "s": s}
-    for k in _GK for t in _GT for s in _GS
+# SAME strategy (fire at 1.5σ → target = the rolling mean) at different R:R.
+# stop_mult = how far the stop sits, as a multiple of the entry→mean distance.
+#   1.0 = 1:1 (current) · 2.0 = 1:2 · etc.
+STRAT_GRID = [
+    {"name": "CURRENT · 1:1 (stop = 1.0× reversion)", "k": 1.5, "mean": True, "sm": 1.0},
+    {"name": "mean revert · 1:1.5 (stop = 1.5×)", "k": 1.5, "mean": True, "sm": 1.5},
+    {"name": "mean revert · 1:2 (stop = 2.0×)",   "k": 1.5, "mean": True, "sm": 2.0},
+    {"name": "mean revert · 1:2.5 (stop = 2.5×)", "k": 1.5, "mean": True, "sm": 2.5},
+    {"name": "mean revert · 1:3 (stop = 3.0×)",   "k": 1.5, "mean": True, "sm": 3.0},
+    {"name": "mean revert · 1:4 (stop = 4.0×)",   "k": 1.5, "mean": True, "sm": 4.0},
 ]
 
 _model: dict[str, dict] = {}      # pair_name -> {mean,sd,upper,lower,target,n, buckets, overall}
@@ -147,12 +150,14 @@ def _aggregate(res: list[tuple]):
     return buckets, overall
 
 
-def _combo_bt(vals: list, k: float, t: float | None = None,
-              s: float | None = None, target_mean: bool = False) -> tuple:
+def _combo_bt(vals: list, k: float, t: float | None = None, s: float | None = None,
+              target_mean: bool = False, stop_mult: float = 1.0) -> tuple:
     """Walk-forward backtest of one strategy combo (no lookahead).
 
     Fire when |z| ≥ k. Then:
-      target_mean=True → target = rolling mean (full reversion), stop 1:1 (2*entry−mean).
+      target_mean=True → target = rolling mean (full reversion); stop sits
+                         `stop_mult`× the entry→mean distance the other way
+                         (stop_mult=1.0 → 1:1, 2.0 → 1:2, …).
       else             → target = entry moved `t`·σ toward the mean;
                          stop   = entry moved `s`·σ away from the mean.
     Win = target reached before stop within MAXHOLD_DAYS.
@@ -174,7 +179,8 @@ def _combo_bt(vals: list, k: float, t: float | None = None,
             short = z > 0                                  # spread high → target below
             if target_mean:
                 target = m
-                stop = 2 * entry - m
+                d = abs(entry - m)                         # the reversion distance
+                stop = entry + stop_mult * d if short else entry - stop_mult * d
             else:
                 target = entry - t * sd if short else entry + t * sd
                 stop = entry + s * sd if short else entry - s * sd
@@ -291,9 +297,10 @@ def refresh_model() -> int:
         if days:
             dmin = days[0] if dmin is None else min(dmin, days[0])
             dmax = days[-1] if dmax is None else max(dmax, days[-1])
-        # full grid backtest (CPU only on the already-fetched vals — no extra Dhan calls)
+        # backtest each R:R variant (CPU only on the already-fetched vals — no extra Dhan calls)
         for gi, g in enumerate(STRAT_GRID):
-            w, l, t, d = _combo_bt(vals, g["k"], g.get("t"), g.get("s"), g.get("mean", False))
+            w, l, t, d = _combo_bt(vals, g["k"], g.get("t"), g.get("s"),
+                                   g.get("mean", False), g.get("sm", 1.0))
             a = grid_acc[gi]
             a[0] += w; a[1] += l; a[2] += t; a[3].extend(d)
     _model = new   # atomic reference swap — readers never see a half-built map
@@ -302,25 +309,21 @@ def refresh_model() -> int:
     for gi, g in enumerate(STRAT_GRID):
         r = _summarize_bt(*grid_acc[gi])
         r["name"] = g["name"]
-        if not g.get("mean") and g.get("t") and g.get("s"):
-            wr = (r["win_rate"] or 0) / 100.0
-            r.update(k=g["k"], t=g["t"], s=g["s"], rr=f"{g['t']}:{g['s']}",
-                     expectancy_sigma=round(wr * g["t"] - (1 - wr) * g["s"], 3))
+        wr = (r["win_rate"] or 0) / 100.0
+        if g.get("mean"):
+            sm = g.get("sm", 1.0)
+            r["rr"] = f"1:{sm:g}"
+            # expectancy in "reversion units" (1 win = +1 reversion, 1 loss = −stop_mult)
+            r["expectancy"] = round(wr * 1.0 - (1 - wr) * sm, 3)
+        else:
+            r.update(rr=f"{g['t']}:{g['s']}", expectancy=round(wr * g["t"] - (1 - wr) * g["s"], 3))
         results.append(r)
-    # "real" = resolves reliably, profitable, decent sample (filters degenerate tiny-target combos)
-    real = [r for r in results if r.get("expectancy_sigma") is not None
-            and (r.get("timeout_pct") or 100) <= 12 and r["trades"] >= 100 and r["expectancy_sigma"] > 0]
-    top_acc = sorted(real, key=lambda r: (-(r["win_rate"] or 0), -(r["expectancy_sigma"] or 0)))[:15]
-    best_bal = sorted([r for r in real if (r["win_rate"] or 0) >= 88],
-                      key=lambda r: -(r["expectancy_sigma"] or 0))[:6]
     _bt_grid = {
         "tested": len(STRAT_GRID),
         "data": {"pairs": len(bars), "total_bars": sum(bars),
                  "min_bars": min(bars) if bars else 0, "max_bars": max(bars) if bars else 0,
                  "from": dmin, "to": dmax},
-        "current": next((r for r in results if r["name"].startswith("CURRENT")), None),
-        "top_accuracy": top_acc,
-        "best_balanced": best_bal,
+        "combos": results,
     }
     _state["last_refresh"] = datetime.now().isoformat(timespec="seconds")
     _state["models"] = len(new)
