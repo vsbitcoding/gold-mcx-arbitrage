@@ -23,7 +23,7 @@ import statistics
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.config import MULTIPLIERS, settings
 from app.database import SessionLocal
@@ -456,7 +456,9 @@ def _load_open():
                 "target": r.target_spread, "stop": r.stop_spread, "probability": r.probability,
                 "z_at_entry": r.z_at_entry, "expected_days": r.expected_days,
                 "label": r.label, "expiry_label": r.expiry_label,
-                "started": r.fired_at.timestamp() if r.fired_at else time.time(),
+                # fired_at is stored naive-UTC (datetime.utcnow); tag it UTC so the epoch
+                # (and the IST time shown on the card) is correct after a reload/restart.
+                "started": r.fired_at.replace(tzinfo=timezone.utc).timestamp() if r.fired_at else time.time(),
             }
         if changed:
             db.commit()
