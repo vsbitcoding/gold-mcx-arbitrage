@@ -305,6 +305,8 @@ def refresh_model() -> int:
     for p in cross:
         groups[p.get("label")].append(p)
     pairs = [pf for ps in groups.values() if (pf := _pick_front(ps))]
+    log.info("Signal fronts (roll within %dd → next month): %s", ROLL_DAYS,
+             ", ".join(f"{p.get('label')}={p.get('expiry_short')}" for p in pairs))
     try:
         dhan = _dhan()
     except Exception as e:
