@@ -52,7 +52,10 @@ export default function SignalModal({ row, onClose }) {
                 <span className="sig-trade-sell">🔴 SELL {tl.sell}</span>
               </div>
               <div className="sigm-howto-note">
-                Enter both legs now · book profit at target {r0(s.target)} · stop at {r0(s.stop)}
+                <div><b>Enter</b> now at the <b>{narrow ? "▼ DEC (sell)" : "▲ INC (buy)"}</b> price.</div>
+                <div><b>Exit</b> — watch the <b>{narrow ? "▲ INC" : "▼ DEC"}</b> column:
+                  &nbsp;reaches <b style={{ color: "var(--accent)" }}>{r0(s.target)}</b> = book profit ✓ ·
+                  &nbsp;reaches <b style={{ color: "var(--red)" }}>{r0(s.stop)}</b> = stop loss ✗</div>
               </div>
             </div>
           );
