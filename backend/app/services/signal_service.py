@@ -44,6 +44,7 @@ DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firin
 MAX_AGE_SECONDS = 14 * 24 * 3600  # live signal expires (=wrong) if target not hit in ~10 trading days
 MIN_HOLD_SECONDS = 60 * 60        # a signal that hits target faster than this = noise → discarded
 LIQ_K = 1.0                       # skip firing if the spread's bid/ask width > LIQ_K × σ (illiquid)
+GAP_MAX_FRAC = 0.25               # skip firing if buy/sell gap > 25% of the expected reversion (mid not tradeable)
 TICK_SECONDS = 3
 MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
 Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
@@ -511,6 +512,16 @@ def _tick():
                     prob, exp_days = _prob_for(model, z)
                     entry = round(mid, 1)
                     target = model["target"]
+                    # Tradeability: skip if the live buy/sell gap is wide vs the expected
+                    # profit — on a wide gap you fill at bid/ask, far from the mid, so the
+                    # signal isn't realistically tradeable (esp. near-expiry illiquid contracts).
+                    gap = abs((s.get("increase_spread") or 0) - (s.get("decrease_spread") or 0))
+                    reversion = abs(entry - target)
+                    if reversion <= 0 or gap > GAP_MAX_FRAC * reversion:
+                        log.info("signal SKIP %s — buy/sell gap %.0f is %.0f%% of reversion %.0f (not tradeable)",
+                                 name, gap, (gap / reversion * 100) if reversion else 0, reversion)
+                        _pending.pop(name, None)
+                        continue
                     stop = round(entry + STOP_MULT * (entry - target), 1)   # 1:STOP_MULT (3× the distance the other way)
                     db = db or SessionLocal()
                     row = Signal(
