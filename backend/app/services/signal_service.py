@@ -440,8 +440,16 @@ def _load_open():
 
 
 def _tick():
-    """Single-threaded writer: fire new signals + resolve open ones. ~3s cadence."""
+    """Single-threaded writer: fire new signals + resolve open ones. ~3s cadence.
+
+    Only fires/resolves during MCX market hours so every entry & exit is at a
+    price you can actually trade. Outside hours it holds (no fire, no resolve),
+    avoiding un-tradeable after-hours/pre-open fills from stale feed ticks."""
     from app.services.spread_engine import compute_all
+    from app.services.dhan_feed import is_market_open
+    if not is_market_open():
+        _pending.clear()                       # reset debounce; resume cleanly at next open
+        return
     snaps = {s["name"]: s for s in compute_all() if s.get("type") == "cross"}
     now = time.time()
     db = None
