@@ -38,7 +38,7 @@ STOP_MULT = 3.0                   # stop sits 3× the entry→target distance th
 # Signals only fire / resolve inside this IST window, Mon–Fri (client's tradeable window).
 SIGNAL_WINDOW_OPEN = 9 * 60 + 10    # 09:10 AM
 SIGNAL_WINDOW_CLOSE = 22 * 60 + 30  # 10:30 PM
-ROLL_DAYS = 6                     # within this many days of expiry → roll signals to the NEXT month (near-expiry = illiquid, untradeable)
+ROLL_DAYS = 7                     # within this many days of expiry → roll signals to the NEXT month (near-expiry = illiquid, untradeable)
 LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
 MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
