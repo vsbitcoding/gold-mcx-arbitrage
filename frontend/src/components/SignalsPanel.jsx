@@ -133,8 +133,8 @@ export default function SignalsPanel({ signals }) {
                       <span className="sig-end tgt">target {r0(s.target)} ✓</span>
                     </div>
                   </div>
-                  <div className="sig-foot">
-                    <span className="sig-fire">⚡ fired @ <b>{r0(s.entry)}</b></span>
+                  <div className="sig-foot sig-hist-foot">
+                    <span className="sig-fire">⚡ fired @ <b>{r0(s.entry)}</b><br />🕐 {s.fired_at}</span>
                     <span className="sig-meta">running {fmtMin(s.age_min)}</span>
                   </div>
                 </div>
