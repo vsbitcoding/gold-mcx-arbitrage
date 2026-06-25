@@ -35,6 +35,9 @@ log = logging.getLogger("signal_service")
 WINDOW = 20                       # rolling days for mean / sd (the band)
 ENTRY_K = 1.5                     # fire threshold in σ
 STOP_MULT = 3.0                   # stop sits 3× the entry→target distance the other way (R:R 1:3; backtested ~98% hit-rate, 2024-26)
+# Signals only fire / resolve inside this IST window, Mon–Fri (client's tradeable window).
+SIGNAL_WINDOW_OPEN = 9 * 60 + 10    # 09:10 AM
+SIGNAL_WINDOW_CLOSE = 22 * 60 + 30  # 10:30 PM
 LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
 MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
@@ -439,15 +442,23 @@ def _load_open():
         db.close()
 
 
+def _in_signal_window() -> bool:
+    """True only inside the client's tradeable window: 09:10 AM – 10:30 PM IST, Mon–Fri."""
+    n = datetime.utcnow() + timedelta(hours=5, minutes=30)   # IST
+    if n.weekday() >= 5:
+        return False
+    mins = n.hour * 60 + n.minute
+    return SIGNAL_WINDOW_OPEN <= mins <= SIGNAL_WINDOW_CLOSE
+
+
 def _tick():
     """Single-threaded writer: fire new signals + resolve open ones. ~3s cadence.
 
-    Only fires/resolves during MCX market hours so every entry & exit is at a
-    price you can actually trade. Outside hours it holds (no fire, no resolve),
-    avoiding un-tradeable after-hours/pre-open fills from stale feed ticks."""
+    Only fires/resolves inside the client's tradeable window (09:10 AM – 10:30 PM
+    IST) so every entry & exit is at a price you can actually trade. Outside it
+    holds (no fire, no resolve) — avoids un-tradeable after-hours/pre-open fills."""
     from app.services.spread_engine import compute_all
-    from app.services.dhan_feed import is_market_open
-    if not is_market_open():
+    if not _in_signal_window():
         _pending.clear()                       # reset debounce; resume cleanly at next open
         return
     snaps = {s["name"]: s for s in compute_all() if s.get("type") == "cross"}
