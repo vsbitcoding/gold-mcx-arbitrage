@@ -8,6 +8,17 @@ const dshort = (iso) => {
     return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
   } catch { return "—"; }
 };
+// date + time in IST. Server timestamps are naive UTC → treat as UTC, show Asia/Kolkata.
+const dtIST = (iso) => {
+  if (!iso) return "—";
+  try {
+    const d = new Date(/[Z+]/.test(iso) ? iso : iso + "Z");
+    return d.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata", day: "2-digit", month: "short",
+      hour: "numeric", minute: "2-digit", hour12: true,
+    });
+  } catch { return "—"; }
+};
 // human-readable duration from minutes, e.g. 75 → "1h 15m", 1500 → "1d 1h"
 function fmtMin(mins) {
   if (mins == null || mins < 0) return "—";
@@ -151,8 +162,8 @@ export default function SignalsPanel({ signals }) {
                     <span className="sig-flow-arrow">→</span>
                     <span><span className="sig-lbl">exit</span><b>{r0(h.exit)}</b></span>
                   </div>
-                  <div className="sig-foot">
-                    <span>fired {dshort(h.fired_at)} → closed {dshort(h.resolved_at)}</span>
+                  <div className="sig-foot sig-hist-foot">
+                    <span>⚡ fired {dtIST(h.fired_at)}<br />🏁 closed {dtIST(h.resolved_at)}</span>
                     <span className="sig-meta">ran {fmtDur(h.fired_at, h.resolved_at)}</span>
                   </div>
                 </div>

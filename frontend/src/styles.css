@@ -4055,6 +4055,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sig-foot { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
 .sig-foot b { color: var(--text-secondary); font-weight: 800; }
 .sig-meta { flex: none; }
+/* History foot: fired/closed on two lines (each carries a date + time) */
+.sig-hist-foot { align-items: flex-start; line-height: 1.8; }
+.sig-hist-foot .sig-meta { margin-top: 2px; }
 .sig-sub { margin-top: 2px; }
 .sig-expires { color: #d97706; font-weight: 800; }
 /* fired-at spread on the open card foot — the spread value where the signal fired */
