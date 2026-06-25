@@ -38,6 +38,7 @@ STOP_MULT = 3.0                   # stop sits 3× the entry→target distance th
 # Signals only fire / resolve inside this IST window, Mon–Fri (client's tradeable window).
 SIGNAL_WINDOW_OPEN = 9 * 60 + 10    # 09:10 AM
 SIGNAL_WINDOW_CLOSE = 22 * 60 + 30  # 10:30 PM
+ROLL_DAYS = 6                     # within this many days of expiry → roll signals to the NEXT month (near-expiry = illiquid, untradeable)
 LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
 MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
@@ -277,6 +278,24 @@ def _prob_for(model: dict, z: float):
     return None, None
 
 
+def _pair_expiry(p: dict) -> datetime:
+    try:
+        return datetime.fromisoformat(p.get("big_expiry") or "")
+    except Exception:
+        return datetime.max
+
+
+def _pick_front(ps: list[dict]):
+    """Front contract for a pair = nearest expiry that's still more than ROLL_DAYS
+    away. Contracts within ROLL_DAYS of expiry are illiquid (wide, untradeable
+    spreads) so signals roll forward to the next month (client rule)."""
+    if not ps:
+        return None
+    cutoff = datetime.now() + timedelta(days=ROLL_DAYS)
+    fresh = sorted((p for p in ps if _pair_expiry(p) > cutoff), key=_pair_expiry)
+    return fresh[0] if fresh else min(ps, key=_pair_expiry)
+
+
 def refresh_model() -> int:
     global _model, _bt_grid
     cross = [p for p in pair_registry.get_pairs() if p.get("type") == "cross"]
@@ -285,7 +304,7 @@ def refresh_model() -> int:
     groups: dict = defaultdict(list)
     for p in cross:
         groups[p.get("label")].append(p)
-    pairs = [min(ps, key=lambda x: x.get("name", "")) for ps in groups.values()]
+    pairs = [pf for ps in groups.values() if (pf := _pick_front(ps))]
     try:
         dhan = _dhan()
     except Exception as e:
@@ -466,43 +485,51 @@ def _tick():
     now = time.time()
     db = None
     try:
-        for name, model in _model.items():
+        # ── 1) RESOLVE every open signal — including ones whose contract has rolled
+        #        out of the model, so a near-expiry open still hits target / stop. ──
+        for name in list(_active):
+            a = _active[name]
             s = snaps.get(name)
             mid = _mid(s) if s else None
-            a = _active.get(name)
+            hit = mid is not None and (
+                (a["direction"] == "narrow" and mid <= a["target"]) or
+                (a["direction"] == "widen" and mid >= a["target"]))
+            stop = a.get("stop")
+            stopped = mid is not None and stop is not None and (
+                (a["direction"] == "narrow" and mid >= stop) or
+                (a["direction"] == "widen" and mid <= stop))
+            expired = (now - a["started"]) > MAX_AGE_SECONDS
+            if hit or stopped or expired:
+                db = db or SessionLocal()
+                row = db.get(Signal, a["id"])
+                dur = now - a["started"]
+                if row and row.status == "open":
+                    if (hit or stopped) and dur < MIN_HOLD_SECONDS:
+                        db.delete(row)       # resolved too fast → noise, discard (not counted)
+                    else:
+                        row.status = "hit" if hit else ("stopped" if stopped else "expired")
+                        row.exit_spread = round(mid, 1) if mid is not None else None
+                        row.resolved_at = datetime.utcnow()
+                        row.days_held = round(dur / 86400.0, 2)
+                    db.commit()              # persist BEFORE dropping from memory
+                _active.pop(name, None)
 
-            if a:  # track open signal → resolve (target = win, stop = loss, timeout)
-                hit = mid is not None and (
-                    (a["direction"] == "narrow" and mid <= a["target"]) or
-                    (a["direction"] == "widen" and mid >= a["target"]))
-                stop = a.get("stop")
-                stopped = mid is not None and stop is not None and (
-                    (a["direction"] == "narrow" and mid >= stop) or
-                    (a["direction"] == "widen" and mid <= stop))
-                expired = (now - a["started"]) > MAX_AGE_SECONDS
-                if hit or stopped or expired:
-                    db = db or SessionLocal()
-                    row = db.get(Signal, a["id"])
-                    dur = now - a["started"]
-                    if row and row.status == "open":
-                        if (hit or stopped) and dur < MIN_HOLD_SECONDS:
-                            db.delete(row)       # resolved too fast → noise, discard (not counted)
-                        else:
-                            row.status = "hit" if hit else ("stopped" if stopped else "expired")
-                            row.exit_spread = round(mid, 1) if mid is not None else None
-                            row.resolved_at = datetime.utcnow()
-                            row.days_held = round(dur / 86400.0, 2)
-                        db.commit()              # persist BEFORE dropping from memory
-                    _active.pop(name, None)
+        # ── 2) FIRE new signals on the current (rolled) front contracts ──
+        open_labels = {a.get("label") for a in _active.values()}
+        for name, model in _model.items():
+            if name in _active:
                 continue
-
-            # no open signal → debounce + fire
+            s = snaps.get(name)
+            mid = _mid(s) if s else None
             if mid is None:
                 _pending.pop(name, None)
                 continue
             direction = "narrow" if mid >= model["upper"] else "widen" if mid <= model["lower"] else None
             if direction is None or _too_noisy(s, model["sd"]):
                 _pending.pop(name, None)        # no extreme, or pair too illiquid → don't fire
+                continue
+            if model.get("label") in open_labels:
+                _pending.pop(name, None)        # one open signal per pair at a time (across rolled expiries)
                 continue
             p = _pending.get(name)
             if p and p["direction"] == direction:
@@ -537,6 +564,7 @@ def _tick():
                         "target": target, "stop": stop, "probability": prob, "z_at_entry": round(z, 2),
                         "expected_days": exp_days, "label": s.get("label"),
                         "expiry_label": s.get("expiry_label"), "started": now}
+                    open_labels.add(s.get("label"))
                     _pending.pop(name, None)
                     try:                                   # fire a push to all registered devices (non-blocking)
                         from app.services import fcm_service
@@ -548,18 +576,6 @@ def _tick():
                         log.warning("signal push dispatch failed: %s", e)
             else:
                 _pending[name] = {"direction": direction, "since": now}
-
-        # expire orphan open signals whose pair is gone (rolled expiry)
-        for name in list(_active):
-            if name not in _model and (now - _active[name]["started"]) > MAX_AGE_SECONDS:
-                db = db or SessionLocal()
-                row = db.get(Signal, _active[name]["id"])
-                if row and row.status == "open":
-                    row.status = "expired"
-                    row.resolved_at = datetime.utcnow()
-                    row.days_held = round((now - _active[name]["started"]) / 86400.0, 2)
-                    db.commit()
-                _active.pop(name, None)
     except Exception:
         if db:
             db.rollback()
