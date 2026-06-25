@@ -420,6 +420,11 @@ def refresh_model() -> int:
     _state["models"] = len(new)
     log.info("Signal model refreshed: %d pairs. Grid sweep %d combos over %d pairs (%d–%d bars, %s→%s).",
              len(new), len(STRAT_GRID), len(bars), min(bars) if bars else 0, max(bars) if bars else 0, dmin, dmax)
+    c13 = next((c for c in results if c.get("rr") == "1:3"), {})
+    yr13 = (_bt_grid.get("yearly") or {}).get("1:3", [])
+    log.info("Backtest (current rolled contracts) 1:3 → win_rate=%s%% over %s trades · yearly: %s",
+             c13.get("win_rate"), c13.get("trades"),
+             ", ".join(f"{y['year']}={y['win_rate']}%" for y in yr13))
     return len(new)
 
 
