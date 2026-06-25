@@ -4063,6 +4063,17 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* fired-at spread on the open card foot — the spread value where the signal fired */
 .sig-fire { color: var(--text-muted); font-weight: 700; }
 .sig-fire b { color: var(--text-primary); font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 800; }
+/* trade instruction — exact BUY / SELL legs */
+.sig-trade { display: flex; gap: 7px; margin: 8px 0 2px; }
+.sig-trade-buy, .sig-trade-sell { flex: 1; text-align: center; font-size: 12px; font-weight: 800; padding: 5px 6px; border-radius: 7px; white-space: nowrap; }
+.sig-trade-buy { color: var(--green); background: rgba(22,163,74,.10); border: 1px solid rgba(22,163,74,.30); }
+.sig-trade-sell { color: var(--red); background: rgba(220,38,38,.10); border: 1px solid rgba(220,38,38,.30); }
+/* popup: How to trade */
+.sigm-howto { margin: 12px 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--bg-surface-alt); border: 1px solid var(--border-light); }
+.sigm-howto-title { font-size: 10px; font-weight: 800; letter-spacing: .5px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+.sigm-howto-legs { display: flex; gap: 8px; }
+.sigm-howto-legs span { flex: 1; text-align: center; font-size: 13px; padding: 8px 6px; border-radius: 8px; }
+.sigm-howto-note { margin-top: 9px; font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.5; }
 
 /* Open card: NOW value + signed scale % */
 .sig-nowline { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 9px; }

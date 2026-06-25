@@ -45,6 +45,15 @@ function sigRank(label) {
   return i === -1 ? 999 : i;
 }
 
+// Exact buy/sell legs from "BIG / SMALL" + direction.
+// WIDEN = buy the spread → BUY big, SELL small ;  NARROW = sell the spread → SELL big, BUY small.
+export function tradeLegs(label, direction) {
+  const p = String(label || "").split("/").map((x) => x.trim());
+  if (p.length !== 2 || !p[0] || !p[1]) return null;
+  const [big, small] = p;
+  return direction === "widen" ? { buy: big, sell: small } : { buy: small, sell: big };
+}
+
 // Fire-once signals (direction + target) + accuracy track record. No % shown.
 export default function SignalsPanel({ signals }) {
   const [view, setView] = useState("open");
@@ -98,6 +107,7 @@ export default function SignalsPanel({ signals }) {
             {[...signals].sort((a, b) => sigRank(a.label) - sigRank(b.label)).map((r) => {
               const s = r.signal;
               const narrow = s.direction === "narrow";
+              const tl = tradeLegs(r.label, s.direction);
               // gauge: stop (0%) ── entry tick ── target (100%); entry isn't centered (1:3 → ~75%)
               const okG = s.stop != null && s.target != null && s.stop !== s.target && s.entry != null;
               const fr = (v) => Math.max(0, Math.min(1, (v - s.stop) / (s.target - s.stop)));
@@ -116,6 +126,12 @@ export default function SignalsPanel({ signals }) {
                     <span className={`sig-dir sig-dir-${s.direction}`}>{narrow ? "▼ NARROW" : "▲ WIDEN"}</span>
                   </div>
                   <div className="sig-exp2">{r.expiry_label}</div>
+                  {tl && (
+                    <div className="sig-trade">
+                      <span className="sig-trade-buy">BUY {tl.buy}</span>
+                      <span className="sig-trade-sell">SELL {tl.sell}</span>
+                    </div>
+                  )}
                   <div className="sig-nowline">
                     <span className="sig-nowlbl">NOW</span>
                     <b className="sig-nowval">{r0(s.current)}</b>

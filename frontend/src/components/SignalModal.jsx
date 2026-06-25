@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { tradeLegs } from "./SignalsPanel.jsx";
 
 const r0 = (v) => (v == null ? "—" : Math.round(v).toLocaleString("en-IN"));
 function fmtMin(mins) {
@@ -41,6 +42,21 @@ export default function SignalModal({ row, onClose }) {
         <div className={`sigm-dir sigm-dir-${s.direction}`}>
           {narrow ? "▼ NARROW — spread likely to fall" : "▲ WIDEN — spread likely to rise"}
         </div>
+        {tradeLegs(row.label, s.direction) && (() => {
+          const tl = tradeLegs(row.label, s.direction);
+          return (
+            <div className="sigm-howto">
+              <div className="sigm-howto-title">How to trade</div>
+              <div className="sigm-howto-legs">
+                <span className="sig-trade-buy">🟢 BUY {tl.buy}</span>
+                <span className="sig-trade-sell">🔴 SELL {tl.sell}</span>
+              </div>
+              <div className="sigm-howto-note">
+                Enter both legs now · book profit at target {r0(s.target)} · stop at {r0(s.stop)}
+              </div>
+            </div>
+          );
+        })()}
         <div className="sig-nowline" style={{ justifyContent: "center", gap: 10 }}>
           <span className="sig-nowlbl">NOW</span>
           <b className="sig-nowval">{r0(s.current)}</b>
