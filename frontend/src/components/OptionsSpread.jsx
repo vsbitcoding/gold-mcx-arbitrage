@@ -134,13 +134,15 @@ export default function OptionsSpread() {
           </span>
           <span className="opt-spot-sub">ATM {data?.sensex_atm ?? "—"}</span>
         </div>
-        {data?.status?.subscribed_options != null && (
-          <div className="opt-spot-chip" title="Total option contracts under live subscription">
-            <span className="opt-spot-label">SUBSCRIBED</span>
-            <span className="opt-spot-value">{data.status.subscribed_options}</span>
-            <span className="opt-spot-sub">PE contracts</span>
-          </div>
-        )}
+        <div className="opt-spot-chip" title="India VIX — NSE volatility index">
+          <span className="opt-spot-label">
+            {data?.india_vix != null && <span className="live-dot" />}INDIA VIX
+          </span>
+          <span className="opt-spot-value">
+            {data?.india_vix == null ? "—" : fmtNum(data.india_vix, 2)}
+          </span>
+          <span className="opt-spot-sub">volatility</span>
+        </div>
       </div>
 
       {!matrix ? (

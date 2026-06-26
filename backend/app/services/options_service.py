@@ -42,6 +42,7 @@ log = logging.getLogger("options_service")
 # Spot index security IDs (from Dhan scrip master)
 NIFTY_SPOT_ID = "13"          # NSE IDX, "NIFTY"
 SENSEX_SPOT_ID = "51"         # BSE IDX, "SENSEX"
+INDIA_VIX_ID = "21"           # NSE IDX, "INDIA VIX"
 
 # Strike step per index
 NIFTY_STEP = 50
@@ -290,6 +291,8 @@ def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     meta[NIFTY_SPOT_ID] = {"short": "nifty_spot", "trading_symbol": "NIFTY", "kind": "index"}
     instruments.append((marketfeed.MarketFeed.IDX, SENSEX_SPOT_ID, marketfeed.MarketFeed.Ticker))
     meta[SENSEX_SPOT_ID] = {"short": "sensex_spot", "trading_symbol": "SENSEX", "kind": "index"}
+    instruments.append((marketfeed.MarketFeed.IDX, INDIA_VIX_ID, marketfeed.MarketFeed.Ticker))
+    meta[INDIA_VIX_ID] = {"short": "india_vix", "trading_symbol": "INDIA VIX", "kind": "index"}
 
     # Option contracts
     for (idx, wk_i, strike, opt_type), info in _state["options"].items():
@@ -334,6 +337,7 @@ def get_spread_table(side: str = "below") -> dict:
     """
     nifty_spot = _live_spot(NIFTY_SPOT_ID)
     sensex_spot = _live_spot(SENSEX_SPOT_ID)
+    india_vix = _live_spot(INDIA_VIX_ID)
 
     # Fall back to spot snapshot captured at refresh() if live tick missing.
     nifty_spot_for_calc = nifty_spot or _state.get("nifty_spot_at_refresh")
@@ -404,6 +408,7 @@ def get_spread_table(side: str = "below") -> dict:
         "side": side,
         "nifty_spot": nifty_spot,
         "sensex_spot": sensex_spot,
+        "india_vix": india_vix,
         "nifty_atm": nifty_atm_live,
         "sensex_atm": sensex_atm_live,
         "weeks": weeks_out,
