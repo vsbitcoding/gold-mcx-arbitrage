@@ -53,6 +53,46 @@ LAUNCH_ARGS = [
     "--disable-dev-shm-usage",
 ]
 
+# Optional explicit overrides; otherwise we auto-detect a working browser.
+CHROME_CHANNEL = os.environ.get("MCXCCL_CHROME_CHANNEL", "").strip()  # e.g. "chrome"
+CHROME_PATH = os.environ.get("MCXCCL_CHROME_PATH", "").strip()        # e.g. /usr/bin/google-chrome
+# System browsers to try when Playwright's bundled Chromium is unavailable
+# (e.g. a brand-new Ubuntu Playwright has no build for). Install Google Chrome's
+# .deb and it lands at /usr/bin/google-chrome.
+_FALLBACK_PATHS = (
+    "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium", "/usr/bin/chromium-browser", "/snap/bin/chromium",
+)
+
+
+def _launch(p):
+    """Launch via the first strategy that works: explicit override → bundled
+    Chromium → 'chrome'/'chromium' channel → known system paths."""
+    attempts = []
+    if CHROME_PATH:
+        attempts.append(("executable_path", CHROME_PATH))
+    elif CHROME_CHANNEL:
+        attempts.append(("channel", CHROME_CHANNEL))
+    else:
+        attempts.append(("bundled", None))
+        attempts.append(("channel", "chrome"))
+        attempts.append(("channel", "chromium"))
+        attempts += [("executable_path", path) for path in _FALLBACK_PATHS]
+    errors = []
+    for kind, val in attempts:
+        kw = {"headless": True, "args": LAUNCH_ARGS}
+        if kind == "channel":
+            kw["channel"] = val
+        elif kind == "executable_path":
+            if not os.path.exists(val):
+                continue
+            kw["executable_path"] = val
+        try:
+            return p.chromium.launch(**kw)
+        except Exception as e:  # noqa: BLE001 — try the next strategy
+            errors.append(f"{kind}={val}: {type(e).__name__}")
+    raise RuntimeError("no usable browser — install Google Chrome. Tried: " + "; ".join(errors))
+
 # Only rows naming one of these commodities (plus a GM/KG unit) are kept.
 _COMMODITY_HINTS = ("GOLD", "SILVER", "PETAL", "GUINEA")
 
@@ -62,7 +102,7 @@ def _scrape_pdf_bytes():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=LAUNCH_ARGS)
+        browser = _launch(p)
         try:
             ctx = browser.new_context(
                 user_agent=UA,

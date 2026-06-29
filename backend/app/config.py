@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     MCXCCL_FETCH_HOUR_IST: int = 18
     MCXCCL_FETCH_MINUTE_IST: int = 0
     MCXCCL_SCRAPE_TIMEOUT: int = 150   # seconds; subprocess killed past this
+    # Browser overrides (optional). Leave blank → auto-detect (bundled Chromium,
+    # then system Google Chrome/Chromium). Set channel="chrome" or an explicit
+    # path if auto-detect ever picks the wrong one.
+    MCXCCL_CHROME_CHANNEL: str = ""
+    MCXCCL_CHROME_PATH: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

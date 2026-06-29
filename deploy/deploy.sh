@@ -26,10 +26,12 @@ if [ "$DEPS_CHANGED" -gt 0 ]; then
     echo "==> Reinstalling backend deps"
     cd "$APP_DIR/backend"
     ./venv/bin/pip install -r requirements.txt --quiet
-    # Chromium for the daily MCXCCL bullion-stock scrape (idempotent; ~150 MB first time).
-    # Non-fatal: a download hiccup must NOT block the backend restart / live feed.
-    ./venv/bin/playwright install chromium \
-        || echo "WARN: 'playwright install chromium' failed — Bullion Stock scrape skipped until fixed"
+    # Browser for the daily MCXCCL scrape. Best-effort + non-fatal: Playwright's
+    # bundled Chromium isn't published for brand-new distros (e.g. Ubuntu 26.04),
+    # so the scraper also auto-detects a system Google Chrome — install its .deb
+    # once (see README); it lands at /usr/bin/google-chrome.
+    ./venv/bin/playwright install chromium >/dev/null 2>&1 \
+        || echo "NOTE: Playwright Chromium unavailable on this OS — install Google Chrome .deb for the Bullion Stock scrape (see README); the scraper auto-detects /usr/bin/google-chrome"
 fi
 
 if [ "$FRONTEND_CHANGED" -gt 0 ]; then

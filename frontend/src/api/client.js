@@ -140,6 +140,7 @@ export const api = {
   bullionStock: () => request("/api/bullion-stock"),
   bullionStockStatus: () => request("/api/bullion-stock/status"),
   bullionPdf: (download = false) => requestBlob(`/api/bullion-stock/pdf${download ? "?download=1" : ""}`),
+  bullionRefresh: () => request("/api/bullion-stock/refresh", { method: "POST" }),
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();

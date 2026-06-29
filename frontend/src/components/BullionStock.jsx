@@ -57,6 +57,7 @@ export default function BullionStock() {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [selected, setSelected] = useState(null); // pair_name
 
   const load = useCallback(async () => {
@@ -76,6 +77,21 @@ export default function BullionStock() {
   // Fetch ONCE on mount — the warehouse data changes ~once a day, so there is
   // no polling here (keeps server/DB load near zero).
   useEffect(() => { load(); }, [load]);
+
+  // Trigger the scrape now (on-demand) — takes ~15-20s, then reload the report.
+  const fetchNow = useCallback(async () => {
+    setFetching(true);
+    setErr(null);
+    try {
+      const res = await api.bullionRefresh();
+      if (!res?.ok && res?.status?.msg) setErr(`Fetch: ${res.status.msg}`);
+      await load();
+    } catch (e) {
+      setErr(e.message || "Fetch failed");
+    } finally {
+      setFetching(false);
+    }
+  }, [load]);
 
   // View / Download the stored PDF. Fetched with the auth header → object URL.
   const openPdf = useCallback(async (download) => {
@@ -142,6 +158,9 @@ export default function BullionStock() {
           )}
           <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
             {loading ? "Loading…" : "↻ Refresh"}
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={fetchNow} disabled={fetching} title="Scrape MCXCCL now">
+            {fetching ? "Fetching…" : "⟳ Fetch now"}
           </button>
         </div>
       </div>

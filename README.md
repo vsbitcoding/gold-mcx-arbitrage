@@ -152,9 +152,19 @@ npm run dev
 
 > **Bullion Stock tab (MCXCCL):** a once-a-day job scrapes the warehouse
 > "Eligible Units" PDF (isolated subprocess, runs at 18:00 IST) and snapshots the
-> live spread, then shows stock-vs-spread correlation. It needs `playwright
-> install chromium` in the backend venv. If the browser is missing the job logs a
-> warning and the rest of the app is unaffected. Disable with `BULLION_STOCK_ENABLED=false`.
+> live spread, then shows stock-vs-spread correlation. Disable with
+> `BULLION_STOCK_ENABLED=false`.
+>
+> **Browser:** the scraper auto-detects a browser — Playwright's bundled Chromium
+> (`playwright install chromium`) **or** a system Google Chrome. On brand-new
+> distros where Playwright has no Chromium build (e.g. **Ubuntu 26.04**), install
+> Google Chrome once:
+> ```bash
+> cd /tmp && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+> sudo apt install -y ./google-chrome-stable_current_amd64.deb   # also pulls the needed libs
+> ```
+> The scraper finds it at `/usr/bin/google-chrome` automatically (override with
+> `MCXCCL_CHROME_CHANNEL=chrome` or `MCXCCL_CHROME_PATH=...`).
 
 ## Deploy
 

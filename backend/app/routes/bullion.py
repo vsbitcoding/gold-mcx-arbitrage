@@ -22,6 +22,14 @@ def get_status(user: str = Depends(get_current_user)):
     return mcxccl_service.status()
 
 
+@router.post("/refresh")
+def force_refresh(user: str = Depends(get_current_user)):
+    """Trigger the scrape + spread snapshot now (on-demand / for testing).
+    Serialised by an internal lock so it can't overlap the daily job."""
+    ok = mcxccl_service.refresh()
+    return {"ok": ok, "status": mcxccl_service.status()}
+
+
 @router.get("/pdf")
 def get_pdf(download: bool = Query(False), user: str = Depends(get_current_user)):
     """Serve the stored MCXCCL stock PDF from our own server (inline = view,

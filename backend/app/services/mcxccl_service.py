@@ -21,6 +21,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +58,10 @@ _status = {
 _report_cache: dict = {"at": 0.0, "data": None}
 _REPORT_TTL = 60.0
 
+# Serialises refresh() so the daily job and a manual "Fetch now" can't overlap
+# (and double-clicks can't spawn two Chromium subprocesses).
+_refresh_lock = threading.Lock()
+
 
 def status() -> dict:
     return dict(_status)
@@ -71,6 +76,10 @@ def _scrape_and_store() -> tuple[str, bool, str | None, int]:
         **os.environ,
         "MCXCCL_STOCK_PAGE_URL": settings.MCXCCL_STOCK_PAGE_URL,
     }
+    if settings.MCXCCL_CHROME_CHANNEL:
+        env["MCXCCL_CHROME_CHANNEL"] = settings.MCXCCL_CHROME_CHANNEL
+    if settings.MCXCCL_CHROME_PATH:
+        env["MCXCCL_CHROME_PATH"] = settings.MCXCCL_CHROME_PATH
     try:
         proc = subprocess.run(
             [sys.executable, str(_SCRIPT)],
@@ -184,19 +193,25 @@ def _snapshot_spread() -> str:
 
 def refresh() -> bool:
     """Run the daily scrape + spread snapshot. Always safe; never raises."""
-    _status["last_run_at"] = datetime.now(timezone.utc).isoformat()
-    if not settings.BULLION_STOCK_ENABLED:
-        _status.update(ok=False, msg="disabled (BULLION_STOCK_ENABLED=false)")
+    if not _refresh_lock.acquire(blocking=False):
+        log.info("MCXCCL refresh skipped — already running")
         return False
+    try:
+        _status["last_run_at"] = datetime.now(timezone.utc).isoformat()
+        if not settings.BULLION_STOCK_ENABLED:
+            _status.update(ok=False, msg="disabled (BULLION_STOCK_ENABLED=false)")
+            return False
 
-    stock_msg, stock_ok, as_on, nrows = _scrape_and_store()
-    spread_msg = _snapshot_spread()
-    _report_cache["data"] = None  # invalidate the dashboard cache
+        stock_msg, stock_ok, as_on, nrows = _scrape_and_store()
+        spread_msg = _snapshot_spread()
+        _report_cache["data"] = None  # invalidate the dashboard cache
 
-    _status.update(ok=stock_ok, as_on_date=as_on or _status["as_on_date"],
-                   rows=nrows, msg=f"{stock_msg}; {spread_msg}")
-    log.info("MCXCCL refresh: %s", _status["msg"])
-    return stock_ok
+        _status.update(ok=stock_ok, as_on_date=as_on or _status["as_on_date"],
+                       rows=nrows, msg=f"{stock_msg}; {spread_msg}")
+        log.info("MCXCCL refresh: %s", _status["msg"])
+        return stock_ok
+    finally:
+        _refresh_lock.release()
 
 
 # --------------------------------------------------------------------------- #
