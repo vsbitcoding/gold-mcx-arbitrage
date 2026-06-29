@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import activity, extra_instruments, span_service
+from app.services import activity, extra_instruments, mcxccl_service, span_service
 
 log = logging.getLogger("maintenance")
 
@@ -121,6 +121,7 @@ def _loop() -> None:
     last_clear_date: str | None = None
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
+    last_mcxccl_fetch: str | None = None
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -158,6 +159,20 @@ def _loop() -> None:
                 last_span_refresh = today_str
                 if ok:
                     log.info("SPAN margin feed refreshed for %s", today_str)
+
+            # Daily MCXCCL bullion warehouse-stock scrape + spread snapshot —
+            # once per IST day at the configured time. Isolated subprocess +
+            # fully wrapped → can never affect the live feed/signals.
+            if (
+                settings.BULLION_STOCK_ENABLED
+                and last_mcxccl_fetch != today_str
+                and (now.hour, now.minute) >= (settings.MCXCCL_FETCH_HOUR_IST, settings.MCXCCL_FETCH_MINUTE_IST)
+            ):
+                try:
+                    mcxccl_service.refresh()
+                except Exception as e:
+                    log.warning("MCXCCL refresh raised: %s", e)
+                last_mcxccl_fetch = today_str
         except Exception as e:
             log.exception("Maintenance error: %s", e)
         time.sleep(TICK_SECONDS)

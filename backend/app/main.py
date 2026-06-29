@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, calculator, feed, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, price as price_route, public_v1, signals as signals_route, ws as ws_route
+from app.routes import auth, bullion as bullion_route, calculator, feed, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, price as price_route, public_v1, signals as signals_route, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
@@ -42,6 +42,7 @@ app.include_router(price_route.router)
 app.include_router(signals_route.router)
 app.include_router(ws_route.router)
 app.include_router(public_v1.router)
+app.include_router(bullion_route.router)
 
 
 @app.exception_handler(Exception)

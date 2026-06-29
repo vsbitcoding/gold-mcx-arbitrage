@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Boolean, Text
+from sqlalchemy import Column, DateTime, Float, Integer, LargeBinary, String, Boolean, Text
 
 from app.database import Base
 
@@ -196,3 +196,57 @@ class DeviceToken(Base):
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BullionStock(Base):
+    """Daily MCXCCL warehouse 'Eligible Units' per bullion commodity.
+
+    One row per (as_on_date, commodity), scraped from the 'Summary of Stock –
+    Bullion Commodities' table (last page of the daily Warehouse & Vault PDF).
+    `as_on_date` is the date printed in the PDF (it can lag the calendar date).
+    Tiny table: ~7 rows whenever the published PDF changes.
+    """
+    __tablename__ = "bullion_stock"
+
+    id = Column(Integer, primary_key=True)
+    as_on_date = Column(String(10), nullable=False, index=True)   # 'YYYY-MM-DD' from the PDF
+    commodity = Column(String(40), nullable=False, index=True)    # GOLD | GOLD MINI | SILVER ...
+    unit = Column(String(8), nullable=True)                       # GM | KG
+    eligible_units = Column(Float, nullable=False)
+    fetched_at = Column(DateTime, default=datetime.utcnow)        # when we scraped it
+
+
+class DailySpread(Base):
+    """Once-a-day snapshot of each pair's spread, taken in-process from the live
+    quote_store. There is no continuous spread history otherwise, so this is what
+    the stock-vs-spread correlation is computed against. ~N pairs rows per day.
+    """
+    __tablename__ = "daily_spread"
+
+    id = Column(Integer, primary_key=True)
+    snap_date = Column(String(10), nullable=False, index=True)    # 'YYYY-MM-DD' IST
+    pair_name = Column(String(64), nullable=False, index=True)
+    decrease_spread = Column(Float, nullable=True)
+    increase_spread = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BullionPdf(Base):
+    """The latest scraped 'Warehouse & Vault Wise Stock Position' PDF (~47 KB),
+    kept so the dashboard can View/Download it from our own server (no Akamai or
+    cross-origin issue at view-time). Only the most recent row is retained.
+    """
+    __tablename__ = "bullion_pdf"
+
+    id = Column(Integer, primary_key=True)
+    as_on_date = Column(String(10), nullable=False)
+    filename = Column(String(160), nullable=True)
+    source_url = Column(Text, nullable=True)
+    content = Column(LargeBinary, nullable=False)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+# Composite UNIQUE indexes → make the daily ingest idempotent (a re-run for the
+# same PDF date / same calendar day simply finds the rows already present).
+Index("ix_bullion_date_comm", BullionStock.as_on_date, BullionStock.commodity, unique=True)
+Index("ix_dailyspread_date_pair", DailySpread.snap_date, DailySpread.pair_name, unique=True)

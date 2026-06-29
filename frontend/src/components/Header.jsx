@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { key: "othercomm", label: "Other Commodity" },
   { key: "calculator", label: "Calculator" },
   { key: "options", label: "Nifty / Sensex" },
+  { key: "stock", label: "Bullion Stock" },
 ];
 
 // Clean monochrome line icons (match the app's drawer look).
@@ -24,6 +25,7 @@ function NavIcon({ name }) {
     case "othercomm": return <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z" /></svg>;
     case "calculator": return <svg {...c}><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" /></svg>;
     case "options": return <svg {...c}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
+    case "stock": return <svg {...c}><path d="M3 21h18" /><rect x="5" y="11" width="4" height="7" /><rect x="15" y="11" width="4" height="7" /><path d="M7 11V7l5-4 5 4v4" /></svg>;
     default: return null;
   }
 }

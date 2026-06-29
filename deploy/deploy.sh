@@ -26,6 +26,10 @@ if [ "$DEPS_CHANGED" -gt 0 ]; then
     echo "==> Reinstalling backend deps"
     cd "$APP_DIR/backend"
     ./venv/bin/pip install -r requirements.txt --quiet
+    # Chromium for the daily MCXCCL bullion-stock scrape (idempotent; ~150 MB first time).
+    # Non-fatal: a download hiccup must NOT block the backend restart / live feed.
+    ./venv/bin/playwright install chromium \
+        || echo "WARN: 'playwright install chromium' failed — Bullion Stock scrape skipped until fixed"
 fi
 
 if [ "$FRONTEND_CHANGED" -gt 0 ]; then

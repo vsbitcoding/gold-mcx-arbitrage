@@ -141,6 +141,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+playwright install chromium   # one-time: browser for the daily MCXCCL bullion-stock scrape (~300 MB)
 uvicorn app.main:app --reload
 
 # Frontend
@@ -148,6 +149,12 @@ cd frontend
 npm install
 npm run dev
 ```
+
+> **Bullion Stock tab (MCXCCL):** a once-a-day job scrapes the warehouse
+> "Eligible Units" PDF (isolated subprocess, runs at 18:00 IST) and snapshots the
+> live spread, then shows stock-vs-spread correlation. It needs `playwright
+> install chromium` in the backend venv. If the browser is missing the job logs a
+> warning and the rest of the app is unaffected. Disable with `BULLION_STOCK_ENABLED=false`.
 
 ## Deploy
 

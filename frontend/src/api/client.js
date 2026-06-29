@@ -54,6 +54,22 @@ async function request(path, opts = {}) {
   throw lastErr || new Error("Request failed");
 }
 
+// Fetch a binary file (e.g. PDF) WITH the auth header, returned as a Blob.
+// (A plain <a href> can't send the Bearer token, so we fetch then objectURL it.)
+async function requestBlob(path) {
+  const res = await _doRequest(path, {});
+  if (res.status === 401) {
+    clearToken();
+    window.location.reload();
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+
 export async function login(username, password) {
   const body = new URLSearchParams();
   body.set("username", username);
@@ -120,6 +136,10 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }),
+  // MCXCCL bullion warehouse stock + stock-vs-spread correlation
+  bullionStock: () => request("/api/bullion-stock"),
+  bullionStockStatus: () => request("/api/bullion-stock/status"),
+  bullionPdf: (download = false) => requestBlob(`/api/bullion-stock/pdf${download ? "?download=1" : ""}`),
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();
