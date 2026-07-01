@@ -4229,53 +4229,199 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   .bs-grid { grid-template-columns: 1fr; }
   .bs-corr-grid { grid-template-columns: 1fr; }
 }
+/* ============================================================
+   GOLD OPTIONS TAB — GOLD / GOLD MINI options spread
+   Merged production build: polished top cards, ALL values
+   centered, hero spread columns, sticky Strike column on
+   horizontal scroll, stacked per-strike cards <=640px.
+   Theme-var based (body.dark flips vars).
+   ============================================================ */
+.go-page { display: flex; flex-direction: column; gap: 16px; padding: 2px 2px 28px; }
 
-/* ===== Gold Options tab (GOLD / GOLD MINI option spread) ===== */
-.go-page { padding: 2px 2px 24px; }
-.go-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.go-head h2 { font-size: 17px; font-weight: 700; margin: 0; color: var(--text-primary); }
-.go-head-sub { color: var(--text-muted); font-weight: 600; font-size: 14px; }
-.go-exp-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
-.go-exp-toggle button { padding: 5px 12px; border: 1px solid var(--border); background: var(--bg-surface-alt); color: var(--text-secondary); border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.go-exp-toggle button:hover { border-color: var(--accent); }
-.go-exp-toggle button.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
-.go-exp-sub { color: var(--text-muted); font-weight: 500; }
+/* ---------- Header ---------- */
+.go-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.go-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.go-title-main { font-size: 20px; font-weight: 800; letter-spacing: 0.2px; color: var(--text-primary); line-height: 1.15; margin: 0; }
+.go-title-x { color: var(--text-muted); font-weight: 600; margin: 0 2px; }
+.go-title-sub { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; }
 
-.go-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-.go-chip { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; padding: 8px 14px; min-width: 132px; }
-.go-chip-g { border-left-color: var(--yellow); }
-.go-chip-m { border-left-color: #64748b; }
-.go-chip-l { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-.go-chip-v { font-size: 17px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.go-chip-s { font-size: 11px; color: var(--text-muted); }
+/* Expiry toggle (segmented) */
+.go-exp-toggle { display: inline-flex; gap: 4px; padding: 4px; background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 12px; }
+.go-exp-btn { display: inline-flex; align-items: baseline; gap: 5px; padding: 7px 14px; border: none; border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; white-space: nowrap; }
+.go-exp-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.go-exp-btn.active { background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
+.go-exp-main { font-variant-numeric: tabular-nums; }
+.go-exp-mini { font-size: 11px; font-weight: 600; opacity: 0.85; font-variant-numeric: tabular-nums; }
 
-/* Centered card-style table with grouped colour headers */
-.go-wrap { max-width: 1120px; margin: 0 auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
-.go-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.go-table th, .go-table td { padding: 8px 12px; white-space: nowrap; }
-.go-table td.num, .go-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.go-grp-row th { text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); }
-.go-h-strike, .go-h-type { text-align: left; color: var(--th-color); background: var(--th-bg); vertical-align: bottom; }
-.go-grp-m { background: rgba(100,116,139,0.16); color: var(--text-secondary); }
-.go-grp-g { background: rgba(249,171,0,0.16); color: var(--yellow); }
-.go-grp-s { background: var(--accent-bg); color: var(--accent); }
-.go-sub-row th { font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--bg-surface-alt); border-bottom: 2px solid var(--border); }
-/* group separators */
-.go-b-m, .go-b-g { border-left: 2px solid var(--border-light); }
-.go-b-s { border-left: 2px solid var(--accent); }
+/* ---------- Top cards ---------- */
+.go-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.go-card { position: relative; display: flex; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.go-card:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+.go-card-bar { flex: 0 0 4px; background: var(--border); }
+.go-card-body { flex: 1 1 auto; min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.go-card-top { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 16px; }
+.go-card-ico { font-size: 13px; line-height: 1; color: var(--text-muted); flex: 0 0 auto; }
+.go-card-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.go-card-value { font-size: 26px; font-weight: 800; line-height: 1.05; color: var(--text-primary); font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.go-card-value-sm { font-size: 18px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.go-card-foot { font-size: 11.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.go-live { margin-left: auto; flex: 0 0 auto; }
 
-.go-table tbody tr { border-bottom: 1px solid var(--border-light); }
-.go-table tbody tr:nth-child(even) { background: var(--bg-surface-alt); }
-.go-table tbody tr:hover { background: var(--bg-hover); }
-.go-table tbody tr.atm-row { background: var(--accent-bg); }
-.go-table tbody tr.atm-row .go-strike { color: var(--accent); }
-.go-strike { font-weight: 700; font-variant-numeric: tabular-nums; }
-.go-type { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-.go-ce { background: var(--green-bg); color: var(--green); }
-.go-pe { background: var(--red-bg); color: var(--red); }
-.go-sp { font-variant-numeric: tabular-nums; font-weight: 700; }
-.go-sp-main { font-size: 14px; }
-.go-sp.pos { color: var(--green); }
-.go-sp.neg { color: var(--red); }
-.go-sp.neutral { color: var(--text-muted); }
-@media (max-width: 720px) { .go-wrap { max-width: 100%; } .go-table th, .go-table td { padding: 6px 8px; } }
+/* GOLD — amber accent */
+.go-card-gold { background: linear-gradient(180deg, var(--yellow-bg) 0%, var(--bg-surface) 55%); }
+.go-card-gold .go-card-bar { background: var(--yellow); }
+.go-card-gold .go-card-ico { color: var(--yellow); }
+.go-card-gold .go-card-value { color: var(--yellow); }
+
+/* GOLD MINI — slate/blue accent */
+.go-card-mini { background: linear-gradient(180deg, var(--accent-bg) 0%, var(--bg-surface) 55%); }
+.go-card-mini .go-card-bar { background: var(--accent); }
+.go-card-mini .go-card-ico { color: var(--accent); }
+.go-card-mini .go-card-value { color: var(--accent); }
+
+/* Pricing side */
+.go-card-ref .go-card-bar { background: var(--text-muted); }
+.go-side-hi { font-weight: 800; color: var(--text-primary); }
+.go-side-lo { font-weight: 700; color: var(--text-secondary); }
+.go-side-arrow { font-size: 12px; font-weight: 700; color: var(--green); }
+
+/* Expiry card */
+.go-card-exp .go-card-bar { background: var(--accent); }
+.go-card-exp .go-card-value { font-variant-numeric: tabular-nums; }
+
+/* ---------- Legend ---------- */
+.go-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-surface-alt); font-size: 12px; color: var(--text-secondary); }
+.go-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.go-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.go-swatch-s1 { background: var(--green); }
+.go-swatch-s2 { background: var(--accent); }
+.go-legend-atm { color: var(--text-muted); }
+
+/* ---------- ATM pill (never overlaps strike) ---------- */
+.go-atm { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px; line-height: 1.6; vertical-align: middle; white-space: nowrap; }
+/* In the table Strike cell the badge sits on its OWN line, centered */
+.go-atm-block { display: block; width: fit-content; margin: 4px auto 0; }
+
+/* ============================================================
+   TABLE — desktop / tablet
+   ============================================================ */
+.go-wrap { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.go-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.go-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 660px; font-variant-numeric: tabular-nums; }
+/* ALL headers & cells centered */
+.go-table th, .go-table td { text-align: center; vertical-align: middle; }
+
+.go-col-strike { width: 120px; }
+.go-col-type { width: 62px; }
+.go-col-sp { width: 15%; }
+
+/* Grouped header row */
+.go-grp-row th { background: var(--th-bg); color: var(--th-color); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; padding: 9px 8px; border-bottom: 1px solid var(--border); }
+.go-grp-mini { color: var(--accent); border-left: 2px solid var(--border); }
+.go-grp-gold { color: var(--yellow); border-left: 2px solid var(--border); }
+.go-grp-sp { color: var(--green); border-left: 2px solid var(--border); background: var(--green-bg); }
+
+/* Sub header row */
+.go-sub-row th.go-sub { background: var(--bg-surface-alt); color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.3px; padding: 7px 8px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+.go-sub-row th.go-sub-sp { color: var(--green); background: var(--green-bg); font-weight: 800; }
+.go-h-strike, .go-h-type { background: var(--th-bg); color: var(--th-color); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; padding: 9px 8px; border-bottom: 1px solid var(--border); }
+
+/* Sticky Strike column (header + body) */
+.go-h-strike, .go-strike { position: sticky; left: 0; box-shadow: 1px 0 0 var(--border); }
+.go-h-strike { z-index: 5; }
+.go-strike { z-index: 2; background: var(--bg-surface); }
+
+/* Vertical group separators on body cells */
+.go-edge-l { border-left: 2px solid var(--border-light); }
+
+/* Body cells */
+.go-td { padding: 10px 8px; font-size: 13.5px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-light); }
+.go-num { font-variant-numeric: tabular-nums; letter-spacing: -0.1px; }
+.go-strike { padding: 10px 12px; border-bottom: 1px solid var(--border-light); font-weight: 800; color: var(--text-primary); }
+.go-strike-n { display: inline-block; font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 800; }
+
+/* Type badges */
+.go-type { display: inline-block; min-width: 34px; padding: 2px 9px; border-radius: 100px; font-size: 11px; font-weight: 800; letter-spacing: 0.4px; }
+.go-type-pe { background: var(--red-bg); color: var(--red); }
+.go-type-ce { background: var(--green-bg); color: var(--green); }
+
+/* Zebra + hover */
+.go-tr:nth-child(even) .go-td { background: var(--bg-surface-alt); }
+.go-tr:nth-child(even) .go-strike { background: var(--bg-surface-alt); }
+.go-tr:hover .go-td { background: var(--bg-hover); }
+.go-tr:hover .go-strike { background: var(--bg-hover); }
+
+/* ATM row highlight (sticky cell backgrounds overridden so nothing bleeds through) */
+.go-tr.atm-row .go-td, .go-tr.atm-row .go-strike { background: var(--accent-bg); }
+.go-tr.atm-row:hover .go-td, .go-tr.atm-row:hover .go-strike { background: var(--accent-bg); }
+.go-tr.atm-row .go-strike { box-shadow: 1px 0 0 var(--border), inset 3px 0 0 var(--accent); }
+.go-tr.atm-row .go-strike-n { color: var(--accent); }
+
+/* ---------- HERO spread numbers ---------- */
+.go-hero { font-size: 15.5px; font-weight: 800; letter-spacing: -0.2px; }
+.go-hero.go-pos { color: var(--green); }
+.go-hero.go-neg { color: var(--red); }
+.go-hero.go-flat { color: var(--text-muted); font-weight: 700; }
+/* faint tinted lane so the two spread columns read as the key output */
+.go-td.go-hero { background: var(--green-bg); }
+.go-tr:hover .go-td.go-hero { filter: brightness(0.98); }
+.go-tr.atm-row .go-td.go-hero { background: var(--accent-bg); }
+.go-tr.atm-row .go-hero { font-size: 16.5px; }
+
+/* ============================================================
+   STACKED CARDS — mobile (<=640px), hidden on desktop
+   ============================================================ */
+.go-stack { display: none; flex-direction: column; gap: 10px; }
+.go-scard { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.go-scard.atm-row { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 1px 2px rgba(0, 0, 0, 0.04); background: linear-gradient(180deg, var(--accent-bg) 0%, var(--bg-surface) 55%); }
+.go-scard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border-light); }
+.go-scard-strike { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+/* Hero spreads in the card */
+.go-scard-spreads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.go-scard-sp { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 6px; border-radius: 10px; background: var(--green-bg); text-align: center; }
+.go-scard.atm-row .go-scard-sp { background: var(--bg-surface); border: 1px solid var(--border-light); }
+.go-scard-sp-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); line-height: 1.2; }
+.go-scard-sp-val { font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* Supporting legs */
+.go-scard-legs { display: flex; flex-direction: column; gap: 6px; }
+.go-scard-leg { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--bg-surface-alt); }
+.go-scard-leg-t { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+.go-leg-mini .go-scard-leg-t { color: var(--accent); }
+.go-leg-gold .go-scard-leg-t { color: var(--yellow); }
+.go-scard-leg-r { font-size: 13px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.go-scard-leg-r em { font-style: normal; font-weight: 600; color: var(--text-muted); font-size: 11px; }
+.go-scard-leg-r i { font-style: normal; color: var(--text-muted); margin: 0 3px; }
+
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================ */
+@media (max-width: 1024px) {
+  .go-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .go-card-value { font-size: 23px; }
+}
+
+@media (max-width: 720px) {
+  .go-title-main { font-size: 18px; }
+  .go-td, .go-strike { padding: 9px 6px; }
+}
+
+/* Phone: swap table for stacked cards */
+@media (max-width: 640px) {
+  .go-head { align-items: stretch; }
+  .go-exp-toggle { width: 100%; justify-content: center; }
+  .go-exp-btn { flex: 1 1 0; justify-content: center; }
+  .go-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .go-card-value { font-size: 20px; }
+  .go-card-value-sm { font-size: 16px; }
+  .go-wrap { display: none; }
+  .go-stack { display: flex; }
+}
+
+/* Very small phones: nothing cramps */
+@media (max-width: 380px) {
+  .go-cards { grid-template-columns: 1fr; }
+  .go-scard-spreads { grid-template-columns: 1fr; }
+}
