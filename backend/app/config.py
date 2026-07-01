@@ -44,10 +44,10 @@ class Settings(BaseSettings):
     # Runs once/IST-day in the maintenance loop as an isolated subprocess.
     # Requires `playwright install chromium` in the backend venv on the server.
     BULLION_STOCK_ENABLED: bool = True
-    MCXCCL_STOCK_PAGE_URL: str = "https://www.mcxccl.com/warehousing-logistics/stock-position"
     MCXCCL_FETCH_HOUR_IST: int = 18
     MCXCCL_FETCH_MINUTE_IST: int = 0
-    MCXCCL_SCRAPE_TIMEOUT: int = 150   # seconds; subprocess killed past this
+    MCXCCL_SCRAPE_TIMEOUT: int = 180   # seconds; subprocess killed past this (backfill day-1)
+    MCXCCL_LOOKBACK_DAYS: int = 14     # how far back to look for the latest / backfill daily files
     # Browser overrides (optional). Leave blank → auto-detect (bundled Chromium,
     # then system Google Chrome/Chromium). Set channel="chrome" or an explicit
     # path if auto-detect ever picks the wrong one.

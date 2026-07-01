@@ -42,6 +42,7 @@ _LABEL_TO_KEY = {
     "GOLD": "gold",
     "GOLDPETAL": "petal",
     "SILVER": "silver",
+    "SILVER 100": "silver100",
     "SILVERMIC": "silvermic",
 }
 
@@ -72,14 +73,24 @@ def status() -> dict:
 # --------------------------------------------------------------------------- #
 def _scrape_and_store() -> tuple[str, bool, str | None, int]:
     """Run the subprocess scrape and store new rows. Returns (msg, ok, as_on, rows)."""
+    # Dates already stored → the subprocess skips them, so steady-state runs
+    # download just the one new day (first run backfills the lookback window).
+    db = SessionLocal()
+    try:
+        have = [d[0] for d in db.query(BullionStock.as_on_date).distinct().all() if d[0]]
+    finally:
+        db.close()
+
     env = {
         **os.environ,
-        "MCXCCL_STOCK_PAGE_URL": settings.MCXCCL_STOCK_PAGE_URL,
+        "MCXCCL_HAVE_DATES": ",".join(have),
+        "MCXCCL_LOOKBACK_DAYS": str(settings.MCXCCL_LOOKBACK_DAYS),
     }
     if settings.MCXCCL_CHROME_CHANNEL:
         env["MCXCCL_CHROME_CHANNEL"] = settings.MCXCCL_CHROME_CHANNEL
     if settings.MCXCCL_CHROME_PATH:
         env["MCXCCL_CHROME_PATH"] = settings.MCXCCL_CHROME_PATH
+
     try:
         proc = subprocess.run(
             [sys.executable, str(_SCRIPT)],
@@ -102,15 +113,21 @@ def _scrape_and_store() -> tuple[str, bool, str | None, int]:
         log.warning("scrape failed: %s | stderr=%s", payload.get("error"), (proc.stderr or "")[:300])
         return (f"scrape failed: {payload.get('error')}", False, None, 0)
 
-    as_on = payload.get("as_on_date")
-    rows = payload.get("rows") or []
-    if not as_on or not rows:
-        return ("scrape returned no usable rows", False, as_on, 0)
+    latest = payload.get("latest_available")
+    items = payload.get("items") or []
+    if not items:
+        return (f"up to date (latest {latest})", True, latest, 0)
 
+    added = 0
     db = SessionLocal()
     try:
-        already = db.query(BullionStock.id).filter(BullionStock.as_on_date == as_on).first()
-        if not already:
+        for it in items:  # newest-first
+            as_on = it.get("as_on_date")
+            rows = it.get("rows") or []
+            if not as_on or not rows:
+                continue
+            if db.query(BullionStock.id).filter(BullionStock.as_on_date == as_on).first():
+                continue
             for r in rows:
                 db.add(BullionStock(
                     as_on_date=as_on,
@@ -118,17 +135,22 @@ def _scrape_and_store() -> tuple[str, bool, str | None, int]:
                     unit=str(r.get("unit", ""))[:8],
                     eligible_units=float(r.get("eligible_units", 0) or 0),
                 ))
-            db.commit()
-        added = 0 if already else len(rows)
+            added += len(rows)
+        db.commit()
     except Exception as e:  # noqa: BLE001
         db.rollback()
-        return (f"stock store error: {e}", False, as_on, 0)
+        return (f"stock store error: {e}", False, latest, 0)
     finally:
         db.close()
 
-    pdf_msg = _store_pdf(as_on, payload.get("source_url"), payload.get("pdf_name"), payload.get("pdf_b64"))
-    detail = "already stored" if added == 0 else f"+{added} stock rows"
-    return (f"as_on {as_on}: {detail}{pdf_msg}", True, as_on, added)
+    # Persist the newest day's PDF (only that item carries pdf_b64).
+    pdf_msg = ""
+    for it in items:
+        if it.get("pdf_b64"):
+            pdf_msg = _store_pdf(it["as_on_date"], it.get("source_url"), it.get("pdf_name"), it["pdf_b64"])
+            break
+
+    return (f"latest {latest}: +{added} rows / {len(items)} day(s){pdf_msg}", True, latest, added)
 
 
 def _store_pdf(as_on: str, url, name, b64) -> str:

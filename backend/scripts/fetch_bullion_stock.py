@@ -1,33 +1,48 @@
 #!/usr/bin/env python3
 """Isolated MCXCCL bullion warehouse-stock scraper (runs as a SUBPROCESS, once/day).
 
-Why a separate process: Playwright + headless Chromium are heavy. Spawning this
-from mcxccl_service via subprocess (and killing it on a timeout) means the
-~300 MB Chromium footprint and the playwright/pdfplumber imports NEVER live in
-the long-running FastAPI process, and a crash/hang here can't touch the live feed.
+Why a separate process: Playwright + headless Chromium/Chrome are heavy. Spawning
+this from mcxccl_service via subprocess (killed on timeout) keeps that memory and
+the playwright/pdfplumber imports OUT of the long-running FastAPI process, and a
+hang here can't touch the live feed.
+
+Source = the DAILY "Exchange Deliverable Stock Position" feed. The page's date
+picker calls:
+    GET .../warehouse-report/GetFilteredDeliverableStock?fromDate=MM/DD/YYYY&page=1
+    → {"DeliverableStock":[{"Title":"DD/MM/YYYY","SummaryDocURL":"...pdf",...}], ...}
+The filter is an EXACT date match (empty on non-published / non-trading days), so
+we walk back from today to the most recent available file. The bullion
+"Summary of Stock – Bullion Commodities" (Eligible Units) is the PDF's last page.
 
 Output: one JSON object on stdout, then exit 0:
-    {"ok": true, "as_on_date": "2026-05-29", "source_url": "...",
-     "rows": [{"commodity": "GOLD", "unit": "KG", "eligible_units": 2454.0}, ...]}
-On failure: {"ok": false, "error": "..."} on stdout and a non-zero exit code.
+    {"ok": true, "latest_available": "2026-06-29",
+     "items": [ {"as_on_date":"2026-06-29","source_url":"...","pdf_name":"...",
+                 "pdf_b64":"<newest only>","rows":[{"commodity","unit","eligible_units"}]}, ... ]}
+`items` is newest-first and EXCLUDES dates already stored (passed via
+MCXCCL_HAVE_DATES) so steady-state runs download just the one new day; the first
+run backfills the whole lookback window. `pdf_b64` is attached only to the newest
+day (that's the file the dashboard serves for View/Download).
+On failure: {"ok": false, "error": "..."} and a non-zero exit code.
 
-mcxccl.com sits behind Akamai bot-protection: a plain request (even real headless
-Chromium with a normal UA) gets 403 Access Denied. The stealth init-script +
-anti-automation launch flags below defeat the headless fingerprinting and pass.
+mcxccl.com is behind Akamai bot-protection: a plain request (even real headless
+Chrome with a normal UA) → 403. The stealth init-script + anti-automation launch
+flags below defeat the headless fingerprinting and pass.
 """
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import io
 import json
 import os
-import re
 import sys
 
-PAGE_URL = os.environ.get(
-    "MCXCCL_STOCK_PAGE_URL",
-    "https://www.mcxccl.com/warehousing-logistics/stock-position",
+DELIVERABLE_API = os.environ.get(
+    "MCXCCL_DELIVERABLE_API",
+    "https://www.mcxccl.com/warehousing-logistics/warehouse-report/GetFilteredDeliverableStock",
 )
+LOOKBACK_DAYS = int(os.environ.get("MCXCCL_LOOKBACK_DAYS", "14"))
+HAVE_DATES = {x for x in os.environ.get("MCXCCL_HAVE_DATES", "").split(",") if x}
 NAV_TIMEOUT_MS = int(os.environ.get("MCXCCL_NAV_TIMEOUT_MS", "45000"))
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -40,7 +55,7 @@ HEADERS = {
     "sec-ch-ua-platform": '"Windows"',
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 }
-# Defeats Akamai's headless-Chromium fingerprinting.
+# Defeats Akamai's headless fingerprinting.
 STEALTH = (
     "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
     "Object.defineProperty(navigator,'languages',{get:()=>['en-US','en']});"
@@ -53,16 +68,16 @@ LAUNCH_ARGS = [
     "--disable-dev-shm-usage",
 ]
 
-# Optional explicit overrides; otherwise we auto-detect a working browser.
+# Optional explicit browser overrides; otherwise we auto-detect.
 CHROME_CHANNEL = os.environ.get("MCXCCL_CHROME_CHANNEL", "").strip()  # e.g. "chrome"
 CHROME_PATH = os.environ.get("MCXCCL_CHROME_PATH", "").strip()        # e.g. /usr/bin/google-chrome
-# System browsers to try when Playwright's bundled Chromium is unavailable
-# (e.g. a brand-new Ubuntu Playwright has no build for). Install Google Chrome's
-# .deb and it lands at /usr/bin/google-chrome.
 _FALLBACK_PATHS = (
     "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
     "/usr/bin/chromium", "/usr/bin/chromium-browser", "/snap/bin/chromium",
 )
+
+# Only rows naming one of these commodities (plus a GM/KG unit) are kept.
+_COMMODITY_HINTS = ("GOLD", "SILVER", "PETAL", "GUINEA")
 
 
 def _launch(p):
@@ -93,12 +108,63 @@ def _launch(p):
             errors.append(f"{kind}={val}: {type(e).__name__}")
     raise RuntimeError("no usable browser — install Google Chrome. Tried: " + "; ".join(errors))
 
-# Only rows naming one of these commodities (plus a GM/KG unit) are kept.
-_COMMODITY_HINTS = ("GOLD", "SILVER", "PETAL", "GUINEA")
+
+def _list_available(ctx):
+    """Walk back from today; return [(date_iso, summary_pdf_url), ...] newest-first."""
+    out = []
+    today = dt.date.today()  # server runs in Asia/Kolkata → IST date
+    for i in range(LOOKBACK_DAYS + 1):
+        d = today - dt.timedelta(days=i)
+        fd = f"{d.month:02d}/{d.day:02d}/{d.year}"  # API wants MM/DD/YYYY
+        try:
+            resp = ctx.request.get(f"{DELIVERABLE_API}?fromDate={fd}&page=1", timeout=NAV_TIMEOUT_MS)
+            if resp.status != 200:
+                continue
+            rows = (resp.json() or {}).get("DeliverableStock") or []
+        except Exception:  # noqa: BLE001 — skip a bad day, keep walking
+            continue
+        if rows and rows[0].get("SummaryDocURL"):
+            out.append((d.isoformat(), rows[0]["SummaryDocURL"]))
+    return out
 
 
-def _scrape_pdf_bytes():
-    """Return (pdf_bytes, source_url) for the latest stock-position PDF."""
+def _parse_bullion(pdf_bytes):
+    """Extract the 'Summary of Stock – Bullion Commodities' rows (last page)."""
+    import pdfplumber
+
+    rows = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        target = None
+        for i in range(len(pdf.pages) - 1, -1, -1):
+            text = pdf.pages[i].extract_text() or ""
+            if "Bullion" in text and "Eligible" in text:
+                target = i
+                break
+        if target is None:
+            raise RuntimeError("bullion summary page not found in PDF")
+        for tbl in pdf.pages[target].extract_tables():
+            for r in tbl:
+                cells = [(c or "").strip() for c in r if (c or "").strip()]
+                if len(cells) < 3:
+                    continue
+                joined = " ".join(cells).upper()
+                if not any(k in joined for k in _COMMODITY_HINTS):
+                    continue  # skips header / title / disclaimer rows
+                unit = cells[-2].upper()
+                if unit not in ("GM", "KG"):
+                    continue
+                try:
+                    units = float(cells[-1].replace(",", ""))
+                except ValueError:
+                    continue
+                commodity = " ".join(cells[:-2])
+                rows.append({"commodity": commodity, "unit": unit, "eligible_units": units})
+    if not rows:
+        raise RuntimeError("no bullion rows parsed from summary page")
+    return rows
+
+
+def _scrape():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -115,76 +181,42 @@ def _scrape_pdf_bytes():
             # Warm up on the homepage so Akamai issues its clearance cookies.
             page.goto("https://www.mcxccl.com/", wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
             page.wait_for_timeout(2000)
-            page.goto(PAGE_URL, wait_until="networkidle", timeout=NAV_TIMEOUT_MS)
-            page.wait_for_timeout(1500)
-            href = page.eval_on_selector(
-                "a[href*='warehouse-vault-wise-stock-position']", "e => e.href"
-            )
-            if not href:
-                raise RuntimeError("stock-position PDF link not found on page")
-            # Download via the browser's request context so it carries the
-            # Akamai clearance cookies (a bare fetch would 403).
-            resp = ctx.request.get(href, timeout=NAV_TIMEOUT_MS)
-            if resp.status != 200:
-                raise RuntimeError(f"PDF download HTTP {resp.status}")
-            return resp.body(), href
+
+            available = _list_available(ctx)
+            if not available:
+                raise RuntimeError(f"no daily deliverable-stock file found in last {LOOKBACK_DAYS} days")
+            latest_available = available[0][0]
+
+            items = []
+            for date_iso, url in available:
+                if date_iso in HAVE_DATES:
+                    continue  # already stored — let steady-state runs skip the download
+                resp = ctx.request.get(url, timeout=NAV_TIMEOUT_MS)
+                if resp.status != 200:
+                    continue
+                pdf = resp.body()
+                try:
+                    rows = _parse_bullion(pdf)
+                except Exception:  # noqa: BLE001 — one bad PDF shouldn't drop the rest
+                    continue
+                item = {
+                    "as_on_date": date_iso,
+                    "source_url": url,
+                    "pdf_name": url.split("/")[-1].split("?")[0],
+                    "rows": rows,
+                }
+                if date_iso == latest_available:  # only the newest carries the PDF for View/Download
+                    item["pdf_b64"] = base64.b64encode(pdf).decode("ascii")
+                items.append(item)
+            return {"latest_available": latest_available, "items": items}
         finally:
             browser.close()
 
 
-def _parse_bullion(pdf_bytes):
-    """Extract the 'Summary of Stock – Bullion Commodities' rows (last page)."""
-    import pdfplumber
-
-    rows = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        # The bullion summary is the last page; scan from the back for safety.
-        target = None
-        for i in range(len(pdf.pages) - 1, -1, -1):
-            text = pdf.pages[i].extract_text() or ""
-            if "Bullion" in text and "Eligible" in text:
-                target = i
-                break
-        if target is None:
-            raise RuntimeError("bullion summary page not found in PDF")
-        for tbl in pdf.pages[target].extract_tables():
-            for r in tbl:
-                cells = [(c or "").strip() for c in r if (c or "").strip()]
-                if len(cells) < 3:
-                    continue
-                joined = " ".join(cells).upper()
-                if not any(k in joined for k in _COMMODITY_HINTS):
-                    continue  # skips the header / title / disclaimer rows
-                # Robust to the commodity name being split across cells:
-                # last cell = number, second-to-last = unit, rest = name.
-                unit = cells[-2].upper()
-                if unit not in ("GM", "KG"):
-                    continue
-                try:
-                    units = float(cells[-1].replace(",", ""))
-                except ValueError:
-                    continue
-                commodity = " ".join(cells[:-2])
-                rows.append({"commodity": commodity, "unit": unit, "eligible_units": units})
-    if not rows:
-        raise RuntimeError("no bullion rows parsed from summary page")
-    return rows
-
-
 def main():
     try:
-        pdf_bytes, src = _scrape_pdf_bytes()
-        m = re.search(r"as-on-date-(\d{2})-(\d{2})-(\d{4})", src)
-        as_on = f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else None
-        rows = _parse_bullion(pdf_bytes)
-        print(json.dumps({
-            "ok": True,
-            "as_on_date": as_on,
-            "source_url": src,
-            "pdf_name": src.split("/")[-1].split("?")[0],
-            "pdf_b64": base64.b64encode(pdf_bytes).decode("ascii"),  # tiny (~47 KB) → served back to the client
-            "rows": rows,
-        }))
+        result = _scrape()
+        print(json.dumps({"ok": True, **result}))
         return 0
     except Exception as e:  # noqa: BLE001 — any failure → clean JSON for the parent
         print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}))
