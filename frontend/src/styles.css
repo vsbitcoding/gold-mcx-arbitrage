@@ -4234,27 +4234,48 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .go-page { padding: 2px 2px 24px; }
 .go-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .go-head h2 { font-size: 17px; font-weight: 700; margin: 0; color: var(--text-primary); }
+.go-head-sub { color: var(--text-muted); font-weight: 600; font-size: 14px; }
 .go-exp-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
 .go-exp-toggle button { padding: 5px 12px; border: 1px solid var(--border); background: var(--bg-surface-alt); color: var(--text-secondary); border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .go-exp-toggle button:hover { border-color: var(--accent); }
 .go-exp-toggle button.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 .go-exp-sub { color: var(--text-muted); font-weight: 500; }
-.go-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.go-chip { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; min-width: 130px; }
+
+.go-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.go-chip { display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; padding: 8px 14px; min-width: 132px; }
+.go-chip-g { border-left-color: var(--yellow); }
+.go-chip-m { border-left-color: #64748b; }
 .go-chip-l { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
 .go-chip-v { font-size: 17px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .go-chip-s { font-size: 11px; color: var(--text-muted); }
-.go-wrap { margin-top: 2px; }
-.go-table th, .go-table td { padding: 6px 12px; }
-.go-strike { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Centered card-style table with grouped colour headers */
+.go-wrap { max-width: 1120px; margin: 0 auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
+.go-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.go-table th, .go-table td { padding: 8px 12px; white-space: nowrap; }
+.go-table td.num, .go-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.go-grp-row th { text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); }
+.go-h-strike, .go-h-type { text-align: left; color: var(--th-color); background: var(--th-bg); vertical-align: bottom; }
+.go-grp-m { background: rgba(100,116,139,0.16); color: var(--text-secondary); }
+.go-grp-g { background: rgba(249,171,0,0.16); color: var(--yellow); }
+.go-grp-s { background: var(--accent-bg); color: var(--accent); }
+.go-sub-row th { font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--bg-surface-alt); border-bottom: 2px solid var(--border); }
+/* group separators */
+.go-b-m, .go-b-g { border-left: 2px solid var(--border-light); }
+.go-b-s { border-left: 2px solid var(--accent); }
+
+.go-table tbody tr { border-bottom: 1px solid var(--border-light); }
+.go-table tbody tr:nth-child(even) { background: var(--bg-surface-alt); }
+.go-table tbody tr:hover { background: var(--bg-hover); }
+.go-table tbody tr.atm-row { background: var(--accent-bg); }
+.go-table tbody tr.atm-row .go-strike { color: var(--accent); }
+.go-strike { font-weight: 700; font-variant-numeric: tabular-nums; }
 .go-type { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .go-ce { background: var(--green-bg); color: var(--green); }
 .go-pe { background: var(--red-bg); color: var(--red); }
-.go-sp { font-variant-numeric: tabular-nums; font-weight: 600; }
+.go-sp { font-variant-numeric: tabular-nums; font-weight: 700; }
+.go-sp-main { font-size: 14px; }
 .go-sp.pos { color: var(--green); }
 .go-sp.neg { color: var(--red); }
 .go-sp.neutral { color: var(--text-muted); }
-.go-sp-main { font-weight: 800; }
-.go-sp-h { background: var(--accent-bg); }
-.go-table tbody tr.atm-row { background: var(--accent-bg); }
-.go-table tbody tr.atm-row .go-strike { color: var(--accent); }
+@media (max-width: 720px) { .go-wrap { max-width: 100%; } .go-table th, .go-table td { padding: 6px 8px; } }

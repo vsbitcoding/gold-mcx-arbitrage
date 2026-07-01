@@ -124,9 +124,11 @@ export default function BullionStock() {
 
   const commodities = useMemo(() => (data ? Object.keys(data.stock_history || {}) : []), [data]);
 
-  // Default to the commodity that actually moves (largest relative range) so the chart is meaningful.
+  // Default the trend to GOLD (client preference); fall back to the commodity
+  // that moves most, then the first available.
   const defaultHist = useMemo(() => {
     const hist = data?.stock_history || {};
+    if (hist["GOLD"]) return "GOLD";
     let best = null, bestRange = -1;
     for (const [c, s] of Object.entries(hist)) {
       if (!s || s.length < 2) continue;
