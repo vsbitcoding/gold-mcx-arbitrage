@@ -81,9 +81,9 @@ export default function GoldOptions() {
 
       <div className="go-head">
         <div className="go-title">
-          <h2 className="go-title-main">{bigName} <span className="go-title-x">/</span> {miniName}</h2>
+          <h2 className="go-title-main">{data?.label || "Commodity"} <span className="go-title-x">Options</span></h2>
           <span className="go-title-sub">
-            Options Spread · watch only{ref != null && <> · ATM ref {fmtNum(ref, 0)}</>}
+            {bigName} / {miniName} · watch only{ref != null && <> · ATM ref {fmtNum(ref, 0)}</>}
           </span>
         </div>
         {expiries.length > 0 && (
