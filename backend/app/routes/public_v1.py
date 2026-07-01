@@ -10,11 +10,11 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, fcm_service, goldopt_service, metals_service, options_service, othercomm_service, price_service, signal_service
+from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_service, othercomm_service, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -293,6 +293,33 @@ def public_gold_options_spread(_key: str = Depends(require_api_key)):
         "status": goldopt_service.status(),
         **goldopt_service.get_spread_table(),
     }
+
+
+@router.get("/bullion-stock")
+def public_bullion_stock(_key: str = Depends(require_api_key)):
+    """MCXCCL daily bullion warehouse stock (Eligible Units) + history + stock-vs-spread
+    correlation. Data changes ~once/day — poll at most every 60s."""
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "status": mcxccl_service.status(),
+        **mcxccl_service.report(),
+    }
+
+
+@router.get("/bullion-stock/pdf")
+def public_bullion_pdf(download: bool = Query(False), _key: str = Depends(require_api_key)):
+    """The latest MCXCCL stock PDF (served from our server). Accepts the key as a
+    query param (`?api_key=...`) so the app can open/download it directly."""
+    pdf = mcxccl_service.get_latest_pdf()
+    if not pdf:
+        raise HTTPException(status_code=404, detail="No bullion PDF available yet")
+    content, name, _src = pdf
+    disposition = "attachment" if download else "inline"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{disposition}; filename="{name}"'},
+    )
 
 
 @router.get("/signals")
