@@ -185,10 +185,10 @@ export default function GoldOptions() {
               <colgroup>
                 <col className="go-col-strike" />
                 <col className="go-col-type" />
-                <col />
-                <col />
-                <col />
-                <col />
+                <col className="go-col-leg" />
+                <col className="go-col-leg" />
+                <col className="go-col-leg" />
+                <col className="go-col-leg" />
                 <col className="go-col-sp" />
                 <col className="go-col-sp" />
               </colgroup>
