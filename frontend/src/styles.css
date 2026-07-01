@@ -4431,8 +4431,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 640px) {
   .go-page { gap: 8px; }
   .go-head { align-items: stretch; }
-  .go-comm-bar { align-self: stretch; }         /* full-width scrollable tab strip */
-  .go-comm-btn { flex: 1 0 auto; text-align: center; }
+  .go-comm-btn { padding: 8px 16px; }           /* clean content-width pills; strip scrolls if needed */
   .go-exp-toggle { width: 100%; justify-content: center; }
   .go-exp-btn { flex: 1 1 0; justify-content: center; }
   .go-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
