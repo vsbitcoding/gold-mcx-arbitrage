@@ -4311,6 +4311,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .go-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; min-width: 660px; font-variant-numeric: tabular-nums; }
 /* ALL headers & cells centered */
 .go-table th, .go-table td { text-align: center; vertical-align: middle; }
+/* Bold vertical column separators between every column (client request) */
+.go-table th, .go-table td { border-right: 1.5px solid var(--border); }
+.go-table th:last-child, .go-table td:last-child { border-right: none; }
 
 /* Fixed proportions → fills full width, GOLD / GOLD MINI columns get the bulk (one shared Strike col) */
 .go-col-strike { width: 11%; }
