@@ -4239,7 +4239,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .go-page { display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 14px; }
 
 /* Commodity selector (Gold / Silver / Crude / Natural Gas) — compact segmented control */
-.go-comm-bar { display: inline-flex; align-self: flex-end; max-width: 100%; gap: 4px; padding: 4px; background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.go-comm-bar { display: inline-flex; align-self: center; max-width: 100%; gap: 4px; padding: 4px; background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .go-comm-bar::-webkit-scrollbar { display: none; }
 .go-comm-btn { flex: 0 0 auto; padding: 8px 20px; border: none; border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 13.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
 .go-comm-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
