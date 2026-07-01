@@ -4159,10 +4159,22 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 1366px) { .spread-cards.sc-cal { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width: 720px)  {
   .spread-cards.sc-cal { grid-template-columns: 1fr; gap: 10px; }
-  /* phone: expiry flexes, drop the trailing spacer, allow the date to wrap */
-  .sc-cal .sc-row { grid-template-columns: 1fr 70px 70px 50px; }
-  .sc-cal .sc-exp { white-space: normal; }
+  /* Phone: stack — expiry on its own line, then Dec | Inc | % across full width
+     so the big numbers + brackets have room and never overflow. */
+  .sc-cal .sc-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas: "exp exp exp" "dec inc pct";
+    row-gap: 7px; padding: 9px 12px; align-items: center;
+  }
+  .sc-cal .sc-exp { grid-area: exp; white-space: normal; justify-self: start; }
   .sc-cal .sc-exp-txt { white-space: normal; }
+  .sc-cal .sc-dec { grid-area: dec; }
+  .sc-cal .sc-inc { grid-area: inc; }
+  .sc-cal .sc-pct { grid-area: pct; }
+  .sc-cal .sc-colhead span:nth-child(1) { grid-area: exp; }
+  .sc-cal .sc-colhead span:nth-child(2) { grid-area: dec; }
+  .sc-cal .sc-colhead span:nth-child(3) { grid-area: inc; }
+  .sc-cal .sc-colhead span:nth-child(4) { grid-area: pct; }
 }
 
 /* ===== Bullion warehouse-stock tab (MCXCCL) ===== */
