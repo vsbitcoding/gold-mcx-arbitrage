@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
   { key: "signals", label: "⚡ Signals" },
@@ -110,7 +111,7 @@ export default function Header({
       <div className="header-left">
         <button className="nav-hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">☰</button>
         <div className="brand">
-          <img src="/favicon.svg" className="brand-logo" alt="Gurukrupa Bullion" width="26" height="26" />
+          <BrandMark className="brand-logo" size={28} />
           <span className="brand-name">Gurukrupa</span>
           <span className="brand-sub">Bullion</span>
         </div>
@@ -147,7 +148,7 @@ export default function Header({
           <nav className="nav-drawer">
             <div className="nav-drawer-head">
               <div className="nav-drawer-brand">
-                <img src="/favicon.svg" width="32" height="32" alt="Gurukrupa Bullion" />
+                <BrandMark size={32} />
                 <div>
                   <div className="ndb-title">Gurukrupa <span className="ndb-b">Bullion</span></div>
                   <div className="ndb-sub">Spread Monitor</div>

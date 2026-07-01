@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { login } from "../api/client.js";
+import BrandMark from "./BrandMark.jsx";
 
 export default function Login({ onSuccess }) {
   const [u, setU] = useState("");
@@ -25,7 +26,7 @@ export default function Login({ onSuccess }) {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="login-header">
-          <img src="/favicon.svg" className="login-logo" alt="Gurukrupa Bullion" width="72" height="72" />
+          <BrandMark className="login-logo" size={72} />
           <h1>Gurukrupa <span className="lh-b">Bullion</span></h1>
           <p>Sign in to the spread dashboard</p>
         </div>

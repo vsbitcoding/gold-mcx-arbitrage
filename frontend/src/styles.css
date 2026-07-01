@@ -28,9 +28,12 @@
 
   --th-bg: #e2e8f0;
   --th-color: #334155;
+
+  --brand-gold: #c9a24e;   /* logo mark / accent on light theme */
 }
 
 body.dark {
+  --brand-gold: #e1c06e;   /* brighter gold so the mark pops on dark */
   --bg-primary: #1a1a2e;
   --bg-surface: #16213e;
   --bg-surface-alt: #1a2540;
@@ -179,7 +182,7 @@ body {
 .nav-drawer-brand { display: flex; align-items: center; gap: 11px; }
 .nav-drawer-brand img { border-radius: 8px; }
 .ndb-title { font-size: 18px; font-weight: 800; line-height: 1; }
-.ndb-title .ndb-b { color: #c9a24e; font-weight: 700; }
+.ndb-title .ndb-b { color: var(--brand-gold); font-weight: 700; }
 .ndb-sub { font-size: 11.5px; color: var(--text-muted); font-weight: 600; margin-top: 3px; }
 .nav-drawer-x { background: none; border: none; font-size: 26px; line-height: 1; cursor: pointer; color: var(--text-muted); }
 .nav-drawer-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -2216,7 +2219,7 @@ body.dark .calc-pending-chip { color: #fcd34d; background: rgba(251,191,36,0.18)
 .login-header .logo { font-size: 48px; margin-bottom: 10px; }
 .login-logo { display: block; width: 72px; height: 72px; margin: 0 auto 16px; }
 .login-header h1 { font-size: 28px; color: #2d3748; margin-bottom: 8px; letter-spacing: .3px; }
-.login-header h1 .lh-b { color: #c9a24e; }
+.login-header h1 .lh-b { color: var(--brand-gold); }
 .login-header p { color: #718096; font-size: 14px; }
 .login-card label {
   display: block;
