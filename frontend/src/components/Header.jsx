@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
@@ -47,6 +47,8 @@ export default function Header({
   counts = {},
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenu, setUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
 
   // Close drawer on Escape; lock page scroll while open.
   useEffect(() => {
@@ -56,6 +58,16 @@ export default function Header({
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
   }, [menuOpen]);
+
+  // User dropdown: close on outside-click / Escape.
+  useEffect(() => {
+    if (!userMenu) return;
+    function onDoc(e) { if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenu(false); }
+    function onKey(e) { if (e.key === "Escape") setUserMenu(false); }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [userMenu]);
 
   // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
   const dhanMode = feedStatus?.mode;
@@ -134,11 +146,38 @@ export default function Header({
           <span className="health-label">{label}</span>
           {extra && <span className="health-meta">{extra}</span>}
         </span>
-        <button className="theme-toggle hide-mobile" onClick={onToggleTheme} title="Toggle theme">
-          {theme === "dark" ? "☀" : "☾"}
-        </button>
-        <span className="username-chip hide-mobile">{user || "User"}</span>
-        <button className="btn btn-secondary hide-mobile" onClick={onLogout}>Logout</button>
+        <div className="user-menu hide-mobile" ref={userMenuRef}>
+          <button
+            className="user-trigger"
+            onClick={() => setUserMenu((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={userMenu}
+            title="Account"
+          >
+            <span className="user-avatar">{(user || "U").charAt(0).toUpperCase()}</span>
+            <span className="user-name">{user || "User"}</span>
+            <span className={`user-caret${userMenu ? " open" : ""}`}>▾</span>
+          </button>
+          {userMenu && (
+            <div className="user-panel" role="menu">
+              <div className="user-panel-head">
+                <span className="user-avatar lg">{(user || "U").charAt(0).toUpperCase()}</span>
+                <div className="user-panel-id">
+                  <div className="user-panel-name">{user || "User"}</div>
+                  <div className="user-panel-sub">Signed in</div>
+                </div>
+              </div>
+              <button className="user-item" role="menuitem" onClick={onToggleTheme}>
+                <span className="user-item-ic">{theme === "dark" ? "☀" : "☾"}</span>
+                <span className="user-item-lbl">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+              </button>
+              <button className="user-item danger" role="menuitem" onClick={() => { setUserMenu(false); onLogout(); }}>
+                <span className="user-item-ic">⎋</span>
+                <span className="user-item-lbl">Logout</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mobile slide-in navigation drawer */}
