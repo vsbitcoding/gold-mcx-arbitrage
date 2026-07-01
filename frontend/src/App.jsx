@@ -4,6 +4,7 @@ import Header from "./components/Header.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
 import Calculator from "./components/Calculator.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
+import GoldOptions from "./components/GoldOptions.jsx";
 import BullionStock from "./components/BullionStock.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
@@ -12,7 +13,7 @@ import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "options", "stock"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "options", "goldopt", "stock"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -228,6 +229,7 @@ function Dashboard() {
         )}
         {page === "calculator" && <Calculator />}
         {page === "options" && <OptionsSpread />}
+        {page === "goldopt" && <GoldOptions />}
         {page === "stock" && <BullionStock />}
       </div>
     </div>

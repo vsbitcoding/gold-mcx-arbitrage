@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, s
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, fcm_service, metals_service, options_service, othercomm_service, price_service, signal_service
+from app.services import extra_instruments, fcm_service, goldopt_service, metals_service, options_service, othercomm_service, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -275,6 +275,23 @@ def public_othercomm_spread(_key: str = Depends(require_api_key)):
         "formula": "difference = far.buy − near.sell",
         "status": othercomm_service.status(),
         **othercomm_service.get_table(),
+    }
+
+
+@router.get("/gold-options-spread")
+def public_gold_options_spread(_key: str = Depends(require_api_key)):
+    """Live GOLD vs GOLD MINI option-spread table (watch-only), current + next month.
+
+    Per strike (PE below the future price, CE above), 1:1, both directions:
+        spread1 = lower-future.Bid - higher-future.Ask
+        spread2 = higher-future.Bid - lower-future.Ask
+    (The higher/lower future is decided live; currently GOLD > GOLD MINI.)
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "status": goldopt_service.status(),
+        **goldopt_service.get_spread_table(),
     }
 
 

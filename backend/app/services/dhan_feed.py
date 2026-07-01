@@ -195,7 +195,7 @@ def _run_real_feed_thread() -> None:
             # Resolve + add base-metal calendar legs (Copper/Aluminium/Zinc/Nickel/Lead +
             # minis) — watch-only 'Metal' tab. These are MCX FUTCOM, so they flow through
             # the default MCX-Full path below (NOT added to non_mcx_meta).
-            from app.services import metals_service, othercomm_service, price_service
+            from app.services import goldopt_service, metals_service, othercomm_service, price_service
             try:
                 metals_service.refresh()
             except Exception as e:
@@ -210,6 +210,15 @@ def _run_real_feed_thread() -> None:
             except Exception as e:
                 log.warning("othercomm_service.refresh() failed: %s", e)
             for sid, m in othercomm_service.get_subscription_meta().items():
+                subs[sid] = m
+
+            # GOLD ↔ GOLD MINI option spreads (watch-only 'Gold Options' tab).
+            # MCX OPTFUT → flows through the default MCX-Full path below.
+            try:
+                goldopt_service.refresh()
+            except Exception as e:
+                log.warning("goldopt_service.refresh() failed: %s", e)
+            for sid, m in goldopt_service.get_subscription_meta().items():
                 subs[sid] = m
 
             # 'Price' tab — gold/silver active contracts (already subscribed by the

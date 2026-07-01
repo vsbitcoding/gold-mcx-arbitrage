@@ -119,6 +119,8 @@ export const api = {
   calcQuotes: () => request("/api/calculator/quotes"),
   // Options spread (Nifty / Sensex PE) — side: "below" (ATM+9) | "above" (ATM+15)
   optionsSpread: (side) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : "")),
+  // GOLD vs GOLD MINI option spread (current + next month)
+  goldOptions: () => request("/api/gold-options/spread"),
   // Base-metal calendar spreads (Metal tab)
   metalsSpread: () => request("/api/metals/spread"),
   // Other-commodity calendar spreads (Crude / NatGas / Electricity)
