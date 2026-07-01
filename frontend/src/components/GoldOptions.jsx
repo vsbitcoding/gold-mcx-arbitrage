@@ -76,7 +76,10 @@ export default function GoldOptions() {
           <h2 className="go-title-main">
             GOLD <span className="go-title-x">/</span> GOLD MINI
           </h2>
-          <span className="go-title-sub">Options Spread · watch only</span>
+          <span className="go-title-sub">
+            Options Spread · watch only
+            {ref != null && <> · ATM ref {fmtNum(ref, 0)}</>}
+          </span>
         </div>
         {expiries.length > 0 && (
           <div className="go-exp-toggle" role="tablist" aria-label="Expiry">
@@ -166,22 +169,6 @@ export default function GoldOptions() {
           </div>
         </div>
       </div>
-
-      {/* ===== Legend ===== */}
-      {cur && (
-        <div className="go-legend">
-          <span className="go-legend-item">
-            <span className="go-swatch go-swatch-s1" /> {sp1Label}
-          </span>
-          <span className="go-legend-item">
-            <span className="go-swatch go-swatch-s2" /> {sp2Label}
-          </span>
-          <span className="go-legend-item go-legend-atm">
-            <span className="go-atm">ATM</span> nearest to ref
-            {ref != null ? ` (${fmtNum(ref, 0)})` : ""}
-          </span>
-        </div>
-      )}
 
       {/* ===== Table (desktop/tablet) + stacked cards (mobile) ===== */}
       {!cur ? (
