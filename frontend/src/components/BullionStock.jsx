@@ -205,8 +205,8 @@ export default function BullionStock() {
             {/* Latest eligible units + 1-day change */}
             <div className="bs-card">
               <div className="bs-card-h">Eligible Units <span className="bs-muted">· {data.as_on_date}</span></div>
-              <div className="bs-tbl-scroll">
-                <table className="bs-table">
+              <div className="bs-tbl-scroll bs-eu-scroll">
+                <table className="bs-table bs-eu">
                   <thead><tr><th>Commodity</th><th>Unit</th><th className="num">Eligible Units</th><th className="num">Δ 1 day</th></tr></thead>
                   <tbody>
                     {data.latest.map((r) => (
