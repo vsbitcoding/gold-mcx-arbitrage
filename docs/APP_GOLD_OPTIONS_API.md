@@ -50,17 +50,20 @@ Header:  X-API-Key: <your key>
 }
 ```
 
-## Columns to render (same as the website)
-| Column | Value |
-|---|---|
-| **Strike** | `strike` (mark the ATM row = strike nearest `ref`) |
-| **Type** | `type` — `PE` (red badge) / `CE` (green badge) |
-| **GOLD MINI** | `goldm_bid` · `goldm_ask` |
-| **GOLD** | `gold_bid` · `gold_ask` |
-| **`spread1_label`** | `spread1` |
-| **`spread2_label`** | `spread2` |
+## Layout to render (ODIN-style — TWO rows per strike, like the website)
+Each strike shows **two stacked rows** — GOLD MINI first, then GOLD — with Strike,
+Type and the two Spreads spanning the pair:
 
-Colour the spread cells: **< 0 → red**, **> 0 → green**. Any `null` → show `—`.
+| Strike | Type | Contract | Bid | Ask | `spread1_label` | `spread2_label` |
+|---|---|---|---|---|---|---|
+| **120000** (span 2) | **PE** (span 2) | GOLD MINI | `goldm_bid` | `goldm_ask` | **`spread1`** (span 2) | **`spread2`** (span 2) |
+|  |  | GOLD | `gold_bid` | `gold_ask` |  |  |
+
+- **Strike**, **Type**, **`spread1`**, **`spread2`** are per-strike → span both rows.
+- ATM row = strike nearest `ref` (highlight the whole pair).
+- Type badge: `PE` red, `CE` green.
+- Spread colour: **< 0 → red**, **> 0 → green**. Any `null` → `—`.
+- (On phones a per-strike card works well: Strike+Type header, GOLD MINI & GOLD Bid/Ask, both spreads.)
 
 ## The spread (already computed server-side — just display)
 The leg whose **future price is higher** (`higher`) quotes at its **Ask**; the

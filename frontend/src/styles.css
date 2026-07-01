@@ -4313,10 +4313,11 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .go-table th, .go-table td { text-align: center; vertical-align: middle; }
 
 /* Fixed proportions → fills full width, GOLD / GOLD MINI columns get the bulk (one shared Strike col) */
-.go-col-strike { width: 10%; }
+.go-col-strike { width: 11%; }
 .go-col-type { width: 8%; }
-.go-col-leg { width: 13%; }   /* GOLD MINI bid/ask + GOLD bid/ask (×4) */
-.go-col-sp { width: 15%; }    /* the two spread columns */
+.go-col-contract { width: 16%; }
+.go-col-leg { width: 15%; }   /* Bid / Ask (shared by GOLD MINI & GOLD rows) */
+.go-col-sp { width: 17.5%; }  /* the two spread columns (rowspan per strike) */
 
 /* Grouped header row */
 .go-grp-row th { background: var(--th-bg); color: var(--th-color); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
@@ -4348,9 +4349,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .go-type-pe { background: var(--red-bg); color: var(--red); }
 .go-type-ce { background: var(--green-bg); color: var(--green); }
 
+/* Contract label (GOLD MINI / GOLD) + strike-pair grouping (ODIN two-rows-per-strike) */
+.go-contract { font-weight: 800; font-size: 12px; letter-spacing: 0.3px; }
+.go-c-mini { color: var(--accent); }
+.go-c-gold { color: var(--yellow); }
+.go-pair-bot .go-td { border-bottom: 2px solid var(--border); }        /* stronger line between strikes */
+.go-strike, .go-type-cell, .go-td.go-hero { border-bottom: 2px solid var(--border); }  /* rowspan cells end at pair bottom */
+
 /* Zebra + hover */
-.go-tr:nth-child(even) .go-td { background: var(--bg-surface-alt); }
-.go-tr:nth-child(even) .go-strike { background: var(--bg-surface-alt); }
+.go-alt .go-td, .go-alt .go-strike { background: var(--bg-surface-alt); }
 .go-tr:hover .go-td { background: var(--bg-hover); }
 .go-tr:hover .go-strike { background: var(--bg-hover); }
 

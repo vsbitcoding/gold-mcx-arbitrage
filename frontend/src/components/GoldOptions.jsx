@@ -185,35 +185,18 @@ export default function GoldOptions() {
               <colgroup>
                 <col className="go-col-strike" />
                 <col className="go-col-type" />
-                <col className="go-col-leg" />
-                <col className="go-col-leg" />
+                <col className="go-col-contract" />
                 <col className="go-col-leg" />
                 <col className="go-col-leg" />
                 <col className="go-col-sp" />
                 <col className="go-col-sp" />
               </colgroup>
               <thead>
-                <tr className="go-grp-row">
-                  <th rowSpan={2} className="go-h-strike">
-                    Strike
-                  </th>
-                  <th rowSpan={2} className="go-h-type">
-                    Type
-                  </th>
-                  <th colSpan={2} className="go-grp go-grp-mini">
-                    GOLD MINI
-                  </th>
-                  <th colSpan={2} className="go-grp go-grp-gold">
-                    GOLD
-                  </th>
-                  <th colSpan={2} className="go-grp go-grp-sp">
-                    Spread · 1:1
-                  </th>
-                </tr>
                 <tr className="go-sub-row">
-                  <th className="go-sub go-edge-l">Bid</th>
-                  <th className="go-sub">Ask</th>
-                  <th className="go-sub go-edge-l">Bid</th>
+                  <th className="go-sub go-h-strike">Strike</th>
+                  <th className="go-sub go-h-type">Type</th>
+                  <th className="go-sub">Contract</th>
+                  <th className="go-sub">Bid</th>
                   <th className="go-sub">Ask</th>
                   <th className="go-sub go-sub-sp go-edge-l" title={sp1Label}>
                     {sp1Label}
@@ -224,37 +207,31 @@ export default function GoldOptions() {
                 </tr>
               </thead>
               <tbody>
-                {cur.rows.map((r) => {
+                {cur.rows.map((r, i) => {
                   const isAtm = r.strike === atmStrike;
+                  const cls = (isAtm ? " atm-row" : "") + (i % 2 ? " go-alt" : "");
                   return (
-                    <tr
-                      key={`${r.strike}-${r.type}`}
-                      className={isAtm ? "go-tr atm-row" : "go-tr"}
-                    >
-                      <th scope="row" className="go-strike">
-                        <span className="go-strike-n">{fmtNum(r.strike, 0)}</span>
-                        {isAtm && <span className="go-atm go-atm-block">ATM</span>}
-                      </th>
-                      <td className="go-td">
-                        <span
-                          className={`go-type go-type-${(r.type || "").toLowerCase()}`}
-                        >
-                          {r.type}
-                        </span>
-                      </td>
-                      <td className="go-td go-num go-edge-l">{cell(r.goldm_bid)}</td>
-                      <td className="go-td go-num">{cell(r.goldm_ask)}</td>
-                      <td className="go-td go-num go-edge-l">{cell(r.gold_bid)}</td>
-                      <td className="go-td go-num">{cell(r.gold_ask)}</td>
-                      <td
-                        className={`go-td go-num go-edge-l go-hero ${spCls(r.spread1)}`}
-                      >
-                        {fmtSigned(r.spread1)}
-                      </td>
-                      <td className={`go-td go-num go-hero ${spCls(r.spread2)}`}>
-                        {fmtSigned(r.spread2)}
-                      </td>
-                    </tr>
+                    <React.Fragment key={r.strike}>
+                      <tr className={`go-tr go-pair-top${cls}`}>
+                        <th scope="row" rowSpan={2} className="go-strike">
+                          <span className="go-strike-n">{fmtNum(r.strike, 0)}</span>
+                          {isAtm && <span className="go-atm go-atm-block">ATM</span>}
+                        </th>
+                        <td rowSpan={2} className="go-td go-type-cell">
+                          <span className={`go-type go-type-${(r.type || "").toLowerCase()}`}>{r.type}</span>
+                        </td>
+                        <td className="go-td go-contract go-c-mini">GOLD MINI</td>
+                        <td className="go-td go-num">{cell(r.goldm_bid)}</td>
+                        <td className="go-td go-num">{cell(r.goldm_ask)}</td>
+                        <td rowSpan={2} className={`go-td go-num go-hero go-edge-l ${spCls(r.spread1)}`}>{fmtSigned(r.spread1)}</td>
+                        <td rowSpan={2} className={`go-td go-num go-hero ${spCls(r.spread2)}`}>{fmtSigned(r.spread2)}</td>
+                      </tr>
+                      <tr className={`go-tr go-pair-bot${cls}`}>
+                        <td className="go-td go-contract go-c-gold">GOLD</td>
+                        <td className="go-td go-num">{cell(r.gold_bid)}</td>
+                        <td className="go-td go-num">{cell(r.gold_ask)}</td>
+                      </tr>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
