@@ -3963,13 +3963,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* Columns FILL the card width evenly: expiry gets the most (min for the full date),
    Dec/Inc/% share the rest → no inter-column gap and no wasted trailing space. */
 .sc-cal .sc-row { grid-template-columns: minmax(176px, 1.6fr) 1fr 1fr 0.9fr; }
-.sc-cal .sc-exp { font-size: 11px; }
+.sc-cal .sc-exp { font-size: 13px; }
 .sc-cal .sc-exp-txt { overflow: visible; }   /* never clip the date */
 .sc-tail { display: none; }                  /* spacer no longer needed — columns fill */
 .spread-cards.sc-cal { grid-template-columns: repeat(3, minmax(0, 1fr)); }  /* 3 per row only on wide screens (see media below) */
 .sc-row:last-child { border-bottom: none; }
 .sc-colhead { background: var(--bg-surface); border-bottom: 1px solid var(--border); }
-.sc-colhead span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.sc-colhead span { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
 .sc-colhead .sc-c { text-align: center; }
 .sc-row:not(.sc-colhead):hover { background: var(--bg-hover); }
 
@@ -4127,13 +4127,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sig-flow b.sig-stop { color: var(--red); }
 @media (max-width: 560px) { .signal-list { grid-template-columns: 1fr; } }
 
-.sc-dec, .sc-inc { justify-self: center; min-width: 58px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 5px; }
+.sc-dec, .sc-inc { justify-self: center; min-width: 64px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 3px 7px; }
 .sc-dec { color: var(--red); background: rgba(220,38,38,.07); }
 .sc-inc { color: var(--green); background: rgba(22,163,74,.07); }
 /* Calendar "simple minus" (spread ÷ multiplier) shown below the value — Petal/Guinea/Silver100 */
-.sc-raw { display: block; margin-top: 1px; color: var(--text-muted); font-size: 9.5px; font-weight: 600; line-height: 1.1; }
+.sc-raw { display: block; margin-top: 1px; color: var(--text-muted); font-size: 12px; font-weight: 700; line-height: 1.15; }
 /* Decrease % — its own column, clearly readable */
-.sc-pct { justify-self: center; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sc-pct { justify-self: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .sc-pct.pos { color: var(--green); }
 .sc-pct.neg { color: var(--red); }
 
@@ -4160,7 +4160,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 720px)  {
   .spread-cards.sc-cal { grid-template-columns: 1fr; gap: 10px; }
   /* phone: expiry flexes, drop the trailing spacer, allow the date to wrap */
-  .sc-cal .sc-row { grid-template-columns: 1fr 56px 56px 44px; }
+  .sc-cal .sc-row { grid-template-columns: 1fr 70px 70px 50px; }
   .sc-cal .sc-exp { white-space: normal; }
   .sc-cal .sc-exp-txt { white-space: normal; }
 }
