@@ -52,6 +52,31 @@ function MiniChart({ series }) {
   );
 }
 
+// Single-series line chart of one commodity's eligible units over time.
+function StockTrend({ series }) {
+  if (!series || series.length < 2) return null;
+  const W = 760, H = 210, padL = 72, padR = 16, padT = 14, padB = 26;
+  const vals = series.map((d) => d.units);
+  const mn = Math.min(...vals), mx = Math.max(...vals), span = (mx - mn) || 1;
+  const X = (i) => padL + (i / (series.length - 1)) * (W - padL - padR);
+  const Y = (v) => padT + (1 - (v - mn) / span) * (H - padT - padB);
+  const path = series.map((d, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(d.units).toFixed(1)}`).join(" ");
+  return (
+    <svg className="bs-trend" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Daily stock history">
+      {[mx, (mx + mn) / 2, mn].map((v, k) => (
+        <g key={k}>
+          <line x1={padL} y1={Y(v)} x2={W - padR} y2={Y(v)} stroke="var(--border-light)" strokeWidth="1" />
+          <text x={padL - 8} y={Y(v) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)">{fmtNum(v, 0)}</text>
+        </g>
+      ))}
+      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2.5" />
+      {series.map((d, i) => <circle key={i} cx={X(i)} cy={Y(d.units)} r="3" fill="var(--accent)" />)}
+      <text x={padL} y={H - 6} fontSize="12" fill="var(--text-muted)">{series[0].date}</text>
+      <text x={W - padR} y={H - 6} textAnchor="end" fontSize="12" fill="var(--text-muted)">{series[series.length - 1].date}</text>
+    </svg>
+  );
+}
+
 export default function BullionStock() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -59,6 +84,7 @@ export default function BullionStock() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [selected, setSelected] = useState(null); // pair_name
+  const [histCommodity, setHistCommodity] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +153,15 @@ export default function BullionStock() {
     return buildSeries(data.spread_history?.[selectedCorr.pair_name], data.stock_history?.[selectedCorr.commodity]);
   }, [data, selectedCorr]);
 
+  // Daily stock history (per commodity), independent of the correlation.
+  const commodities = useMemo(() => (data ? Object.keys(data.stock_history || {}) : []), [data]);
+  const effHist = histCommodity && commodities.includes(histCommodity) ? histCommodity : commodities[0];
+  const histSeries = data?.stock_history?.[effHist] || [];
+  const histRows = useMemo(
+    () => histSeries.map((d, i) => ({ date: d.date, units: d.units, delta: i > 0 ? d.units - histSeries[i - 1].units : null })).reverse(),
+    [histSeries]
+  );
+
   const stale = data?.stale_days;
   const staleBad = stale != null && stale > 35;
 
@@ -175,6 +210,7 @@ export default function BullionStock() {
       )}
 
       {data?.latest?.length > 0 && (
+        <>
         <div className="bs-grid">
           {/* Latest eligible units (the headline PDF numbers) */}
           <div className="bs-card">
@@ -236,6 +272,41 @@ export default function BullionStock() {
             )}
           </div>
         </div>
+
+        {/* Daily stock history — the day-by-day data the correlation is built on */}
+        <div className="bs-card bs-history">
+          <div className="bs-card-h">
+            Daily Stock History
+            {histSeries.length ? <span className="bs-muted"> · {histSeries.length} days</span> : null}
+          </div>
+          <div className="bs-chips">
+            {commodities.map((c) => (
+              <button key={c} className={`bs-chip ${c === effHist ? "on" : ""}`} onClick={() => setHistCommodity(c)}>{c}</button>
+            ))}
+          </div>
+          {histSeries.length >= 2 ? (
+            <>
+              <StockTrend series={histSeries} />
+              <table className="bs-table bs-hist-tbl">
+                <thead><tr><th>Date</th><th className="num">Eligible Units</th><th className="num">Δ vs prev day</th></tr></thead>
+                <tbody>
+                  {histRows.map((r) => (
+                    <tr key={r.date}>
+                      <td>{r.date}</td>
+                      <td className="num">{fmtNum(r.units, 2)}</td>
+                      <td className="num" style={{ color: r.delta == null ? "var(--text-muted)" : r.delta > 0 ? "var(--green)" : r.delta < 0 ? "var(--red)" : "var(--text-muted)" }}>
+                        {r.delta == null ? "—" : (r.delta > 0 ? "▲ " : r.delta < 0 ? "▼ " : "") + fmtNum(Math.abs(r.delta), 2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <div className="bs-note">Only one day of data so far — the history chart builds as new daily files publish.</div>
+          )}
+        </div>
+        </>
       )}
     </div>
   );
