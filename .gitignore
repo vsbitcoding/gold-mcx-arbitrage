@@ -35,3 +35,7 @@ build/
 # Logs
 logs/
 *.log
+
+# Design source (client logo — kept locally, not in repo)
+*.cdr
+Gurukrupa Bullion_CC/
