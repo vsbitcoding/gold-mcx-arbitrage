@@ -12,8 +12,8 @@ router = APIRouter(prefix="/api/gold-options", tags=["gold-options"])
 
 
 @router.get("/spread")
-def get_spread(user: str = Depends(get_current_user)):
+def get_spread(commodity: str = "gold", user: str = Depends(get_current_user)):
     return {
         "status": goldopt_service.status(),
-        **goldopt_service.get_spread_table(),
+        **goldopt_service.get_spread_table(commodity),
     }

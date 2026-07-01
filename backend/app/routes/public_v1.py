@@ -279,19 +279,20 @@ def public_othercomm_spread(_key: str = Depends(require_api_key)):
 
 
 @router.get("/gold-options-spread")
-def public_gold_options_spread(_key: str = Depends(require_api_key)):
-    """Live GOLD vs GOLD MINI option-spread table (watch-only), current + next month.
+def public_gold_options_spread(commodity: str = "gold", _key: str = Depends(require_api_key)):
+    """Live commodity BIG-vs-MINI option-spread table (watch-only), current + next month.
 
+    `commodity` = gold | silver | crude | natgas (see `commodities` in the response).
     Per strike (PE below the future price, CE above), 1:1, both directions:
         spread1 = lower-future.Bid - higher-future.Ask
         spread2 = higher-future.Bid - lower-future.Ask
-    (The higher/lower future is decided live; currently GOLD > GOLD MINI.)
+    (The higher/lower future is decided live.)
     """
     return {
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
         "status": goldopt_service.status(),
-        **goldopt_service.get_spread_table(),
+        **goldopt_service.get_spread_table(commodity),
     }
 
 

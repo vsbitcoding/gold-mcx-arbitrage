@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { key: "othercomm", label: "Other Commodity" },
   { key: "calculator", label: "Calculator" },
   { key: "options", label: "Nifty / Sensex" },
-  { key: "goldopt", label: "Gold Options" },
+  { key: "goldopt", label: "Options" },
   { key: "stock", label: "Bullion Stock" },
 ];
 
