@@ -4130,6 +4130,8 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sc-dec, .sc-inc { justify-self: center; min-width: 58px; text-align: center; font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 5px; padding: 2px 5px; }
 .sc-dec { color: var(--red); background: rgba(220,38,38,.07); }
 .sc-inc { color: var(--green); background: rgba(22,163,74,.07); }
+/* Calendar "simple minus" (spread ÷ multiplier) shown below the value — Petal/Guinea/Silver100 */
+.sc-raw { display: block; margin-top: 1px; color: var(--text-muted); font-size: 9.5px; font-weight: 600; line-height: 1.1; }
 /* Decrease % — its own column, clearly readable */
 .sc-pct { justify-self: center; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .sc-pct.pos { color: var(--green); }

@@ -17,6 +17,14 @@ function fmtPct(v) {
   return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
 }
 
+// Client: on Calendar, also show the raw "simple minus" (spread ÷ multiplier) in
+// brackets — only for Petal (×10), Guinea (×1.25) and Silver 100 (×100).
+const RAW_INSTR = new Set(["petal", "guinea", "silver100"]);
+function calRaw(spread, instrument) {
+  if (spread == null || !RAW_INSTR.has(instrument)) return null;
+  return <span className="sc-raw">({fmtSpread(spread / (MULT[instrument] ?? 1))})</span>;
+}
+
 const CROSS_ORDER = [
   "PETAL / GUINEA", "PETAL / TEN", "PETAL / MINI",
   "GUINEA / TEN", "GUINEA / MINI", "TEN / MINI", "MINI / GOLD",
@@ -86,8 +94,8 @@ export default function SpreadCards({ groups }) {
                     <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
                     {i === 0 && <span className="sc-front" title="Front month">★</span>}
                   </span>
-                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}</span>
-                  <span className="sc-inc">{fmtSpread(row.increase_spread)}</span>
+                  <span className="sc-dec">{fmtSpread(row.decrease_spread)}{isCalendar && calRaw(row.decrease_spread, row.small)}</span>
+                  <span className="sc-inc">{fmtSpread(row.increase_spread)}{isCalendar && calRaw(row.increase_spread, row.small)}</span>
                   {isCalendar ? (
                     <span className={`sc-pct ${(calcPct(row.decrease_spread, row.small_ask, row.small) ?? 0) >= 0 ? "pos" : "neg"}`}>
                       {fmtPct(calcPct(row.decrease_spread, row.small_ask, row.small)) ?? "—"}
