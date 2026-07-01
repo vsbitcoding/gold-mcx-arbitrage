@@ -4238,9 +4238,10 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    ============================================================ */
 .go-page { display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 14px; }
 
-/* Commodity selector (Gold / Silver / Crude / Natural Gas) */
-.go-comm-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 5px; background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 12px; }
-.go-comm-btn { flex: 1 1 auto; min-width: 92px; padding: 9px 16px; border: none; border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 13.5px; font-weight: 700; cursor: pointer; transition: background .15s ease, color .15s ease; }
+/* Commodity selector (Gold / Silver / Crude / Natural Gas) — compact segmented control */
+.go-comm-bar { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 4px; padding: 4px; background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.go-comm-bar::-webkit-scrollbar { display: none; }
+.go-comm-btn { flex: 0 0 auto; padding: 8px 20px; border: none; border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 13.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .15s ease, color .15s ease; }
 .go-comm-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .go-comm-btn.active { background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
 
@@ -4428,10 +4429,14 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 /* Phone: swap table for stacked cards */
 @media (max-width: 640px) {
+  .go-page { gap: 8px; }
   .go-head { align-items: stretch; }
+  .go-comm-bar { align-self: stretch; }         /* full-width scrollable tab strip */
+  .go-comm-btn { flex: 1 0 auto; text-align: center; }
   .go-exp-toggle { width: 100%; justify-content: center; }
   .go-exp-btn { flex: 1 1 0; justify-content: center; }
-  .go-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .go-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .go-card-body { padding: 8px 12px; }
   .go-card-value { font-size: 20px; }
   .go-card-value-sm { font-size: 16px; }
   .go-wrap { display: none; }
