@@ -110,9 +110,9 @@ export default function Header({
       <div className="header-left">
         <button className="nav-hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">☰</button>
         <div className="brand">
-          <img src="/favicon.svg" className="brand-logo" alt="Arbi" width="26" height="26" />
-          <span className="accent">Arbi</span>
-          <span>Dash</span>
+          <img src="/favicon.svg" className="brand-logo" alt="Gurukrupa Bullion" width="26" height="26" />
+          <span className="brand-name">Gurukrupa</span>
+          <span className="brand-sub">Bullion</span>
         </div>
         <nav className="nav-tabs">
           {NAV_ITEMS.map((it) => (
@@ -147,9 +147,9 @@ export default function Header({
           <nav className="nav-drawer">
             <div className="nav-drawer-head">
               <div className="nav-drawer-brand">
-                <img src="/favicon.svg" width="32" height="32" alt="Arbi" />
+                <img src="/favicon.svg" width="32" height="32" alt="Gurukrupa Bullion" />
                 <div>
-                  <div className="ndb-title"><span className="accent">Arbi</span></div>
+                  <div className="ndb-title">Gurukrupa <span className="ndb-b">Bullion</span></div>
                   <div className="ndb-sub">Spread Monitor</div>
                 </div>
               </div>

@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1e293b"/>
-      <stop offset="1" stop-color="#0f172a"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-  <!-- increase: green up arrow -->
-  <path d="M11 23 V12 M11 12 L7.6 15.4 M11 12 L14.4 15.4"
-        fill="none" stroke="#22c55e" stroke-width="2.4"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- decrease: red down arrow -->
-  <path d="M21 9 V20 M21 20 L17.6 16.6 M21 20 L24.4 16.6"
-        fill="none" stroke="#ef4444" stroke-width="2.4"
-        stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -8 79 71">
+  <!-- Gurukrupa Bullion mark: two upper triangles + base trapezoid -->
+  <g fill="#D0A954">
+    <polygon points="20,0 29,17 19,34 0,34"/>
+    <polygon points="43,0 34,17 44,34 63,34"/>
+    <polygon points="21,38 42,38 51,55 12,55"/>
+  </g>
 </svg>

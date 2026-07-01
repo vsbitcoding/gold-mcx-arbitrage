@@ -25,9 +25,9 @@ export default function Login({ onSuccess }) {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="login-header">
-          <div className="logo">📊</div>
-          <h1>ArbiDash Login</h1>
-          <p>Enter your credentials to access the dashboard</p>
+          <img src="/favicon.svg" className="login-logo" alt="Gurukrupa Bullion" width="72" height="72" />
+          <h1>Gurukrupa <span className="lh-b">Bullion</span></h1>
+          <p>Sign in to the spread dashboard</p>
         </div>
         {err && <div className="err">⚠️ {err}</div>}
         <label>Username</label>
@@ -35,7 +35,7 @@ export default function Login({ onSuccess }) {
         <label>Password</label>
         <input type="password" value={p} onChange={(e) => setP(e.target.value)} placeholder="Enter your password" />
         <button className="btn-login" disabled={loading}>{loading ? "Signing in..." : "🔐 Sign In"}</button>
-        <div className="login-footer">ArbiDash © 2026 | Live Spread Monitor</div>
+        <div className="login-footer">Gurukrupa Bullion © 2026 | Live Spread Monitor</div>
       </form>
     </div>
   );
