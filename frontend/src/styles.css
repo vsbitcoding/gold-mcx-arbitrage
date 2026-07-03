@@ -4325,6 +4325,31 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bs-corr-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
 .bs-corr-chart { width: 100%; }
 .bs-corr-chart .bs-trend { height: 320px; }
+
+/* Correlation — commodity-wise cards (pairs inside), centered values */
+.bs-corr-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.cc-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.cc-card-h {
+  text-align: center; font-weight: 800; font-size: 13.5px; letter-spacing: .4px;
+  padding: 9px 10px; background: var(--th-bg); color: var(--th-color);
+  border-bottom: 1px solid var(--border);
+}
+.cc-count { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.cc-list { display: flex; flex-direction: column; }
+.cc-pair {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%;
+  padding: 11px 10px; border: none; border-bottom: 1px solid var(--border-light);
+  background: none; cursor: pointer; font-family: inherit; text-align: center; transition: background .12s;
+}
+.cc-pair:last-child { border-bottom: none; }
+.cc-pair:hover { background: var(--bg-hover); }
+.cc-pair.sel { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.cc-name { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.cc-r { font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.cc-sub { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 480px) {
+  .bs-corr-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
 .bs-corr tbody tr.sel { background: var(--accent-bg); }
 .bs-legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; flex-wrap: wrap; }
 .bs-legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }

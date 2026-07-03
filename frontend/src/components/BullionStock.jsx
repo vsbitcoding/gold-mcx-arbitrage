@@ -171,6 +171,17 @@ export default function BullionStock() {
     if (!data || !selectedCorr) return [];
     return buildSeries(data.spread_history?.[selectedCorr.pair_name], data.stock_history?.[selectedCorr.commodity]);
   }, [data, selectedCorr]);
+  // Group correlation rows by commodity (dedup by pair, strongest |r| first) for the card view.
+  const corrByCommodity = useMemo(() => {
+    const groups = {};
+    for (const c of data?.correlation || []) {
+      const key = c.commodity || "—";
+      (groups[key] ||= new Map()).set(c.pair_name, c);
+    }
+    return Object.entries(groups)
+      .map(([commodity, m]) => ({ commodity, pairs: [...m.values()].sort((a, b) => Math.abs(b.r) - Math.abs(a.r)) }))
+      .sort((a, b) => a.commodity.localeCompare(b.commodity));
+  }, [data]);
 
   const stale = data?.stale_days;
   const staleBad = stale != null && stale > 5;
@@ -316,21 +327,25 @@ export default function BullionStock() {
                       <div className="bs-axis"><span>{corrSeries[0].date}</span><span>{corrSeries[corrSeries.length - 1].date}</span></div>
                     </div>
                   )}
-                  <div className="bs-tbl-scroll">
-                    <table className="bs-table bs-corr">
-                      <thead><tr><th>Pair</th><th>Commodity</th><th className="num">Days</th><th className="num">r</th><th>Reading</th></tr></thead>
-                      <tbody>
-                        {data.correlation.map((c) => (
-                          <tr key={c.pair_name + c.commodity}
-                            className={selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity ? "sel" : ""}
-                            onClick={() => setSelected(c.pair_name)}>
-                            <td>{c.pair}</td><td>{c.commodity}</td><td className="num">{c.n}</td>
-                            <td className="num" style={{ color: corrColor(c.r), fontWeight: 700 }}>{c.r.toFixed(2)}</td>
-                            <td className="bs-muted">{corrText(c.r)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="bs-corr-cards">
+                    {corrByCommodity.map(({ commodity, pairs }) => (
+                      <div className="cc-card" key={commodity}>
+                        <div className="cc-card-h">{commodity} <span className="cc-count">{pairs.length}</span></div>
+                        <div className="cc-list">
+                          {pairs.map((c) => (
+                            <button
+                              key={c.pair_name}
+                              className={`cc-pair ${selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity ? "sel" : ""}`}
+                              onClick={() => setSelected(c.pair_name)}
+                            >
+                              <span className="cc-name">{c.pair}</span>
+                              <span className="cc-r" style={{ color: corrColor(c.r) }}>{c.r.toFixed(2)}</span>
+                              <span className="cc-sub">{c.n} days · {corrText(c.r)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
