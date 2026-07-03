@@ -26,10 +26,15 @@ function cell(v) {
 }
 
 export default function GoldOptions() {
-  const [commodity, setCommodity] = useState("gold");
+  const [commodity, setCommodity] = useState(() => {
+    const c = localStorage.getItem("arbi_goldopt_comm");
+    return ["gold", "silver", "crude", "natgas"].includes(c) ? c : "gold";
+  });
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [exp, setExp] = useState(0);
+
+  useEffect(() => { try { localStorage.setItem("arbi_goldopt_comm", commodity); } catch {} }, [commodity]);
 
   useEffect(() => {
     let alive = true;

@@ -76,7 +76,11 @@ export default function BullionStock() {
   const [fetching, setFetching] = useState(false);
   const [selected, setSelected] = useState(null);
   const [histCommodity, setHistCommodity] = useState(null);
-  const [view, setView] = useState("stock"); // "stock" (details) | "corr" (correlation)
+  const [view, setView] = useState(() => {
+    const v = localStorage.getItem("arbi_bs_view");
+    return v === "corr" || v === "stock" ? v : "stock"; // survive refresh
+  });
+  useEffect(() => { try { localStorage.setItem("arbi_bs_view", view); } catch {} }, [view]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -185,6 +189,18 @@ export default function BullionStock() {
             ) : "No stock fetched yet"}
           </div>
         </div>
+        {data?.latest?.length > 0 && (
+          <div className="bs-viewbar" role="tablist" aria-label="Bullion view">
+            <button type="button" role="tab" aria-selected={view === "stock"}
+              className={`bs-viewbtn ${view === "stock" ? "active" : ""}`} onClick={() => setView("stock")}>
+              Bullion Warehouse Stock
+            </button>
+            <button type="button" role="tab" aria-selected={view === "corr"}
+              className={`bs-viewbtn ${view === "corr" ? "active" : ""}`} onClick={() => setView("corr")}>
+              Spread Correlation
+            </button>
+          </div>
+        )}
         <div className="bs-actions">
           {data?.pdf_available && (
             <>
@@ -204,18 +220,6 @@ export default function BullionStock() {
 
       {data?.latest?.length > 0 && (
         <>
-          {/* Two centered buttons: Stock details ↔ Spread Correlation */}
-          <div className="bs-viewbar" role="tablist" aria-label="Bullion view">
-            <button type="button" role="tab" aria-selected={view === "stock"}
-              className={`bs-viewbtn ${view === "stock" ? "active" : ""}`} onClick={() => setView("stock")}>
-              Bullion Warehouse Stock
-            </button>
-            <button type="button" role="tab" aria-selected={view === "corr"}
-              className={`bs-viewbtn ${view === "corr" ? "active" : ""}`} onClick={() => setView("corr")}>
-              Spread Correlation
-            </button>
-          </div>
-
           {view === "stock" && (
           <>
           <div className="bs-grid">
