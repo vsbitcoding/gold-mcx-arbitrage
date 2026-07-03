@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
-  { key: "signals", label: "⚡ Signals" },
   { key: "cross", label: "Cross Pairs" },
   { key: "calendar", label: "Calendar" },
   { key: "metals", label: "Metal" },
@@ -13,6 +12,7 @@ const NAV_ITEMS = [
   { key: "options", label: "Nifty / Sensex" },
   { key: "goldopt", label: "Commodity Options" },
   { key: "stock", label: "Bullion Stock" },
+  { key: "signals", label: "⚡ Signals" },
 ];
 
 // Clean monochrome line icons (match the app's drawer look).
