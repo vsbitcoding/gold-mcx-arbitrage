@@ -63,7 +63,7 @@ function MiniChart({ series }) {
   return (
     <svg className="bs-trend" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Stock vs spread">
       <path d={path(sN)} fill="none" stroke="var(--yellow)" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      <path d={path(pN)} fill="none" stroke="var(--accent)" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      <path d={path(pN)} fill="none" stroke="#4da3ff" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -305,7 +305,7 @@ export default function BullionStock() {
                     <div className="bs-corr-chart">
                       <div className="bs-legend">
                         <span><i className="dot" style={{ background: "var(--yellow)" }} /> Stock</span>
-                        <span><i className="dot" style={{ background: "var(--accent)" }} /> Spread</span>
+                        <span><i className="dot" style={{ background: "#4da3ff" }} /> Spread</span>
                         <span className="bs-muted">{selectedCorr.pair}</span>
                       </div>
                       <MiniChart series={corrSeries} />
