@@ -12,6 +12,10 @@ function corrText(r) {
   if (s === "No clear") return "no clear link";
   return r < 0 ? `${s}: stock ↑ → spread ↓` : `${s}: stock ↑ → spread ↑`;
 }
+function corrStrength(r) {
+  const a = Math.abs(r);
+  return a >= 0.7 ? "Strong" : a >= 0.4 ? "Moderate" : a >= 0.2 ? "Weak" : "No clear link";
+}
 
 function Delta({ v }) {
   if (v == null) return <span className="bs-muted">—</span>;
@@ -81,6 +85,7 @@ export default function BullionStock() {
     return v === "corr" || v === "stock" ? v : "stock"; // survive refresh
   });
   useEffect(() => { try { localStorage.setItem("arbi_bs_view", view); } catch {} }, [view]);
+  const [showWeak, setShowWeak] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -171,17 +176,17 @@ export default function BullionStock() {
     if (!data || !selectedCorr) return [];
     return buildSeries(data.spread_history?.[selectedCorr.pair_name], data.stock_history?.[selectedCorr.commodity]);
   }, [data, selectedCorr]);
-  // Group correlation rows by commodity (dedup by pair, strongest |r| first) for the card view.
-  const corrByCommodity = useMemo(() => {
-    const groups = {};
+  // Flat, deduped, strongest-first list for the plain-language correlation view.
+  const corrRanked = useMemo(() => {
+    const m = new Map();
     for (const c of data?.correlation || []) {
-      const key = c.commodity || "—";
-      (groups[key] ||= new Map()).set(c.pair_name, c);
+      const k = c.pair_name + "|" + c.commodity;
+      if (!m.has(k)) m.set(k, c);
     }
-    return Object.entries(groups)
-      .map(([commodity, m]) => ({ commodity, pairs: [...m.values()].sort((a, b) => Math.abs(b.r) - Math.abs(a.r)) }))
-      .sort((a, b) => a.commodity.localeCompare(b.commodity));
+    return [...m.values()].sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   }, [data]);
+  const corrWeakCount = corrRanked.filter((c) => Math.abs(c.r) < 0.4).length;
+  const corrShown = showWeak ? corrRanked : corrRanked.filter((c) => Math.abs(c.r) >= 0.4);
 
   const stale = data?.stale_days;
   const staleBad = stale != null && stale > 5;
@@ -327,25 +332,37 @@ export default function BullionStock() {
                       <div className="bs-axis"><span>{corrSeries[0].date}</span><span>{corrSeries[corrSeries.length - 1].date}</span></div>
                     </div>
                   )}
-                  <div className="bs-corr-cards">
-                    {corrByCommodity.map(({ commodity, pairs }) => (
-                      <div className="cc-card" key={commodity}>
-                        <div className="cc-card-h">{commodity} <span className="cc-count">{pairs.length}</span></div>
-                        <div className="cc-list">
-                          {pairs.map((c) => (
-                            <button
-                              key={c.pair_name}
-                              className={`cc-pair ${selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity ? "sel" : ""}`}
-                              onClick={() => setSelected(c.pair_name)}
-                            >
-                              <span className="cc-name">{c.pair}</span>
-                              <span className="cc-r" style={{ color: corrColor(c.r) }}>{c.r.toFixed(2)}</span>
-                              <span className="cc-sub">{c.n} days · {corrText(c.r)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="ci-list">
+                    <div className="ci-hint">Does warehouse stock move the spread? Strongest links first — tap one to see its chart above.</div>
+                    {corrShown.map((c) => {
+                      const neg = c.r < 0;
+                      const pct = Math.max(-1, Math.min(1, c.r));
+                      const col = corrColor(c.r);
+                      const seln = selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity;
+                      return (
+                        <button key={c.pair_name + c.commodity} className={`ci-row ${seln ? "sel" : ""}`} onClick={() => setSelected(c.pair_name)}>
+                          <span className="ci-info">
+                            <span className="ci-name">{c.commodity}</span>
+                            <span className="ci-pair">{c.pair}</span>
+                          </span>
+                          <span className="ci-stmt" style={{ color: col }}>
+                            <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
+                            <span className="ci-strength">{corrStrength(c.r)} · {c.n} days</span>
+                          </span>
+                          <span className="ci-bar" title={`correlation ${c.r.toFixed(2)}`}>
+                            <span className="ci-bar-mid" />
+                            <span className="ci-bar-fill" style={{ [neg ? "right" : "left"]: "50%", width: `${(Math.abs(pct) * 50).toFixed(1)}%`, background: col }} />
+                            <span className="ci-bar-dot" style={{ left: `${(50 + pct * 50).toFixed(1)}%`, background: col }} />
+                          </span>
+                          <span className="ci-r" style={{ color: col }}>{c.r.toFixed(2)}</span>
+                        </button>
+                      );
+                    })}
+                    {corrWeakCount > 0 && (
+                      <button className="ci-more" onClick={() => setShowWeak((v) => !v)}>
+                        {showWeak ? "Hide weaker links" : `Show ${corrWeakCount} weaker link${corrWeakCount > 1 ? "s" : ""}`}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
