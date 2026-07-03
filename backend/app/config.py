@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # Public API keys (comma-separated). Each key authorises a /api/v1/* client.
     PUBLIC_API_KEYS: str = ""
 
+    # Premium-calc live inputs (isolated feed): XAU/USD via Deriv WS, USD/INR via TwelveData.
+    PREMIUM_FEED_ENABLED: bool = True
+    DERIV_APP_ID: str = "1089"
+    TWELVEDATA_API_KEY: str = ""
+
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
 

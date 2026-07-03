@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_service, othercomm_service, price_service, signal_service
+from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_service, othercomm_service, premium_feed, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -383,6 +383,12 @@ def public_price_table(_key: str = Depends(require_api_key)):
         "status": price_service.status(),
         **price_service.get_table(),
     }
+
+
+@router.get("/premium-inputs")
+def public_premium_inputs(_key: str = Depends(require_api_key)):
+    """Live premium-calc inputs: XAU/USD (Deriv), USD/INR (TwelveData spot), MCX gold (Dhan)."""
+    return premium_feed.get_inputs()
 
 
 @router.websocket("/stream")
