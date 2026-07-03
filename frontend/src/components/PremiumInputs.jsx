@@ -6,7 +6,7 @@ import { fmtNum } from "../utils/format.js";
 //   Premium = ((Spot + Cost) × Conversion × USD/INR + Duty) / 100 − MCX Gold
 // Cost, Duty and the two conversion factors are editable (auto-saved locally).
 const LS_KEY = "arbi_premium_v1";
-const DEFAULTS = { cost: 4, duty: 1854062, convBank: 32.12, convAdani: 31.99 };
+const DEFAULTS = { cost: 4, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01 };
 
 function loadCfg() {
   try { const r = localStorage.getItem(LS_KEY); return r ? { ...DEFAULTS, ...JSON.parse(r) } : { ...DEFAULTS }; }
@@ -32,13 +32,14 @@ export default function PremiumInputs() {
   }, []);
 
   const spot = d?.xauusd;
-  const inr = d?.usdinr;
-  const mcx = d?.mcx_gold?.ltp;
+  const inrLive = d?.usdinr;
+  const inr = inrLive == null ? null : inrLive + (Number(cfg.fxAdj) || 0); // client: USD/INR + 0.01
+  const mcx = d?.mcx_gold?.ask ?? d?.mcx_gold?.ltp;                        // client: MCX = Ask price
   const cost = Number(cfg.cost) || 0;
   const duty = Number(cfg.duty) || 0;
   const ready = spot != null && inr != null && mcx != null;
 
-  // Premium = ((Spot + Cost) × Conversion × USD/INR + Duty) / 100 − MCX Gold
+  // Premium = ((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) / 100 − MCX Ask
   const premium = (conv) => (ready ? (((spot + cost) * (Number(conv) || 0) * inr + duty) / 100) - mcx : null);
   const bankPrem = premium(cfg.convBank);
   const adaniPrem = premium(cfg.convAdani);
@@ -50,8 +51,8 @@ export default function PremiumInputs() {
       <div className="pi-head">
         <h2>Forex <span className="pi-x">Premium</span></h2>
         <p className="pi-sub">
-          Live gold premium — <b>((Spot + Cost) × Conversion × USD/INR + Duty) ÷ 100 − MCX Gold</b>.
-          Cost, Duty and the conversion factors are editable; your changes auto-save.
+          Live gold premium — <b>((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) ÷ 100 − MCX Ask</b>.
+          Cost, Duty, conversion factors and the USD/INR spread are editable; your changes auto-save.
         </p>
       </div>
 
@@ -66,11 +67,11 @@ export default function PremiumInputs() {
         </div>
         <div className="pi-card pi-inr">
           <div className="pi-card-h"><span className="pi-name">USD / INR</span><span className="pi-src">TwelveData spot</span></div>
-          <div className="pi-val">{inr == null ? "—" : fmtNum(inr, 4)}</div>
-          <div className="pi-foot">{inr == null ? "loading…" : "~2 min refresh"}</div>
+          <div className="pi-val">{inrLive == null ? "—" : fmtNum(inrLive, 4)}</div>
+          <div className="pi-foot">{inrLive == null ? "loading…" : <>used {fmtNum(inr, 4)} (+{cfg.fxAdj})</>}</div>
         </div>
         <div className="pi-card pi-mcx">
-          <div className="pi-card-h"><span className="pi-name">MCX Gold</span><span className="pi-src">Dhan · live</span></div>
+          <div className="pi-card-h"><span className="pi-name">MCX Gold <span className="pi-tag">Ask</span></span><span className="pi-src">Dhan · live</span></div>
           <div className="pi-val">{mcx == null ? "—" : fmtNum(mcx, 0)}</div>
           <div className="pi-foot">{d?.mcx_gold?.expiry || "—"}</div>
         </div>
@@ -93,6 +94,10 @@ export default function PremiumInputs() {
         <div className="pi-field">
           <label>Conversion — ADANI/995</label>
           <input type="number" step="0.01" value={cfg.convAdani} onChange={(e) => setF("convAdani", e.target.value)} />
+        </div>
+        <div className="pi-field">
+          <label>USD/INR + (spread)</label>
+          <input type="number" step="0.01" value={cfg.fxAdj} onChange={(e) => setF("fxAdj", e.target.value)} />
         </div>
       </div>
 
