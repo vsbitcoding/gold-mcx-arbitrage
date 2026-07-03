@@ -17,7 +17,7 @@ const PAIRS = [
   { key: "petal",       label: "Mini → Petal",   base: "mini",   baseLabel: "Gold Mini", mult: 10,   factored: true },
   { key: "guinea",      label: "Mini → Guinea",  base: "mini",   baseLabel: "Gold Mini", mult: 1.25, factored: true },
   { key: "ten",         label: "Mini → Ten",     base: "mini",   baseLabel: "Gold Mini", mult: 1,    factored: true },
-  { key: "silvermicro", label: "Silver → Micro", base: "silver", baseLabel: "Silver",    mult: 1,    factored: false },
+  { key: "silvermicro", label: "Silver → Micro", chargeOnly: true },
 ];
 
 function load() {
@@ -63,31 +63,32 @@ export default function MakingPrice({ priceData }) {
 
       <div className="mp-grid">
         {PAIRS.map((p) => {
-          const c = nearContract(priceData, p.base);
-          const bid = c?.buyer ?? null;
           const charge = Number(cfg.charges[p.key]) || 0;
-          const value = bid == null ? null : (p.factored ? bid * factor + charge * p.mult : bid + charge);
-          const isSilver = p.base === "silver";
+          const c = p.chargeOnly ? null : nearContract(priceData, p.base);
+          const bid = c?.buyer ?? null;
+          const value = p.chargeOnly ? charge : (bid == null ? null : bid * factor + charge * p.mult);
           return (
-            <div className={`mp-card ${isSilver ? "mp-silver" : "mp-gold"}`} key={p.key}>
+            <div className={`mp-card ${p.chargeOnly ? "mp-silver" : "mp-gold"}`} key={p.key}>
               <div className="mp-card-head">
                 <span className="mp-pair">{p.label}</span>
                 {c?.contract && <span className="mp-exp">{c.contract}</span>}
               </div>
 
               <div className="mp-formula">
-                {p.factored
-                  ? <code>{p.baseLabel} Bid × {cfg.factor} + {fmtNum(charge, 0)} × {p.mult}</code>
-                  : <code>{p.baseLabel} Bid + {fmtNum(charge, 0)}</code>}
+                {p.chargeOnly
+                  ? <code>Making charge only</code>
+                  : <code>{p.baseLabel} Bid × {cfg.factor} + {fmtNum(charge, 0)} × {p.mult}</code>}
               </div>
 
               <div className="mp-rows">
-                <div className="mp-row">
-                  <span className="mp-label">{p.baseLabel} Bid</span>
-                  <span className={`mp-live ${bid == null ? "stale" : ""}`}>
-                    {bid == null ? "waiting for tick…" : <>{fmtNum(bid, 2)} <span className="live-dot" title="Live" /></>}
-                  </span>
-                </div>
+                {!p.chargeOnly && (
+                  <div className="mp-row">
+                    <span className="mp-label">{p.baseLabel} Bid</span>
+                    <span className={`mp-live ${bid == null ? "stale" : ""}`}>
+                      {bid == null ? "waiting for tick…" : <>{fmtNum(bid, 2)} <span className="live-dot" title="Live" /></>}
+                    </span>
+                  </div>
+                )}
                 <div className="mp-row">
                   <span className="mp-label">Making charge</span>
                   <input
