@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -76,6 +76,7 @@ export default function BullionStock() {
   const [fetching, setFetching] = useState(false);
   const [selected, setSelected] = useState(null);
   const [histCommodity, setHistCommodity] = useState(null);
+  const corrRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -185,6 +186,15 @@ export default function BullionStock() {
           </div>
         </div>
         <div className="bs-actions">
+          {data?.latest?.length > 0 && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => corrRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              title="Jump to Stock ↔ Spread Correlation"
+            >
+              📊 Correlation
+            </button>
+          )}
           {data?.pdf_available && (
             <>
               <button className="btn btn-secondary btn-sm" onClick={() => openPdf(false)} disabled={pdfBusy}>👁 View PDF</button>
@@ -277,7 +287,7 @@ export default function BullionStock() {
           )}
 
           {/* Correlation */}
-          <div className="bs-card bs-corr-card">
+          <div className="bs-card bs-corr-card" ref={corrRef} style={{ scrollMarginTop: "12px" }}>
             <div className="bs-card-h">Stock ↔ Spread Correlation</div>
             {!data.correlation?.length ? (
               <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
