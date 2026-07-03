@@ -74,23 +74,17 @@ export default function MakingPrice({ priceData }) {
                 {c?.contract && <span className="mp-exp">{c.contract}</span>}
               </div>
 
-              <div className="mp-formula">
-                {p.chargeOnly
-                  ? <code>Making charge only</code>
-                  : <code>{p.baseLabel} Bid × {cfg.factor} + {fmtNum(charge, 0)} × {p.mult}</code>}
-              </div>
-
               <div className="mp-rows">
                 {!p.chargeOnly && (
                   <div className="mp-row">
-                    <span className="mp-label">{p.baseLabel} Bid</span>
+                    <span className="mp-label">{p.baseLabel} Bid <span className="mp-mult">× {cfg.factor}</span></span>
                     <span className={`mp-live ${bid == null ? "stale" : ""}`}>
-                      {bid == null ? "waiting for tick…" : <>{fmtNum(bid, 2)} <span className="live-dot" title="Live" /></>}
+                      {bid == null ? "waiting…" : <>{fmtNum(bid, 2)} <span className="live-dot" title="Live" /></>}
                     </span>
                   </div>
                 )}
                 <div className="mp-row">
-                  <span className="mp-label">Making charge</span>
+                  <span className="mp-label">Making charge{!p.chargeOnly && <span className="mp-mult"> × {p.mult}</span>}</span>
                   <input
                     type="number"
                     step="1"
