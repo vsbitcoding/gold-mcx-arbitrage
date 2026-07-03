@@ -77,6 +77,10 @@ export default function BullionStock() {
   const [selected, setSelected] = useState(null);
   const [histCommodity, setHistCommodity] = useState(null);
   const corrRef = useRef(null);
+  const [showCorr, setShowCorr] = useState(false);
+  useEffect(() => {
+    if (showCorr) corrRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [showCorr]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -188,11 +192,11 @@ export default function BullionStock() {
         <div className="bs-actions">
           {data?.latest?.length > 0 && (
             <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => corrRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              title="Jump to Stock ↔ Spread Correlation"
+              className={`btn btn-sm ${showCorr ? "btn-primary" : "btn-secondary"}`}
+              onClick={() => setShowCorr((v) => !v)}
+              title="Show / hide Stock ↔ Spread Correlation"
             >
-              📊 Correlation
+              📊 {showCorr ? "Hide Correlation" : "Correlation"}
             </button>
           )}
           {data?.pdf_available && (
@@ -286,43 +290,45 @@ export default function BullionStock() {
             </div>
           )}
 
-          {/* Correlation */}
-          <div className="bs-card bs-corr-card" ref={corrRef} style={{ scrollMarginTop: "12px" }}>
-            <div className="bs-card-h">Stock ↔ Spread Correlation</div>
-            {!data.correlation?.length ? (
-              <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
-            ) : (
-              <div className="bs-corr-grid">
-                <div className="bs-tbl-scroll">
-                  <table className="bs-table bs-corr">
-                    <thead><tr><th>Pair</th><th>Commodity</th><th className="num">Days</th><th className="num">r</th><th>Reading</th></tr></thead>
-                    <tbody>
-                      {data.correlation.map((c) => (
-                        <tr key={c.pair_name + c.commodity}
-                          className={selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity ? "sel" : ""}
-                          onClick={() => setSelected(c.pair_name)}>
-                          <td>{c.pair}</td><td>{c.commodity}</td><td className="num">{c.n}</td>
-                          <td className="num" style={{ color: corrColor(c.r), fontWeight: 700 }}>{c.r.toFixed(2)}</td>
-                          <td className="bs-muted">{corrText(c.r)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {corrSeries.length >= 2 && (
-                  <div>
-                    <div className="bs-legend">
-                      <span><i className="dot" style={{ background: "var(--yellow)" }} /> Stock</span>
-                      <span><i className="dot" style={{ background: "var(--accent)" }} /> Spread</span>
-                      <span className="bs-muted">{selectedCorr.pair}</span>
+          {/* Correlation — hidden until the Correlation button is clicked. Chart on top, table below (full width). */}
+          {showCorr && (
+            <div className="bs-card bs-corr-card" ref={corrRef} style={{ scrollMarginTop: "12px" }}>
+              <div className="bs-card-h">Stock ↔ Spread Correlation</div>
+              {!data.correlation?.length ? (
+                <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
+              ) : (
+                <div className="bs-corr-grid">
+                  {corrSeries.length >= 2 && (
+                    <div className="bs-corr-chart">
+                      <div className="bs-legend">
+                        <span><i className="dot" style={{ background: "var(--yellow)" }} /> Stock</span>
+                        <span><i className="dot" style={{ background: "var(--accent)" }} /> Spread</span>
+                        <span className="bs-muted">{selectedCorr.pair}</span>
+                      </div>
+                      <MiniChart series={corrSeries} />
+                      <div className="bs-axis"><span>{corrSeries[0].date}</span><span>{corrSeries[corrSeries.length - 1].date}</span></div>
                     </div>
-                    <MiniChart series={corrSeries} />
-                    <div className="bs-axis"><span>{corrSeries[0].date}</span><span>{corrSeries[corrSeries.length - 1].date}</span></div>
+                  )}
+                  <div className="bs-tbl-scroll">
+                    <table className="bs-table bs-corr">
+                      <thead><tr><th>Pair</th><th>Commodity</th><th className="num">Days</th><th className="num">r</th><th>Reading</th></tr></thead>
+                      <tbody>
+                        {data.correlation.map((c) => (
+                          <tr key={c.pair_name + c.commodity}
+                            className={selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity ? "sel" : ""}
+                            onClick={() => setSelected(c.pair_name)}>
+                            <td>{c.pair}</td><td>{c.commodity}</td><td className="num">{c.n}</td>
+                            <td className="num" style={{ color: corrColor(c.r), fontWeight: 700 }}>{c.r.toFixed(2)}</td>
+                            <td className="bs-muted">{corrText(c.r)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

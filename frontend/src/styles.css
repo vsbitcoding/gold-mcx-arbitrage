@@ -4303,7 +4303,10 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bs-matrix th:first-child { z-index: 2; }
 .bs-matrix th, .bs-matrix td { padding: 5px 10px; }
 
-.bs-corr-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; align-items: start; }
+/* Correlation: chart on top (full-size), table below — always stacked, full width. */
+.bs-corr-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
+.bs-corr-chart { width: 100%; }
+.bs-corr-chart .bs-trend { height: 320px; }
 .bs-corr tbody tr.sel { background: var(--accent-bg); }
 .bs-legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; flex-wrap: wrap; }
 .bs-legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
@@ -4311,6 +4314,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 900px) {
   .bs-grid { grid-template-columns: 1fr; }
   .bs-corr-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .bs-corr-chart .bs-trend { height: 240px; }
 }
 /* ============================================================
    GOLD OPTIONS TAB — GOLD / GOLD MINI options spread
