@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { key: "metals", label: "Metal" },
   { key: "price", label: "Price" },
   { key: "othercomm", label: "Other Commodity" },
-  { key: "calculator", label: "Calculator" },
+  { key: "calculator", label: "ETF vs MCX" },
   { key: "making", label: "Making Price" },
   { key: "options", label: "Nifty / Sensex" },
   { key: "goldopt", label: "Commodity Options" },

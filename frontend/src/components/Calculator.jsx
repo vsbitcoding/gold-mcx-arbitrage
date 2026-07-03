@@ -215,7 +215,7 @@ export default function Calculator() {
   return (
     <div className="calc-page">
       <div className="calc-page-head">
-        <h2>Spot vs MCX Calculator</h2>
+        <h2>ETF vs MCX</h2>
         <p className="calc-page-sub">
           Live ETF price → formula → compare with MCX. Multiplier, manual value, and divisor are editable;
           your settings auto-save in this browser.
