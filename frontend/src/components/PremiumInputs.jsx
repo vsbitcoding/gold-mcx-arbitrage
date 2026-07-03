@@ -34,7 +34,7 @@ export default function PremiumInputs() {
   const spot = d?.xauusd;
   const inrLive = d?.usdinr;
   const inr = inrLive == null ? null : inrLive + (Number(cfg.fxAdj) || 0); // client: USD/INR + 0.01
-  const mcx = d?.mcx_gold?.ask ?? d?.mcx_gold?.ltp;                        // client: MCX = Ask price
+  const mcx = d?.mcx_gold?.bid ?? d?.mcx_gold?.ltp;                        // client: MCX = Bid price
   const cost = Number(cfg.cost) || 0;
   const duty = Number(cfg.duty) || 0;
   const ready = spot != null && inr != null && mcx != null;
@@ -51,7 +51,7 @@ export default function PremiumInputs() {
       <div className="pi-head">
         <h2>Forex <span className="pi-x">Premium</span></h2>
         <p className="pi-sub">
-          Live gold premium — <b>((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) ÷ 100 − MCX Ask</b>.
+          Live gold premium — <b>((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) ÷ 100 − MCX Bid</b>.
           Cost, Duty, conversion factors and the USD/INR spread are editable; your changes auto-save.
         </p>
       </div>
@@ -71,7 +71,7 @@ export default function PremiumInputs() {
           <div className="pi-foot">{inrLive == null ? "loading…" : <>used {fmtNum(inr, 4)} (+{cfg.fxAdj})</>}</div>
         </div>
         <div className="pi-card pi-mcx">
-          <div className="pi-card-h"><span className="pi-name">MCX Gold <span className="pi-tag">Ask</span></span><span className="pi-src">Dhan · live</span></div>
+          <div className="pi-card-h"><span className="pi-name">MCX Gold <span className="pi-tag">Bid</span></span><span className="pi-src">Dhan · live</span></div>
           <div className="pi-val">{mcx == null ? "—" : fmtNum(mcx, 0)}</div>
           <div className="pi-foot">{d?.mcx_gold?.expiry || "—"}</div>
         </div>
