@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -76,11 +76,7 @@ export default function BullionStock() {
   const [fetching, setFetching] = useState(false);
   const [selected, setSelected] = useState(null);
   const [histCommodity, setHistCommodity] = useState(null);
-  const corrRef = useRef(null);
-  const [showCorr, setShowCorr] = useState(false);
-  useEffect(() => {
-    if (showCorr) corrRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [showCorr]);
+  const [view, setView] = useState("stock"); // "stock" (details) | "corr" (correlation)
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -190,15 +186,6 @@ export default function BullionStock() {
           </div>
         </div>
         <div className="bs-actions">
-          {data?.latest?.length > 0 && (
-            <button
-              className={`btn btn-sm ${showCorr ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setShowCorr((v) => !v)}
-              title="Show / hide Stock ↔ Spread Correlation"
-            >
-              📊 {showCorr ? "Hide Correlation" : "Correlation"}
-            </button>
-          )}
           {data?.pdf_available && (
             <>
               <button className="btn btn-secondary btn-sm" onClick={() => openPdf(false)} disabled={pdfBusy}>👁 View PDF</button>
@@ -217,6 +204,20 @@ export default function BullionStock() {
 
       {data?.latest?.length > 0 && (
         <>
+          {/* Two centered buttons: Stock details ↔ Spread Correlation */}
+          <div className="bs-viewbar" role="tablist" aria-label="Bullion view">
+            <button type="button" role="tab" aria-selected={view === "stock"}
+              className={`bs-viewbtn ${view === "stock" ? "active" : ""}`} onClick={() => setView("stock")}>
+              Bullion Warehouse Stock
+            </button>
+            <button type="button" role="tab" aria-selected={view === "corr"}
+              className={`bs-viewbtn ${view === "corr" ? "active" : ""}`} onClick={() => setView("corr")}>
+              Spread Correlation
+            </button>
+          </div>
+
+          {view === "stock" && (
+          <>
           <div className="bs-grid">
             {/* Latest eligible units + 1-day change */}
             <div className="bs-card">
@@ -289,10 +290,12 @@ export default function BullionStock() {
               </div>
             </div>
           )}
+          </>
+          )}
 
-          {/* Correlation — hidden until the Correlation button is clicked. Chart on top, table below (full width). */}
-          {showCorr && (
-            <div className="bs-card bs-corr-card" ref={corrRef} style={{ scrollMarginTop: "12px" }}>
+          {/* Spread Correlation view — chart on top, table below (full width) */}
+          {view === "corr" && (
+            <div className="bs-card bs-corr-card">
               <div className="bs-card-h">Stock ↔ Spread Correlation</div>
               {!data.correlation?.length ? (
                 <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
