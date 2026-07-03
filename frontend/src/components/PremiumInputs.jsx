@@ -26,7 +26,7 @@ export default function PremiumInputs() {
   return (
     <div className="pi-page">
       <div className="pi-head">
-        <h2>Premium <span className="pi-x">Live Inputs</span></h2>
+        <h2>Forex <span className="pi-x">Live Inputs</span></h2>
         <p className="pi-sub">
           Live building blocks for the gold-premium calculation. The full premium formula will
           slot in here once you confirm it from the sheet.
