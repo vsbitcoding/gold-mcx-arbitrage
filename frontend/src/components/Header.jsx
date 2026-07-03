@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { key: "price", label: "Price" },
   { key: "othercomm", label: "Other Commodity" },
   { key: "calculator", label: "Calculator" },
+  { key: "making", label: "Making Price" },
   { key: "options", label: "Nifty / Sensex" },
   { key: "goldopt", label: "Commodity Options" },
   { key: "stock", label: "Bullion Stock" },
@@ -29,6 +30,7 @@ function NavIcon({ name }) {
     case "options": return <svg {...c}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
     case "stock": return <svg {...c}><path d="M3 21h18" /><rect x="5" y="11" width="4" height="7" /><rect x="15" y="11" width="4" height="7" /><path d="M7 11V7l5-4 5 4v4" /></svg>;
     case "goldopt": return <svg {...c}><circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" /></svg>;
+    case "making": return <svg {...c}><path d="M20.6 13.4 12 22l-9-9V4h9z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>;
     default: return null;
   }
 }

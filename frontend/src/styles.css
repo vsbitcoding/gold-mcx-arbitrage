@@ -4530,3 +4530,47 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   .go-cards { grid-template-columns: 1fr; }
   .go-scard-spreads { grid-template-columns: 1fr; }
 }
+
+/* ===== Making Price tab ===== */
+.mp-page { padding: 2px; }
+.mp-head h2 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.mp-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 14px; max-width: 720px; }
+.mp-sub b { color: var(--text-secondary); font-weight: 700; }
+.mp-factor {
+  display: inline-flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 13px; margin-bottom: 18px;
+}
+.mp-factor label { font-weight: 700; font-size: 13px; }
+.mp-factor input, .mp-input {
+  padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--input-bg); color: var(--text-primary);
+  font-family: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.mp-factor input { width: 110px; }
+.mp-factor input:focus, .mp-input:focus { outline: none; border-color: var(--accent); }
+.mp-factor-note { font-size: 11.5px; color: var(--text-muted); }
+
+.mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px; }
+.mp-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-top: 3px solid var(--accent); border-radius: 12px; padding: 14px;
+}
+.mp-card.mp-silver { border-top-color: #9aa3ad; }
+.mp-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.mp-pair { font-weight: 800; font-size: 15px; }
+.mp-exp { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.mp-formula { background: var(--bg-surface-alt); border-radius: 7px; padding: 6px 9px; margin-bottom: 11px; overflow-x: auto; }
+.mp-formula code { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.mp-rows { display: flex; flex-direction: column; gap: 9px; margin-bottom: 12px; }
+.mp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mp-label { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.mp-live { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.mp-live.stale { color: var(--text-muted); font-weight: 500; font-size: 12px; }
+.mp-input { width: 108px; text-align: right; }
+.mp-result { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-light); padding-top: 11px; }
+.mp-result-label { font-weight: 700; font-size: 13px; color: var(--text-muted); }
+.mp-result-value { font-size: 23px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+@media (max-width: 480px) {
+  .mp-grid { grid-template-columns: 1fr; }
+}
