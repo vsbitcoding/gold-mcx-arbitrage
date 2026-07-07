@@ -215,32 +215,40 @@ def get_spread_table(commodity: str = "gold") -> dict:
     def px(v, ltp):
         return v if v else ltp
 
+    def build_row(i, strike, otype):
+        g = st["options"].get((big, i, strike, otype))
+        m = st["options"].get((mini, i, strike, otype))
+        g_bid, g_ask, g_ltp = _q(g["security_id"] if g else None)   # BIG
+        m_bid, m_ask, m_ltp = _q(m["security_id"] if m else None)   # MINI
+        if big_higher:
+            h_bid, h_ask, h_ltp = g_bid, g_ask, g_ltp
+            l_bid, l_ask, l_ltp = m_bid, m_ask, m_ltp
+        else:
+            h_bid, h_ask, h_ltp = m_bid, m_ask, m_ltp
+            l_bid, l_ask, l_ltp = g_bid, g_ask, g_ltp
+        h_ask_p, l_bid_p = px(h_ask, h_ltp), px(l_bid, l_ltp)
+        h_bid_p, l_ask_p = px(h_bid, h_ltp), px(l_ask, l_ltp)
+        spread1 = (l_bid_p - h_ask_p) if (l_bid_p is not None and h_ask_p is not None) else None
+        spread2 = (h_bid_p - l_ask_p) if (h_bid_p is not None and l_ask_p is not None) else None
+        return {
+            "strike": strike, "type": otype,
+            "big_bid": g_bid, "big_ask": g_ask,
+            "mini_bid": m_bid, "mini_ask": m_ask,
+            "spread1": round(spread1, 2) if spread1 is not None else None,
+            "spread2": round(spread2, 2) if spread2 is not None else None,
+        }
+
     expiries_out = []
     for i, (ge, me) in enumerate(st.get("pairs", [])):
+        strikes = strikes_by_pair.get(i, [])
+        # ATM strike = nearest to ref; per client it shows BOTH CE and PE (other strikes: one type by moneyness).
+        atm = min(strikes, key=lambda s: abs(s - ref)) if (strikes and ref is not None) else None
         rows = []
-        for strike in strikes_by_pair.get(i, []):
-            otype = "PE" if (ref is not None and strike < ref) else "CE"
-            g = st["options"].get((big, i, strike, otype))
-            m = st["options"].get((mini, i, strike, otype))
-            g_bid, g_ask, g_ltp = _q(g["security_id"] if g else None)   # BIG
-            m_bid, m_ask, m_ltp = _q(m["security_id"] if m else None)   # MINI
-            if big_higher:
-                h_bid, h_ask, h_ltp = g_bid, g_ask, g_ltp
-                l_bid, l_ask, l_ltp = m_bid, m_ask, m_ltp
-            else:
-                h_bid, h_ask, h_ltp = m_bid, m_ask, m_ltp
-                l_bid, l_ask, l_ltp = g_bid, g_ask, g_ltp
-            h_ask_p, l_bid_p = px(h_ask, h_ltp), px(l_bid, l_ltp)
-            h_bid_p, l_ask_p = px(h_bid, h_ltp), px(l_ask, l_ltp)
-            spread1 = (l_bid_p - h_ask_p) if (l_bid_p is not None and h_ask_p is not None) else None
-            spread2 = (h_bid_p - l_ask_p) if (h_bid_p is not None and l_ask_p is not None) else None
-            rows.append({
-                "strike": strike, "type": otype,
-                "big_bid": g_bid, "big_ask": g_ask,
-                "mini_bid": m_bid, "mini_ask": m_ask,
-                "spread1": round(spread1, 2) if spread1 is not None else None,
-                "spread2": round(spread2, 2) if spread2 is not None else None,
-            })
+        for strike in strikes:
+            primary = "PE" if (ref is not None and strike < ref) else "CE"
+            rows.append(build_row(i, strike, primary))
+            if strike == atm:
+                rows.append(build_row(i, strike, "CE" if primary == "PE" else "PE"))
         expiries_out.append({"expiry_index": i, "big_expiry": ge, "mini_expiry": me, "rows": rows})
 
     return {

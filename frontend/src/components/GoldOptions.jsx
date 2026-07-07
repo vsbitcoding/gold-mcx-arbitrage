@@ -194,7 +194,7 @@ export default function GoldOptions() {
                   const isAtm = r.strike === atmStrike;
                   const cls = (isAtm ? " atm-row" : "") + (i % 2 ? " go-alt" : "");
                   return (
-                    <React.Fragment key={r.strike}>
+                    <React.Fragment key={`${r.strike}-${r.type}`}>
                       <tr className={`go-tr go-pair-top${cls}`}>
                         <th scope="row" rowSpan={2} className="go-strike">
                           <span className="go-strike-n">{fmtNum(r.strike, 0)}</span>
@@ -226,7 +226,7 @@ export default function GoldOptions() {
             {cur.rows.map((r) => {
               const isAtm = r.strike === atmStrike;
               return (
-                <div key={`m-${r.strike}`} className={isAtm ? "go-scard atm-row" : "go-scard"}>
+                <div key={`m-${r.strike}-${r.type}`} className={isAtm ? "go-scard atm-row" : "go-scard"}>
                   <div className="go-scard-head">
                     <span className="go-scard-strike">
                       {fmtNum(r.strike, 0)}
