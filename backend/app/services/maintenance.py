@@ -121,7 +121,7 @@ def _loop() -> None:
     last_clear_date: str | None = None
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
-    last_mcxccl_fetch: str | None = None
+    last_mcxccl_attempt: datetime | None = None
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -160,19 +160,29 @@ def _loop() -> None:
                 if ok:
                     log.info("SPAN margin feed refreshed for %s", today_str)
 
-            # Daily MCXCCL bullion warehouse-stock scrape + spread snapshot —
-            # once per IST day at the configured time. Isolated subprocess +
-            # fully wrapped → can never affect the live feed/signals.
-            if (
-                settings.BULLION_STOCK_ENABLED
-                and last_mcxccl_fetch != today_str
-                and (now.hour, now.minute) >= (settings.MCXCCL_FETCH_HOUR_IST, settings.MCXCCL_FETCH_MINUTE_IST)
+            # MCXCCL bullion warehouse-stock scrape + spread snapshot. MCXCCL
+            # posts the daily PDF with an irregular lag, so a single fixed-time
+            # run can silently miss data for days. Instead, from the morning
+            # start hour we retry every MCXCCL_RETRY_HOURS until the stored data
+            # has caught up to yesterday. refresh() walks back and backfills any
+            # gap in one go. Isolated subprocess + fully wrapped → can never
+            # affect the live feed/signals.
+            if settings.BULLION_STOCK_ENABLED and (now.hour, now.minute) >= (
+                settings.MCXCCL_FETCH_HOUR_IST, settings.MCXCCL_FETCH_MINUTE_IST
             ):
-                try:
-                    mcxccl_service.refresh()
-                except Exception as e:
-                    log.warning("MCXCCL refresh raised: %s", e)
-                last_mcxccl_fetch = today_str
+                target = (now.date() - timedelta(days=1)).isoformat()
+                latest = mcxccl_service.latest_stored_date()
+                caught_up = latest is not None and latest >= target
+                due = (
+                    last_mcxccl_attempt is None
+                    or (now - last_mcxccl_attempt) >= timedelta(hours=settings.MCXCCL_RETRY_HOURS)
+                )
+                if not caught_up and due:
+                    try:
+                        mcxccl_service.refresh()
+                    except Exception as e:
+                        log.warning("MCXCCL refresh raised: %s", e)
+                    last_mcxccl_attempt = now
         except Exception as e:
             log.exception("Maintenance error: %s", e)
         time.sleep(TICK_SECONDS)

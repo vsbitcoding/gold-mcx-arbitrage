@@ -68,6 +68,22 @@ def status() -> dict:
     return dict(_status)
 
 
+def latest_stored_date() -> str | None:
+    """Most recent as_on_date currently in the DB (what the dashboard shows), or None."""
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(BullionStock.as_on_date)
+            .order_by(BullionStock.as_on_date.desc())
+            .first()
+        )
+        return row[0] if row else None
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        db.close()
+
+
 # --------------------------------------------------------------------------- #
 # Daily refresh
 # --------------------------------------------------------------------------- #
