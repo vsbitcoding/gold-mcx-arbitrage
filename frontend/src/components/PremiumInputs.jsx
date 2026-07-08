@@ -62,7 +62,7 @@ export default function PremiumInputs() {
   return (
     <div className="pv-page">
       <div className="pv-head">
-        <h2>Forex <span className="pv-x">Premium</span></h2>
+        <h2><span className="pv-x">Premium</span></h2>
       </div>
       {err && <div className="settings-banner danger">⚠ Couldn't reach the live feed.</div>}
 
