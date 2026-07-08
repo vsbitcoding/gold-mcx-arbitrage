@@ -70,8 +70,8 @@ export default function PremiumInputs() {
         <div className="pv-hrow"><span>Parameter</span><span>Value</span></div>
 
         <div className="pv-row">
-          <span className="pv-param">Spot XAU/USD {d?.deriv_connected && <span className="live-dot" title="Deriv live" />}</span>
-          <span className="pv-val">{num(spot)}</span>
+          <span className="pv-param">Spot XAU/USD</span>
+          <span className="pv-val">{num(spot)} {d?.deriv_connected && <span className="live-dot" title="Deriv live" />}</span>
         </div>
 
         <div className="pv-row">

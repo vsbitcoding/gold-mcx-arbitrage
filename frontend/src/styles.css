@@ -4679,33 +4679,34 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 /* ===== Forex Premium — vertical parameter table (like the sheet) ===== */
 .pv-page { padding: 2px; max-width: 760px; }
-.pv-head h2 { font-size: 17px; font-weight: 800; margin-bottom: 1px; }
+.pv-head h2 { font-size: 19px; font-weight: 800; margin-bottom: 10px; }
 .pv-head h2 .pv-x { color: var(--accent-ink); font-weight: 700; }
 .pv-sub { color: var(--text-muted); font-size: 11px; margin-bottom: 8px; }
 .pv-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface); }
-.pv-hrow, .pv-row { display: grid; grid-template-columns: 1.6fr 1fr; align-items: center; gap: 12px; padding: 5px 14px; border-bottom: 1px solid var(--border-light); }
+.pv-hrow, .pv-row { display: grid; grid-template-columns: 1.7fr 1fr; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border-light); }
 .pv-hrow { background: var(--th-bg); color: var(--th-color); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; }
+.pv-hrow span:last-child { text-align: right; }
 .pv-sec { border-top: 2px solid var(--accent); color: var(--accent-ink); }
 .pv-row:last-child { border-bottom: none; }
-.pv-param { font-weight: 700; font-size: 12.5px; color: var(--text-primary); }
+.pv-param { font-weight: 600; font-size: 13px; color: var(--text-primary); }
 .pv-mut { color: var(--text-muted); font-weight: 500; font-size: 10.5px; }
-.pv-val { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.pv-val { justify-self: end; display: inline-flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .pv-note { font-size: 11.5px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; }
-.pv-input { width: 100%; max-width: 150px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text-primary); font-family: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.pv-input:focus { outline: none; border-color: var(--accent); }
+.pv-input { width: 100%; max-width: 150px; justify-self: end; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text-primary); font-family: inherit; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+.pv-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 .pv-tag { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--on-accent); background: var(--accent); border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
 .pv-prem { background: var(--bg-surface-alt); }
-.pv-prem .pv-param { font-size: 12.5px; font-weight: 800; }
-.pv-pval { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.pv-prem .pv-param { font-size: 13px; font-weight: 800; }
+.pv-pval { justify-self: end; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .pv-pval.pos { color: var(--green); }
 .pv-pval.neg { color: var(--red); }
 /* Only Premium / Premium with GST side by side (equal height) */
 .pv-two { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; align-items: stretch; }
 .pv-two .pv-table { display: flex; flex-direction: column; }
 .pv-two .pv-prem { margin-top: auto; }
-.pv-two .pv-pval { font-size: 16px; }
-.pv-two .pv-hrow { font-size: 10px; }
-.pv-two .pv-ask { font-size: 9px; }
+.pv-two .pv-pval { font-size: 17px; }
+.pv-two .pv-hrow { font-size: 10.5px; }
+.pv-two .pv-ask { font-size: 9.5px; }
 .pv-yin { background: var(--yellow-bg); border-color: var(--yellow-ink); }
 .pv-yin:focus { border-color: var(--yellow-ink); }
 .pv-ask { text-align: right; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
