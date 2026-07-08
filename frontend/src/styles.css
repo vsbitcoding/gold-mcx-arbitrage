@@ -4681,9 +4681,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pv-page { padding: 2px; max-width: 1040px; }
 .pv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .pv-metalcol { min-width: 0; }
+.pv-metalcol.gold, .pv-calcwrap.gold { background: rgba(201, 162, 78, 0.10); border: 1px solid rgba(201, 162, 78, 0.28); border-radius: 12px; padding: 10px 12px; }
+.pv-metalcol.silver, .pv-calcwrap.silver { background: rgba(150, 160, 175, 0.13); border: 1px solid rgba(150, 160, 175, 0.30); border-radius: 12px; padding: 10px 12px; }
+.pv-calcwrap { margin-top: 12px; }
+.pv-calcwrap .pv-two { margin-top: 8px; }
 .pv-metalhead { font-size: 14px; font-weight: 800; padding: 6px 12px; border-radius: 8px; margin-bottom: 8px; text-align: center; letter-spacing: .3px; }
-.pv-metalhead.gold { background: var(--accent-bg); color: var(--accent-ink); }
-.pv-metalhead.silver { background: var(--bg-surface-alt); color: var(--text-secondary); border: 1px solid var(--border); }
+.pv-metalhead.gold { background: var(--accent); color: var(--on-accent); }
+.pv-metalhead.silver { background: #aab2bf; color: #23272e; }
 .pv-head h2 { font-size: 19px; font-weight: 800; margin-bottom: 10px; }
 .pv-head h2 .pv-x { color: var(--accent-ink); font-weight: 700; }
 .pv-sub { color: var(--text-muted); font-size: 11px; margin-bottom: 8px; }
@@ -4719,8 +4723,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pv-yin { background: var(--yellow-bg); border-color: var(--yellow-ink); }
 .pv-yin:focus { border-color: var(--yellow-ink); }
 .pv-ask { text-align: right; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-/* each metal is a half-width column, so its 3 calculators stack vertically */
-.pv-metalcol .pv-two { grid-template-columns: 1fr; }
 @media (max-width: 860px) { .pv-cols { grid-template-columns: 1fr; } }   /* stack Gold above Silver */
 @media (max-width: 720px) { .pv-two { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
