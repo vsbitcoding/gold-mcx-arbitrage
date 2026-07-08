@@ -63,9 +63,6 @@ export default function PremiumInputs() {
     <div className="pv-page">
       <div className="pv-head">
         <h2>Forex <span className="pv-x">Premium</span></h2>
-        <p className="pv-sub">
-          ((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) ÷ 100 − MCX Bid. Editable fields auto-save.
-        </p>
       </div>
       {err && <div className="settings-banner danger">⚠ Couldn't reach the live feed.</div>}
 
