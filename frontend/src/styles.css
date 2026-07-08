@@ -4700,15 +4700,16 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pv-pval.pos { color: var(--green); }
 .pv-pval.neg { color: var(--red); }
 /* Only Premium / Premium with GST side by side (equal height) */
-.pv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; align-items: stretch; }
+.pv-two { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; align-items: stretch; }
 .pv-two .pv-table { display: flex; flex-direction: column; }
 .pv-two .pv-prem { margin-top: auto; }
-.pv-two .pv-span { grid-column: 1 / -1; }
 .pv-two .pv-pval { font-size: 16px; }
+.pv-two .pv-hrow { font-size: 10px; }
+.pv-two .pv-ask { font-size: 9px; }
 .pv-yin { background: var(--yellow-bg); border-color: var(--yellow-ink); }
 .pv-yin:focus { border-color: var(--yellow-ink); }
 .pv-ask { text-align: right; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .pv-two { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
-  .pv-hrow, .pv-row { padding: 10px 12px; gap: 10px; }
-  .pv-two { grid-template-columns: 1fr; }
+  .pv-hrow, .pv-row { padding: 8px 12px; gap: 10px; }
 }

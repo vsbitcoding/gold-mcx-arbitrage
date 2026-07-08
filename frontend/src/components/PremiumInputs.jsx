@@ -126,11 +126,11 @@ export default function PremiumInputs() {
         <div className="pv-table">
           <div className="pv-hrow"><span>Only Premium</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
-            <span className="pv-param">Premium <span className="pv-mut">(type here)</span></span>
+            <span className="pv-param">Premium</span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.onlyPrem} onChange={(e) => setF("onlyPrem", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Price <span className="pv-mut">(Ask+Prem)×1.03</span></span>
+            <span className="pv-param">Price</span>
             <span className="pv-pval">{num(onlyPremRate, 0)}</span>
           </div>
         </div>
@@ -138,27 +138,27 @@ export default function PremiumInputs() {
         <div className="pv-table">
           <div className="pv-hrow"><span>Premium with GST</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
-            <span className="pv-param">Premium GST <span className="pv-mut">(type here)</span></span>
+            <span className="pv-param">Premium GST</span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
           </div>
           <div className="pv-row">
-            <span className="pv-param">Rate <span className="pv-mut">Ask + PRM GST</span></span>
+            <span className="pv-param">Rate</span>
             <span className="pv-val">{num(rateWithGst, 0)}</span>
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03 − Ask</span></span>
+            <span className="pv-param">Premium</span>
             <span className={`pv-pval ${gstPrem == null ? "" : gstPrem >= 0 ? "pos" : "neg"}`}>{num(gstPrem, 0)}</span>
           </div>
         </div>
 
-        <div className="pv-table pv-span">
+        <div className="pv-table">
           <div className="pv-hrow"><span>Premium from Rate</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
-            <span className="pv-param">Rate <span className="pv-mut">(type here)</span></span>
+            <span className="pv-param">Rate</span>
             <input className="pv-input pv-yin" type="number" step="0.01" placeholder="—" value={cfg.manRate} onChange={(e) => setF("manRate", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03 − Ask</span></span>
+            <span className="pv-param">Premium</span>
             <span className={`pv-pval ${manPrem == null ? "" : manPrem >= 0 ? "pos" : "neg"}`}>{num(manPrem, 0)}</span>
           </div>
         </div>
