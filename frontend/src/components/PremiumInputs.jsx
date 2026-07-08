@@ -6,11 +6,12 @@ import { fmtNum } from "../utils/format.js";
 //   Premium = ((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) / 100 − MCX Bid
 //   Two variants: 999 (conversion 32.12) and 995 (conversion 31.99).
 const LS_KEY = "arbi_premium_v1";
-const DEFAULTS = { cost: 5, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01, onlyPrem: "", prmGst: "" };
+const DEFAULTS = { cost: 5, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01, onlyPrem: "", prmGst: "", gstRate: "" };
 // convBank -> "999" (32.12) ; convAdani -> "995" (31.99)
-// Two manual sections the client asked for (inverse of each other):
-//   onlyPrem -> "Only Premium": type a premium (the "-1400" box) -> price = (Gold Ask + onlyPrem) × 1.03  [=(+D9+F15)*1.03]
-//   prmGst   -> "Premium with GST": type a GST-inclusive rate (e.g. 148450) -> premium = prmGst / 1.03 − Gold Ask  [=F18/1.03-D9]
+// Three manual calculators (client sheet):
+//   onlyPrem -> "Only Premium":      type a premium -> Price   = (Gold Ask + onlyPrem) × 1.03  [=(+D9+F15)*1.03]
+//   prmGst   -> "Premium with GST":  type a premium -> Rate    =  Gold Ask + prmGst            [=G15+D9]
+//   gstRate  -> "Premium from Rate": type a GST rate -> Premium =  gstRate / 1.03 − Gold Ask   [=F18/1.03-D9]
 // Blank -> shows "—".
 
 function loadCfg() {
@@ -48,9 +49,11 @@ export default function PremiumInputs() {
   // Two manual rate sections off Gold big Ask.
   const goldAsk = d?.mcx_gold?.ask;
   const onlyPremIn = cfg.onlyPrem === "" || cfg.onlyPrem == null ? null : Number(cfg.onlyPrem);
-  const onlyPremRate = goldAsk != null && onlyPremIn != null ? (goldAsk + onlyPremIn) * 1.03 : null; // (Ask+Prem)×1.03
+  const onlyPremRate = goldAsk != null && onlyPremIn != null ? (goldAsk + onlyPremIn) * 1.03 : null; // box1: (Ask+Prem)×1.03
   const prmGstIn = cfg.prmGst === "" || cfg.prmGst == null ? null : Number(cfg.prmGst);
-  const gstPrem = goldAsk != null && prmGstIn != null ? prmGstIn / 1.03 - goldAsk : null; // Rate÷1.03 − Ask = premium
+  const rateWithGst = goldAsk != null && prmGstIn != null ? goldAsk + prmGstIn : null; // box2: Ask + PRM GST
+  const gstRateIn = cfg.gstRate === "" || cfg.gstRate == null ? null : Number(cfg.gstRate);
+  const gstPrem = goldAsk != null && gstRateIn != null ? gstRateIn / 1.03 - goldAsk : null; // box3: Rate÷1.03 − Ask
   const setF = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
   const num = (v, dp = 2) => (v == null ? "—" : fmtNum(v, dp));
 
@@ -133,11 +136,23 @@ export default function PremiumInputs() {
         <div className="pv-table">
           <div className="pv-hrow"><span>Premium with GST</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
-            <span className="pv-param">Rate with GST <span className="pv-mut">(type here)</span></span>
+            <span className="pv-param">Premium GST <span className="pv-mut">(type here)</span></span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03−Ask</span></span>
+            <span className="pv-param">Rate <span className="pv-mut">Ask + PRM GST</span></span>
+            <span className="pv-pval">{num(rateWithGst, 0)}</span>
+          </div>
+        </div>
+
+        <div className="pv-table pv-span">
+          <div className="pv-hrow"><span>Premium from Rate</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
+          <div className="pv-row">
+            <span className="pv-param">Rate with GST <span className="pv-mut">(type here)</span></span>
+            <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.gstRate} onChange={(e) => setF("gstRate", e.target.value)} />
+          </div>
+          <div className="pv-row pv-prem">
+            <span className="pv-param">Premium <span className="pv-mut">Rate ÷ 1.03 − Ask</span></span>
             <span className={`pv-pval ${gstPrem == null ? "" : gstPrem >= 0 ? "pos" : "neg"}`}>{num(gstPrem, 0)}</span>
           </div>
         </div>
