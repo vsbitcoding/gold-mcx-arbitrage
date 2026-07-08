@@ -6,12 +6,13 @@ import { fmtNum } from "../utils/format.js";
 //   Premium = ((Spot + Cost) × Conversion × (USD/INR + spread) + Duty) / 100 − MCX Bid
 //   Two variants: 999 (conversion 32.12) and 995 (conversion 31.99).
 const LS_KEY = "arbi_premium_v1";
-const DEFAULTS = { cost: 5, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01, onlyPrem: "", prmGst: "" };
+const DEFAULTS = { cost: 5, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01, onlyPrem: "", prmGst: "", manRate: "" };
 // convBank -> "999" (32.12) ; convAdani -> "995" (31.99)
-// Two calculators (client sheet):
+// Three calculators (client sheet):
 //   onlyPrem -> "Only Premium": type a premium -> Price = (Gold Ask + onlyPrem) × 1.03   [=(+D9+F15)*1.03]
 //   prmGst   -> "Premium with GST": type a premium -> Rate = Gold Ask + prmGst, and then
 //               Premium = Rate / 1.03 − Gold Ask   [=G15+D9 ; =G16/1.03-D9]  (chained in same box)
+//   manRate  -> "Premium from Rate": type a rate (yellow) -> Premium = manRate / 1.03 − Gold Ask  [=F18/1.03-D9]
 // Blank -> shows "—".
 
 function loadCfg() {
@@ -53,6 +54,8 @@ export default function PremiumInputs() {
   const prmGstIn = cfg.prmGst === "" || cfg.prmGst == null ? null : Number(cfg.prmGst);
   const rateWithGst = goldAsk != null && prmGstIn != null ? goldAsk + prmGstIn : null;   // Rate = Ask + PRM GST
   const gstPrem = rateWithGst != null && goldAsk != null ? rateWithGst / 1.03 - goldAsk : null; // Rate÷1.03 − Ask
+  const manRateIn = cfg.manRate === "" || cfg.manRate == null ? null : Number(cfg.manRate);
+  const manPrem = manRateIn != null && goldAsk != null ? manRateIn / 1.03 - goldAsk : null; // manual Rate÷1.03 − Ask
   const setF = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
   const num = (v, dp = 2) => (v == null ? "—" : fmtNum(v, dp));
 
@@ -145,6 +148,18 @@ export default function PremiumInputs() {
           <div className="pv-row pv-prem">
             <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03 − Ask</span></span>
             <span className={`pv-pval ${gstPrem == null ? "" : gstPrem >= 0 ? "pos" : "neg"}`}>{num(gstPrem, 0)}</span>
+          </div>
+        </div>
+
+        <div className="pv-table pv-span">
+          <div className="pv-hrow"><span>Premium from Rate</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
+          <div className="pv-row">
+            <span className="pv-param">Rate <span className="pv-mut">(type here)</span></span>
+            <input className="pv-input pv-yin" type="number" step="0.01" placeholder="—" value={cfg.manRate} onChange={(e) => setF("manRate", e.target.value)} />
+          </div>
+          <div className="pv-row pv-prem">
+            <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03 − Ask</span></span>
+            <span className={`pv-pval ${manPrem == null ? "" : manPrem >= 0 ? "pos" : "neg"}`}>{num(manPrem, 0)}</span>
           </div>
         </div>
       </div>
