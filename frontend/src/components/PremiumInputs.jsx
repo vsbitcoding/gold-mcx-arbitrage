@@ -119,25 +119,25 @@ export default function PremiumInputs() {
 
       <div className="pv-two">
         <div className="pv-table">
-          <div className="pv-hrow"><span>Only Premium</span><span /></div>
+          <div className="pv-hrow"><span>Only Premium</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
             <span className="pv-param">Premium <span className="pv-mut">(type here)</span></span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.onlyPrem} onChange={(e) => setF("onlyPrem", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">(Ask + Premium) × 1.03{goldAsk != null && <span className="pv-mut"> · Ask {num(goldAsk, 0)}</span>}</span>
+            <span className="pv-param">Price <span className="pv-mut">(Ask+Prem)×1.03</span></span>
             <span className="pv-pval">{num(onlyPremRate, 0)}</span>
           </div>
         </div>
 
         <div className="pv-table">
-          <div className="pv-hrow"><span>Premium with GST</span><span /></div>
+          <div className="pv-hrow"><span>Premium with GST</span><span className="pv-ask">{goldAsk != null ? `Ask ${num(goldAsk, 0)}` : ""}</span></div>
           <div className="pv-row">
             <span className="pv-param">Rate with GST <span className="pv-mut">(type here)</span></span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Premium{goldAsk != null && <span className="pv-mut"> ÷1.03 − Ask {num(goldAsk, 0)}</span>}</span>
+            <span className="pv-param">Premium <span className="pv-mut">Rate÷1.03−Ask</span></span>
             <span className={`pv-pval ${gstPrem == null ? "" : gstPrem >= 0 ? "pos" : "neg"}`}>{num(gstPrem, 0)}</span>
           </div>
         </div>
