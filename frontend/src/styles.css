@@ -4261,6 +4261,8 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bs-note { background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text-secondary); }
 .bs-note.bad { background: var(--red-bg); border-color: var(--red); color: var(--red); }
 .bs-note.bs-slim { padding: 8px 12px; }
+.bs-note.bs-stale { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; font-size: 13.5px; line-height: 1.45; }
+.bs-stale-ico { font-size: 17px; line-height: 1; flex-shrink: 0; }
 .bs-muted { color: var(--text-muted); font-weight: 500; }
 
 .bs-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 12px; align-items: stretch; }

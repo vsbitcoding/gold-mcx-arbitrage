@@ -189,7 +189,9 @@ export default function BullionStock() {
   const corrShown = showWeak ? corrRanked : corrRanked.filter((c) => Math.abs(c.r) >= 0.4);
 
   const stale = data?.stale_days;
-  const staleBad = stale != null && stale > 5;
+  // MCXCCL data is normally ~1-2 days behind (they publish yesterday's file);
+  // 3+ days behind means the feed has genuinely fallen behind, not normal lag.
+  const staleWarn = stale != null && stale >= 3;
 
   return (
     <div className="bs-wrap">
@@ -199,7 +201,7 @@ export default function BullionStock() {
           <div className="bs-sub">
             {data?.as_on_date ? (
               <>As on <b>{data.as_on_date}</b>{" "}
-                {stale != null && <span className={`bs-pill ${staleBad ? "bad" : "ok"}`}>{stale}d old</span>}
+                {stale != null && <span className={`bs-pill ${staleWarn ? "bad" : "ok"}`}>{stale}d old</span>}
                 <span className="bs-hint"> · exchange deliverable stock, updated daily</span>
               </>
             ) : "No stock fetched yet"}
@@ -229,9 +231,19 @@ export default function BullionStock() {
         </div>
       </div>
 
+      {staleWarn && (
+        <div className="bs-note bad bs-stale">
+          <span className="bs-stale-ico" aria-hidden="true">⚠</span>
+          <span>
+            <b>Data may be stale.</b> Last updated <b>{data.as_on_date}</b> ({stale} days ago).
+            The feed retries automatically through the day — if this keeps showing, the MCXCCL source
+            may have changed. Try <b>⟳ Fetch now</b>.
+          </span>
+        </div>
+      )}
       {err && <div className="bs-note bad">Error: {err}</div>}
       {!err && data && !data.latest?.length && (
-        <div className="bs-note">No data yet — the daily scrape runs at <b>18:00 IST</b>. Press <b>Fetch now</b> to pull immediately.</div>
+        <div className="bs-note">No data yet — the scrape runs from <b>09:00 IST</b> and retries through the day. Press <b>Fetch now</b> to pull immediately.</div>
       )}
 
       {data?.latest?.length > 0 && (
