@@ -8,9 +8,9 @@ import { fmtNum } from "../utils/format.js";
 const LS_KEY = "arbi_premium_v1";
 const DEFAULTS = { cost: 5, duty: 1854062, convBank: 32.12, convAdani: 31.99, fxAdj: 0.01, onlyPrem: "", prmGst: "" };
 // convBank -> "999" (32.12) ; convAdani -> "995" (31.99)
-// Two manual sections the client asked for (each: type a premium -> get the rate):
-//   onlyPrem -> "Only Premium" (the "-1400" box, blank): rate = (Gold Ask + onlyPrem) × 1.03  [=(+D9+F15)*1.03]
-//   prmGst   -> "Premium with GST" (the "3225" box):     rate =  Gold Ask + prmGst            [=G15+D9]
+// Two manual sections the client asked for (inverse of each other):
+//   onlyPrem -> "Only Premium": type a premium (the "-1400" box) -> price = (Gold Ask + onlyPrem) × 1.03  [=(+D9+F15)*1.03]
+//   prmGst   -> "Premium with GST": type a GST-inclusive rate (e.g. 148450) -> premium = prmGst / 1.03 − Gold Ask  [=F18/1.03-D9]
 // Blank -> shows "—".
 
 function loadCfg() {
@@ -50,7 +50,7 @@ export default function PremiumInputs() {
   const onlyPremIn = cfg.onlyPrem === "" || cfg.onlyPrem == null ? null : Number(cfg.onlyPrem);
   const onlyPremRate = goldAsk != null && onlyPremIn != null ? (goldAsk + onlyPremIn) * 1.03 : null; // (Ask+Prem)×1.03
   const prmGstIn = cfg.prmGst === "" || cfg.prmGst == null ? null : Number(cfg.prmGst);
-  const rateWithGst = goldAsk != null && prmGstIn != null ? goldAsk + prmGstIn : null; // Ask + PRM GST
+  const gstPrem = goldAsk != null && prmGstIn != null ? prmGstIn / 1.03 - goldAsk : null; // Rate÷1.03 − Ask = premium
   const setF = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
   const num = (v, dp = 2) => (v == null ? "—" : fmtNum(v, dp));
 
@@ -133,12 +133,12 @@ export default function PremiumInputs() {
         <div className="pv-table">
           <div className="pv-hrow"><span>Premium with GST</span><span /></div>
           <div className="pv-row">
-            <span className="pv-param">Premium with GST <span className="pv-mut">(type here)</span></span>
+            <span className="pv-param">Rate with GST <span className="pv-mut">(type here)</span></span>
             <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
           </div>
           <div className="pv-row pv-prem">
-            <span className="pv-param">Ask + PRM GST{goldAsk != null && <span className="pv-mut"> · Ask {num(goldAsk, 0)}</span>}</span>
-            <span className="pv-pval">{num(rateWithGst, 0)}</span>
+            <span className="pv-param">Premium{goldAsk != null && <span className="pv-mut"> ÷1.03 − Ask {num(goldAsk, 0)}</span>}</span>
+            <span className={`pv-pval ${gstPrem == null ? "" : gstPrem >= 0 ? "pos" : "neg"}`}>{num(gstPrem, 0)}</span>
           </div>
         </div>
       </div>
