@@ -174,26 +174,18 @@ export default function PremiumInputs() {
       <div className="pv-head"><h2><span className="pv-x">Premium</span></h2></div>
       {err && <div className="settings-banner danger">⚠ Couldn't reach the live feed.</div>}
 
-      {/* parameter tables side by side */}
+      {/* Gold | Silver side by side; each column = its table + its 3 calculators below */}
       <div className="pv-cols">
         <div className="pv-metalcol gold">
           <div className="pv-metalhead gold">Gold</div>
           <MainTable v={vg} cfg={cfgGold} setF={setGold} />
+          <Calcs v={vg} cfg={cfgGold} setF={setGold} />
         </div>
         <div className="pv-metalcol silver">
           <div className="pv-metalhead silver">Silver</div>
           <MainTable v={vs} cfg={cfgSilver} setF={setSilver} />
+          <Calcs v={vs} cfg={cfgSilver} setF={setSilver} />
         </div>
-      </div>
-
-      {/* each metal's 3 calculators — full-width, 3 across */}
-      <div className="pv-calcwrap gold">
-        <div className="pv-metalhead gold">Gold</div>
-        <Calcs v={vg} cfg={cfgGold} setF={setGold} />
-      </div>
-      <div className="pv-calcwrap silver">
-        <div className="pv-metalhead silver">Silver</div>
-        <Calcs v={vs} cfg={cfgSilver} setF={setSilver} />
       </div>
     </div>
   );
