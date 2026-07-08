@@ -1,8 +1,8 @@
 """Live premium-calc inputs — ISOLATED, in-memory, zero DB.
 
-  XAU/USD  : Deriv public WebSocket  (real-time tick, free)
-  USD/INR  : TwelveData spot         (polled every ~2 min, free — barely moves)
-  MCX gold : read from the EXISTING Dhan quote_store (no new subscription)
+  XAU/USD + XAG/USD : Deriv public WebSocket  (real-time tick, free)
+  USD/INR           : TwelveData spot         (polled every ~2 min, free — barely moves)
+  MCX gold + silver : read from the EXISTING Dhan quote_store (no new subscription)
 
 Nothing here touches the Dhan feed, its subscriptions, or the database. Two tiny
 daemon threads hold the latest values in memory; the route just reads them. If a
@@ -23,7 +23,9 @@ from app.config import settings
 log = logging.getLogger("premium_feed")
 
 _state = {
-    "xauusd": None, "xauusd_ts": 0.0, "deriv_connected": False,
+    "xauusd": None, "xauusd_ts": 0.0,
+    "xagusd": None, "xagusd_ts": 0.0,
+    "deriv_connected": False,
     "usdinr": None, "usdinr_ts": 0.0,
 }
 _stop = threading.Event()
@@ -40,7 +42,8 @@ async def _deriv_loop() -> None:
         try:
             async with websockets.connect(url, ping_interval=20, ping_timeout=20, close_timeout=5) as ws:
                 await ws.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
-                log.info("Premium: Deriv WS connected (XAU/USD)")
+                await ws.send(json.dumps({"ticks": "frxXAGUSD", "subscribe": 1}))
+                log.info("Premium: Deriv WS connected (XAU/USD + XAG/USD)")
                 async for raw in ws:
                     if _stop.is_set():
                         break
@@ -49,10 +52,15 @@ async def _deriv_loop() -> None:
                     except Exception:
                         continue
                     if m.get("msg_type") == "tick" and m.get("tick"):
-                        q = m["tick"].get("quote")
-                        if q:
-                            _state["xauusd"] = float(q)
-                            _state["xauusd_ts"] = time.time()
+                        t = m["tick"]
+                        q = t.get("quote")
+                        if q is not None:
+                            if t.get("symbol") == "frxXAGUSD":
+                                _state["xagusd"] = float(q)
+                                _state["xagusd_ts"] = time.time()
+                            else:  # frxXAUUSD
+                                _state["xauusd"] = float(q)
+                                _state["xauusd_ts"] = time.time()
                             _state["deriv_connected"] = True
         except Exception as e:  # noqa: BLE001
             _state["deriv_connected"] = False
@@ -86,16 +94,19 @@ def _usdinr_thread() -> None:
             break
 
 
-# ── MCX gold from the existing quote_store (no new subscription) ─────────
-def _mcx_gold() -> dict | None:
+# ── MCX metal from the existing quote_store (no new subscription) ────────
+def _mcx(short: str) -> dict | None:
+    """Near-month MCX future for a price_service instrument key ('gold' / 'silver')."""
     try:
         from app.services import price_service
         from app.services.market_data import quote_store
-        contracts = price_service._state.get("contracts", {}).get("gold", [])
+        contracts = price_service._state.get("contracts", {}).get(short, [])
         if not contracts:
             return None
         c = contracts[0]  # near month
         q = quote_store.get(c["security_id"])
+        if q is None:
+            return None
         return {
             "ltp": (q.ltp or None), "bid": (q.bid or None), "ask": (q.ask or None),
             "expiry": c["expiry"].strftime("%d %b %Y"),
@@ -111,11 +122,15 @@ def get_inputs() -> dict:
         "xauusd": _state["xauusd"],
         "xauusd_age": round(now - _state["xauusd_ts"], 1) if _state["xauusd_ts"] else None,
         "xauusd_source": "Deriv (live)",
+        "xagusd": _state["xagusd"],
+        "xagusd_age": round(now - _state["xagusd_ts"], 1) if _state["xagusd_ts"] else None,
+        "xagusd_source": "Deriv (live)",
         "deriv_connected": _state["deriv_connected"],
         "usdinr": _state["usdinr"],
         "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
         "usdinr_source": "TwelveData spot",
-        "mcx_gold": _mcx_gold(),
+        "mcx_gold": _mcx("gold"),
+        "mcx_silver": _mcx("silver"),
         "server_time": now,
     }
 
