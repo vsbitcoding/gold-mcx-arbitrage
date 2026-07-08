@@ -115,25 +115,31 @@ export default function PremiumInputs() {
           <span className="pv-param">Premium — 995</span>
           <span className={`pv-pval ${p995 == null ? "" : p995 >= 0 ? "pos" : "neg"}`}>{num(p995)}</span>
         </div>
+      </div>
 
-        <div className="pv-hrow pv-sec"><span>Only Premium</span><span /></div>
-        <div className="pv-row">
-          <span className="pv-param">Premium <span className="pv-mut">(type here)</span></span>
-          <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.onlyPrem} onChange={(e) => setF("onlyPrem", e.target.value)} />
-        </div>
-        <div className="pv-row pv-prem">
-          <span className="pv-param">(Ask + Premium) × 1.03{goldAsk != null && <span className="pv-mut"> (Ask {num(goldAsk, 0)})</span>}</span>
-          <span className="pv-pval">{num(onlyPremRate, 0)}</span>
+      <div className="pv-two">
+        <div className="pv-table">
+          <div className="pv-hrow"><span>Only Premium</span><span /></div>
+          <div className="pv-row">
+            <span className="pv-param">Premium <span className="pv-mut">(type here)</span></span>
+            <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.onlyPrem} onChange={(e) => setF("onlyPrem", e.target.value)} />
+          </div>
+          <div className="pv-row pv-prem">
+            <span className="pv-param">(Ask + Premium) × 1.03{goldAsk != null && <span className="pv-mut"> · Ask {num(goldAsk, 0)}</span>}</span>
+            <span className="pv-pval">{num(onlyPremRate, 0)}</span>
+          </div>
         </div>
 
-        <div className="pv-hrow pv-sec"><span>Premium with GST</span><span /></div>
-        <div className="pv-row">
-          <span className="pv-param">Premium with GST <span className="pv-mut">(type here)</span></span>
-          <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
-        </div>
-        <div className="pv-row pv-prem">
-          <span className="pv-param">Ask + PRM GST{goldAsk != null && <span className="pv-mut"> (Ask {num(goldAsk, 0)})</span>}</span>
-          <span className="pv-pval">{num(rateWithGst, 0)}</span>
+        <div className="pv-table">
+          <div className="pv-hrow"><span>Premium with GST</span><span /></div>
+          <div className="pv-row">
+            <span className="pv-param">Premium with GST <span className="pv-mut">(type here)</span></span>
+            <input className="pv-input" type="number" step="0.01" placeholder="—" value={cfg.prmGst} onChange={(e) => setF("prmGst", e.target.value)} />
+          </div>
+          <div className="pv-row pv-prem">
+            <span className="pv-param">Ask + PRM GST{goldAsk != null && <span className="pv-mut"> · Ask {num(goldAsk, 0)}</span>}</span>
+            <span className="pv-pval">{num(rateWithGst, 0)}</span>
+          </div>
         </div>
       </div>
     </div>

@@ -4699,6 +4699,10 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pv-pval { font-size: 23px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .pv-pval.pos { color: var(--green); }
 .pv-pval.neg { color: var(--red); }
+/* Only Premium / Premium with GST side by side */
+.pv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; align-items: start; }
+.pv-two .pv-pval { font-size: 20px; }
 @media (max-width: 560px) {
   .pv-hrow, .pv-row { padding: 10px 12px; gap: 10px; }
+  .pv-two { grid-template-columns: 1fr; }
 }
