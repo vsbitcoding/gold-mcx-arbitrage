@@ -127,6 +127,7 @@ export default function Header({ user, onLogout, theme, onToggleTheme, feedStatu
               key={it.key}
               className={`sidebar-item${page === it.key ? " active" : ""}${it.key === "signals" ? " sidebar-item-signals" : ""}`}
               onClick={() => go(it.key)}
+              title={it.label.replace(/^⚡\s*/, "")}
             >
               <span className="sidebar-ic"><NavIcon name={it.key} /></span>
               <span className="sidebar-lbl">{it.label.replace(/^⚡\s*/, "")}</span>
