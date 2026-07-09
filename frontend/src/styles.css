@@ -83,75 +83,12 @@ body {
   font-size: 13px;
 }
 
-.app { display: flex; align-items: flex-start; min-height: 100vh; }
+.app { min-height: 100vh; }
 
 .container {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 20px 18px 28px;
-}
-
-/* ===== SIDEBAR (left nav) ===== */
-.sidebar { width: 216px; flex: none; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 100; overflow: hidden; transition: width .2s ease; }
-.sidebar-brand { display: flex; align-items: center; gap: 8px; padding: 14px; border-bottom: 1px solid var(--border-light); color: var(--text-primary); }
-.sidebar-brand .brand-name { font-weight: 800; letter-spacing: .2px; font-size: 16px; }
-.sidebar-brand .brand-sub { font-weight: 600; font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-muted); }
-.sidebar-x { display: none; }
-.sidebar-collapse { margin-left: auto; background: none; border: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--text-muted); padding: 2px 6px; border-radius: 6px; }
-.sidebar-collapse:hover { color: var(--text-primary); background: var(--bg-hover); }
-.sidebar-nav { flex: 1 1 auto; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
-.sidebar-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 11px; border-radius: 8px; background: transparent; border: none; cursor: pointer; color: var(--text-secondary); font-size: 13px; font-weight: 600; text-align: left; }
-.sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-.sidebar-item.active { background: var(--accent-bg); color: var(--accent-ink); }
-.sidebar-item.active .sidebar-ic { color: var(--accent-ink); }
-.sidebar-ic { display: inline-flex; color: var(--text-muted); flex: none; }
-.sidebar-lbl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-count { font-size: 11px; font-weight: 700; color: var(--text-muted); background: var(--bg-surface-alt); border-radius: 10px; padding: 1px 7px; flex: none; }
-.sidebar-item.active .sidebar-count { color: var(--accent-ink); background: var(--bg-surface); }
-.sidebar-item-signals .sidebar-ic { color: #f59e0b; }
-.sidebar-foot { border-top: 1px solid var(--border-light); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.sidebar-foot .health-pill { width: fit-content; }
-.sidebar-user { display: flex; align-items: center; gap: 8px; }
-.sidebar-user-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.sidebar-act { background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 7px; width: 30px; height: 30px; cursor: pointer; color: var(--text-secondary); flex: none; font-size: 14px; }
-.sidebar-logout { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--red-bg); color: var(--red); border: 1px solid var(--red); border-radius: 7px; padding: 7px; cursor: pointer; font-weight: 600; font-size: 13px; }
-
-.mobile-bar { display: none; }
-.sidebar-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 190; }
-.sidebar-reopen { display: none; }
-
-/* Desktop: collapse the sidebar to a slim icon rail (with width animation) */
-@media (min-width: 901px) {
-  .app.sidebar-collapsed .sidebar { width: 60px; }
-  .app.sidebar-collapsed .sidebar .brand-name,
-  .app.sidebar-collapsed .sidebar .brand-sub,
-  .app.sidebar-collapsed .sidebar-lbl,
-  .app.sidebar-collapsed .sidebar-count,
-  .app.sidebar-collapsed .sidebar-user-name,
-  .app.sidebar-collapsed .sidebar-logout-lbl,
-  .app.sidebar-collapsed .health-label,
-  .app.sidebar-collapsed .health-meta { display: none; }
-  .app.sidebar-collapsed .sidebar-brand { flex-direction: column; gap: 8px; padding: 12px 6px; justify-content: center; }
-  .app.sidebar-collapsed .sidebar-collapse { margin: 0; transform: rotate(180deg); }
-  .app.sidebar-collapsed .sidebar-nav { padding: 8px 6px; }
-  .app.sidebar-collapsed .sidebar-item { justify-content: center; padding: 9px 0; }
-  .app.sidebar-collapsed .sidebar-foot { align-items: center; padding: 10px 6px; }
-  .app.sidebar-collapsed .sidebar-user { flex-direction: column; gap: 8px; }
-  .app.sidebar-collapsed .sidebar-logout { padding: 8px; }
-  .app.sidebar-collapsed .health-pill { padding: 5px; }
-}
-
-@media (max-width: 900px) {
-  .sidebar-collapse { display: none; }
-  .mobile-bar { display: flex; align-items: center; gap: 12px; position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 0 14px; z-index: 150; }
-  .mobile-bar .brand { flex: 1 1 auto; font-size: 16px; }
-  .sb-burger { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-primary); line-height: 1; padding: 0; }
-  .sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 264px; max-width: 84vw; transform: translateX(-100%); transition: transform .22s ease; z-index: 200; box-shadow: 4px 0 28px rgba(0, 0, 0, .28); }
-  .sidebar.open { transform: none; }
-  .sidebar-x { display: inline-flex; margin-left: auto; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); line-height: 1; }
-  /* content scrolls in its own region BELOW the fixed bar → nothing slides under it,
-     and sticky headers (top:0) stick to this region's top, not behind the bar */
-  .container { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 14px 24px; }
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 16px 24px;
 }
 
 /* ===== HEADER ===== */
@@ -529,7 +466,7 @@ body {
 .stat-value.neg { color: var(--red); }
 
 /* ===== SESSIONS / CARD ===== */
-/* Spread tabs render self-contained cards → no white panel wrapper, cards sit on the page */
+/* Spread tabs render self-contained cards → no white panel, cards sit on the page */
 .sessions-container {
   background: transparent;
   border: none;
