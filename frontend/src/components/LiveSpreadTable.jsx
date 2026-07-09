@@ -57,8 +57,12 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
   const sliceGroups = groupedRows.slice(start, start + PAIR_PAGE_SIZE);
   useEffect(() => { setPage(1); }, [tab]);
 
+  // Card-based tabs render self-contained cards → drop the white panel wrapper
+  // so cards sit directly on the page (no big empty white box).
+  const cardView = !["price", "signals"].includes(tab);
+
   return (
-    <div className="sessions-container">
+    <div className={`sessions-container${cardView ? " bare" : ""}`}>
       {tab === "signals" && <SignalsPanel signals={signalRows} />}
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
       {tab === "price" && <PriceTable data={priceData} embedded />}

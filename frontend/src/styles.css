@@ -509,6 +509,8 @@ body {
   overflow: hidden;
   margin-bottom: 24px;
 }
+/* Card-based tabs: no white panel — cards sit directly on the page */
+.sessions-container.bare { background: transparent; border: none; border-radius: 0; overflow: visible; margin-bottom: 0; }
 .sessions-header {
   padding: 14px 16px;
   background: var(--bg-surface);
