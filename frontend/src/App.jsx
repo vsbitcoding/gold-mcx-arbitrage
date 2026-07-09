@@ -40,7 +40,14 @@ function Dashboard() {
   const [density, setDensity] = useState(getStoredDensity());
   const [user] = useState("Vivek_Bitcoding");
   const [page, setPage] = useState(getStoredPage());
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem("arbi_nav_collapsed") === "1"; } catch { return false; }
+  });
   const fallbackRef = useRef(null);
+
+  useEffect(() => {
+    try { localStorage.setItem("arbi_nav_collapsed", navCollapsed ? "1" : "0"); } catch {}
+  }, [navCollapsed]);
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
@@ -205,7 +212,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${navCollapsed ? " sidebar-collapsed" : ""}`}>
       <Header
         user={user}
         onLogout={logout}
@@ -218,6 +225,7 @@ function Dashboard() {
         page={page}
         onNavigate={setPage}
         counts={counts}
+        onToggleCollapse={() => setNavCollapsed((v) => !v)}
       />
       <div className="container">
         {SPREAD_TABS.includes(page) && (

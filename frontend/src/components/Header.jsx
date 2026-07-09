@@ -37,7 +37,7 @@ function NavIcon({ name }) {
   }
 }
 
-export default function Header({ user, onLogout, theme, onToggleTheme, feedStatus, wsState, page, onNavigate, counts = {} }) {
+export default function Header({ user, onLogout, theme, onToggleTheme, feedStatus, wsState, page, onNavigate, counts = {}, onToggleCollapse }) {
   const [open, setOpen] = useState(false);
 
   // Close mobile drawer on Escape; lock page scroll while open.
@@ -99,6 +99,9 @@ export default function Header({ user, onLogout, theme, onToggleTheme, feedStatu
 
   return (
     <>
+      {/* Desktop: floating button to reopen a collapsed sidebar */}
+      <button className="sidebar-reopen" onClick={onToggleCollapse} aria-label="Open menu" title="Open menu">☰</button>
+
       {/* Mobile top bar (hidden on desktop) */}
       <div className="mobile-bar">
         <button className="sb-burger" onClick={() => setOpen(true)} aria-label="Menu">☰</button>
@@ -117,6 +120,7 @@ export default function Header({ user, onLogout, theme, onToggleTheme, feedStatu
           <BrandMark size={30} />
           <span className="brand-name">Gurukrupa</span>
           <span className="brand-sub">Bullion</span>
+          <button className="sidebar-collapse" onClick={onToggleCollapse} aria-label="Collapse menu" title="Collapse menu">«</button>
           <button className="sidebar-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
         </div>
 
