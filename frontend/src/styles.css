@@ -92,7 +92,7 @@ body {
 }
 
 /* ===== SIDEBAR (left nav) ===== */
-.sidebar { width: 216px; flex: none; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 100; }
+.sidebar { width: 216px; flex: none; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 100; overflow: hidden; transition: width .2s ease; }
 .sidebar-brand { display: flex; align-items: center; gap: 8px; padding: 14px; border-bottom: 1px solid var(--border-light); color: var(--text-primary); }
 .sidebar-brand .brand-name { font-weight: 800; letter-spacing: .2px; font-size: 16px; }
 .sidebar-brand .brand-sub { font-weight: 600; font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-muted); }
@@ -114,17 +114,31 @@ body {
 .sidebar-user { display: flex; align-items: center; gap: 8px; }
 .sidebar-user-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .sidebar-act { background: var(--bg-surface-alt); border: 1px solid var(--border); border-radius: 7px; width: 30px; height: 30px; cursor: pointer; color: var(--text-secondary); flex: none; font-size: 14px; }
-.sidebar-logout { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); border-radius: 7px; padding: 7px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.sidebar-logout { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--red-bg); color: var(--red); border: 1px solid var(--red); border-radius: 7px; padding: 7px; cursor: pointer; font-weight: 600; font-size: 13px; }
 
 .mobile-bar { display: none; }
 .sidebar-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 190; }
-.sidebar-reopen { display: none; position: fixed; top: 10px; left: 8px; z-index: 120; width: 34px; height: 34px; align-items: center; justify-content: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 18px; color: var(--text-primary); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+.sidebar-reopen { display: none; }
 
-/* Desktop: collapse the sidebar for more working room */
+/* Desktop: collapse the sidebar to a slim icon rail (with width animation) */
 @media (min-width: 901px) {
-  .app.sidebar-collapsed .sidebar { display: none; }
-  .app.sidebar-collapsed .container { padding-left: 48px; }
-  .app.sidebar-collapsed .sidebar-reopen { display: inline-flex; }
+  .app.sidebar-collapsed .sidebar { width: 60px; }
+  .app.sidebar-collapsed .sidebar .brand-name,
+  .app.sidebar-collapsed .sidebar .brand-sub,
+  .app.sidebar-collapsed .sidebar-lbl,
+  .app.sidebar-collapsed .sidebar-count,
+  .app.sidebar-collapsed .sidebar-user-name,
+  .app.sidebar-collapsed .sidebar-logout-lbl,
+  .app.sidebar-collapsed .health-label,
+  .app.sidebar-collapsed .health-meta { display: none; }
+  .app.sidebar-collapsed .sidebar-brand { flex-direction: column; gap: 8px; padding: 12px 6px; justify-content: center; }
+  .app.sidebar-collapsed .sidebar-collapse { margin: 0; transform: rotate(180deg); }
+  .app.sidebar-collapsed .sidebar-nav { padding: 8px 6px; }
+  .app.sidebar-collapsed .sidebar-item { justify-content: center; padding: 9px 0; }
+  .app.sidebar-collapsed .sidebar-foot { align-items: center; padding: 10px 6px; }
+  .app.sidebar-collapsed .sidebar-user { flex-direction: column; gap: 8px; }
+  .app.sidebar-collapsed .sidebar-logout { padding: 8px; }
+  .app.sidebar-collapsed .health-pill { padding: 5px; }
 }
 
 @media (max-width: 900px) {

@@ -99,9 +99,6 @@ export default function Header({ user, onLogout, theme, onToggleTheme, feedStatu
 
   return (
     <>
-      {/* Desktop: floating button to reopen a collapsed sidebar */}
-      <button className="sidebar-reopen" onClick={onToggleCollapse} aria-label="Open menu" title="Open menu">☰</button>
-
       {/* Mobile top bar (hidden on desktop) */}
       <div className="mobile-bar">
         <button className="sb-burger" onClick={() => setOpen(true)} aria-label="Menu">☰</button>
@@ -145,7 +142,7 @@ export default function Header({ user, onLogout, theme, onToggleTheme, feedStatu
             <span className="sidebar-user-name">{user || "User"}</span>
             <button className="sidebar-act" onClick={onToggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>{theme === "dark" ? "☀" : "☾"}</button>
           </div>
-          <button className="sidebar-logout" onClick={onLogout}>⎋ Logout</button>
+          <button className="sidebar-logout" onClick={onLogout} title="Logout"><span className="sidebar-logout-ic">⎋</span><span className="sidebar-logout-lbl">Logout</span></button>
         </div>
       </aside>
     </>
