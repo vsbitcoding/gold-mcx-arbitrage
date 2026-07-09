@@ -4714,7 +4714,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 480px) { .pi-grid { grid-template-columns: 1fr; } }
 
 /* ===== Premium — Gold | Silver side by side ===== */
-.pv-page { padding: 2px; max-width: 1400px; }
+.pv-page { padding: 2px; max-width: 100%; }
 .pv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .pv-metalcol { min-width: 0; }
 .pv-metalcol.gold { background: rgba(201, 162, 78, 0.10); border: 1px solid rgba(201, 162, 78, 0.28); border-radius: 12px; padding: 10px 12px; }
