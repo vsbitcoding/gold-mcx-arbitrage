@@ -151,7 +151,7 @@ export default function OptionsSpread() {
           title={"Day move vs previous close.\nExpected = Nifty change × 3.2;\ndivergence = actual Sensex change − expected.\n+ = Sensex stronger than ratio · − = weaker"}
         >
           <span className="opt-spot-label">
-            {data?.day_divergence != null && <span className="live-dot" />}DAY Δ · S vs N×3.2
+            {data?.day_divergence != null && <span className="live-dot" />}DAY CHANGE
           </span>
           <div className="opt-day-flex">
             <div className="opt-day-seg">
