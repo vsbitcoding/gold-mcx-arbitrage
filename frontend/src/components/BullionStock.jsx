@@ -86,6 +86,7 @@ export default function BullionStock() {
   });
   useEffect(() => { try { localStorage.setItem("arbi_bs_view", view); } catch {} }, [view]);
   const [showWeak, setShowWeak] = useState(false);
+  const [histPage, setHistPage] = useState(1); // Daily History pagination (6-month backfill → many rows)
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -296,8 +297,14 @@ export default function BullionStock() {
             </div>
           </div>
 
-          {/* Full daily matrix — every commodity, every day */}
-          {matrix.dates.length > 0 && (
+          {/* Full daily matrix — every commodity, every day (paginated) */}
+          {matrix.dates.length > 0 && (() => {
+            const HIST_PAGE = 15;
+            const totalPages = Math.max(1, Math.ceil(matrix.dates.length / HIST_PAGE));
+            const safe = Math.min(histPage, totalPages);
+            const start = (safe - 1) * HIST_PAGE;
+            const pageDates = matrix.dates.slice(start, start + HIST_PAGE);
+            return (
             <div className="bs-card bs-matrix-card">
               <div className="bs-card-h">Daily History <span className="bs-muted">· {matrix.dates.length} days · all commodities</span></div>
               <div className="bs-tbl-scroll">
@@ -309,7 +316,7 @@ export default function BullionStock() {
                     </tr>
                   </thead>
                   <tbody>
-                    {matrix.dates.map((d) => (
+                    {pageDates.map((d) => (
                       <tr key={d}>
                         <td>{d}</td>
                         {commodities.map((c) => (
@@ -320,8 +327,21 @@ export default function BullionStock() {
                   </tbody>
                 </table>
               </div>
+              {totalPages > 1 && (
+                <div className="pagination-controls">
+                  <div>Showing {start + 1}-{Math.min(start + HIST_PAGE, matrix.dates.length)} of {matrix.dates.length} days</div>
+                  <div className="pager">
+                    <button onClick={() => setHistPage(1)} disabled={safe === 1}>«</button>
+                    <button onClick={() => setHistPage((p) => Math.max(1, p - 1))} disabled={safe === 1}>‹</button>
+                    <button className="active">{safe}</button>
+                    <button onClick={() => setHistPage((p) => Math.min(totalPages, p + 1))} disabled={safe === totalPages}>›</button>
+                    <button onClick={() => setHistPage(totalPages)} disabled={safe === totalPages}>»</button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
           </>
           )}
 
@@ -337,7 +357,7 @@ export default function BullionStock() {
                     <div className="bs-corr-chart">
                       <div className="bs-legend">
                         <span><i className="dot" style={{ background: "var(--yellow)" }} /> Stock</span>
-                        <span><i className="dot" style={{ background: "#4da3ff" }} /> Spread</span>
+                        <span><i className="dot" style={{ background: "#4da3ff" }} /> Spread %</span>
                         <span className="bs-muted">{selectedCorr.pair}</span>
                       </div>
                       <MiniChart series={corrSeries} />
@@ -345,7 +365,7 @@ export default function BullionStock() {
                     </div>
                   )}
                   <div className="ci-list">
-                    <div className="ci-hint">Does warehouse stock move the spread? Strongest links first — tap one to see its chart above.</div>
+                    <div className="ci-hint">Does warehouse stock move the spread? Spread measured as <b>% of price</b> (spread ÷ price × 100), last ~6 months. Strongest links first — tap one to see its chart above.</div>
                     {corrShown.map((c) => {
                       const neg = c.r < 0;
                       const pct = Math.max(-1, Math.min(1, c.r));

@@ -52,6 +52,10 @@ _REQUIRED_COLUMNS = {
     "signals": [
         ("stop_spread", "FLOAT"),
     ],
+    "daily_spread": [
+        ("decrease_pct", "FLOAT"),
+        ("increase_pct", "FLOAT"),
+    ],
 }
 
 

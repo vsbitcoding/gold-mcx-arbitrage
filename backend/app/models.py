@@ -228,6 +228,11 @@ class DailySpread(Base):
     pair_name = Column(String(64), nullable=False, index=True)
     decrease_spread = Column(Float, nullable=True)
     increase_spread = Column(Float, nullable=True)
+    # Client's % logic: spread ÷ small/near-leg value × 100 (comparable across
+    # price levels). Live snapshots store both; Dhan close-based backfill rows
+    # store decrease_* only.
+    decrease_pct = Column(Float, nullable=True)
+    increase_pct = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

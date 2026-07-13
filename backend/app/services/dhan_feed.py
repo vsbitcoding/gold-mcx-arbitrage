@@ -56,6 +56,14 @@ _state_lock = threading.Lock()
 _active_feed = None
 
 
+_live_token = {"value": ""}  # module-private; NEVER exposed via _state / get_status()
+
+
+def get_live_token() -> str:
+    """Current in-process Dhan access token ('' until the feed authenticates)."""
+    return _live_token["value"]
+
+
 def get_status() -> dict:
     with _state_lock:
         s = dict(_state)
@@ -161,6 +169,11 @@ def _run_real_feed_thread() -> None:
                 token_expiry_epoch=token.expiry_epoch,
                 last_token_refresh_epoch=time.time(),
             )
+            # Keep the raw token in a PRIVATE holder (never in _state — get_status()
+            # dumps _state to the API). Lets in-process helpers (e.g. the one-time
+            # spread backfill) call Dhan REST with the live token instead of
+            # minting a new one (which would kill this feed).
+            _live_token["value"] = token.access_token
             log.info(
                 "Token OK: %s, expires %s (in %.1f hours)",
                 token.client_name,

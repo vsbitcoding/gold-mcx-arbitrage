@@ -7,7 +7,7 @@ GET /api/bullion-stock/status  → last-run status of the daily scrape.
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.security import get_current_user
-from app.services import mcxccl_service
+from app.services import mcxccl_service, spread_backfill
 
 router = APIRouter(prefix="/api/bullion-stock", tags=["bullion"])
 
@@ -28,6 +28,19 @@ def force_refresh(user: str = Depends(get_current_user)):
     Serialised by an internal lock so it can't overlap the daily job."""
     ok = mcxccl_service.refresh()
     return {"ok": ok, "status": mcxccl_service.status()}
+
+
+@router.post("/backfill-spread")
+def backfill_spread(days: int = Query(185, ge=7, le=400), user: str = Depends(get_current_user)):
+    """One-time: rebuild ~6 months of daily %-spread history from Dhan closes
+    (runs in a background thread using the live feed token; idempotent)."""
+    started = spread_backfill.start(days)
+    return {"started": started, "status": spread_backfill.status()}
+
+
+@router.get("/backfill-spread")
+def backfill_spread_status(user: str = Depends(get_current_user)):
+    return spread_backfill.status()
 
 
 @router.get("/pdf")

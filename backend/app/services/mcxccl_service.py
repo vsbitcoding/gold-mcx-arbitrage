@@ -218,7 +218,9 @@ def _snapshot_spread() -> str:
             if dec is None and inc is None:
                 continue  # no live quote → don't store an empty point
             db.add(DailySpread(snap_date=today, pair_name=s["name"],
-                               decrease_spread=dec, increase_spread=inc))
+                               decrease_spread=dec, increase_spread=inc,
+                               decrease_pct=s.get("decrease_pct"),
+                               increase_pct=s.get("increase_pct")))
             n += 1
         db.commit()
         return f"spread: +{n} rows"
@@ -341,9 +343,12 @@ def report() -> dict:
     for s in stock:
         stock_hist.setdefault(s.commodity, []).append({"date": s.as_on_date, "units": s.eligible_units})
 
+    # Client's % logic: series & correlation use spread ÷ price × 100 (so 200
+    # points at 50k and 600 at 150k compare equally). Rows without a % (not yet
+    # healed by the backfill) are skipped to keep the series in one unit.
     spread_hist: dict[str, list] = {}
     for sp in spreads:
-        v = sp.decrease_spread if sp.decrease_spread is not None else sp.increase_spread
+        v = sp.decrease_pct if sp.decrease_pct is not None else sp.increase_pct
         if v is None:
             continue
         spread_hist.setdefault(sp.pair_name, []).append({"date": sp.snap_date, "spread": v})
