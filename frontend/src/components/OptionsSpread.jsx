@@ -154,30 +154,31 @@ export default function OptionsSpread() {
             {data?.day_divergence != null && <span className="live-dot" />}DAY Δ · S vs N×3.2
           </span>
           <div className="opt-day-flex">
-            <span className={`opt-spot-value ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
-              {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
-            </span>
-            <div className="opt-nse-grid">
-              <div className="opt-nse-left">
-                <span className="opt-nse-row">
-                  <em>Nifty</em>
-                  <b className={data?.nifty_day_change == null ? "" : data.nifty_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
-                    {data?.nifty_day_change == null ? "—" : fmtSigned(data.nifty_day_change, 1)}
-                  </b>
-                </span>
-                <span className="opt-nse-row">
-                  <em>Sensex</em>
-                  <b className={data?.sensex_day_change == null ? "" : data.sensex_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
-                    {data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
-                  </b>
-                </span>
-              </div>
-              <div className="opt-nse-right">
-                <em>Expected</em>
-                <b className={data?.sensex_expected_change == null ? "" : data.sensex_expected_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
-                  {data?.sensex_expected_change == null ? "—" : fmtSigned(data.sensex_expected_change, 1)}
+            <div className="opt-day-seg">
+              <em>Divergence</em>
+              <b className={`opt-day-hero ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+                {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
+              </b>
+            </div>
+            <div className="opt-nse-left">
+              <span className="opt-nse-row">
+                <em>Nifty</em>
+                <b className={data?.nifty_day_change == null ? "" : data.nifty_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                  {data?.nifty_day_change == null ? "—" : fmtSigned(data.nifty_day_change, 1)}
                 </b>
-              </div>
+              </span>
+              <span className="opt-nse-row">
+                <em>Sensex</em>
+                <b className={data?.sensex_day_change == null ? "" : data.sensex_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                  {data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
+                </b>
+              </span>
+            </div>
+            <div className="opt-day-seg">
+              <em>Expected</em>
+              <b className={`opt-day-big ${data?.sensex_expected_change == null ? "" : data.sensex_expected_change >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+                {data?.sensex_expected_change == null ? "—" : fmtSigned(data.sensex_expected_change, 1)}
+              </b>
             </div>
           </div>
         </div>
