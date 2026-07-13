@@ -146,32 +146,41 @@ export default function OptionsSpread() {
           <span className="opt-spot-sub">ATM {data?.nifty_atm ?? "—"}</span>
         </div>
         <div
-          className="opt-spot-chip opt-day-chip"
+          className="opt-spot-chip"
           title={"Day move vs previous close.\nSensex should move Nifty-change × 3.2;\ndivergence = actual Sensex change − expected.\n+ = Sensex stronger than ratio · − = weaker"}
         >
           <span className="opt-spot-label">
             {data?.day_divergence != null && <span className="live-dot" />}DAY Δ · S vs N×3.2
           </span>
-          <div className="opt-day-vals">
-            <span className={`opt-spot-value ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
-              {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
-            </span>
-            <span className="opt-day-item">
-              <em>Sensex</em>
-              <b className={data?.sensex_day_change == null ? "" : data.sensex_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
-                {data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
-              </b>
-            </span>
-            <span className="opt-day-item">
+          <span className={`opt-spot-value ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+            {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
+          </span>
+          <span className="opt-spot-sub">divergence</span>
+        </div>
+        {/* Client-sketched box: Nifty & Sensex day-change stacked | Expected beside */}
+        <div className="opt-spot-chip opt-nse-chip" title="Day change vs previous day close · Expected = Nifty change × 3.2">
+          <div className="opt-nse-grid">
+            <div className="opt-nse-left">
+              <span className="opt-nse-row">
+                <em>Nifty</em>
+                <b className={data?.nifty_day_change == null ? "" : data.nifty_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                  {data?.nifty_day_change == null ? "—" : fmtSigned(data.nifty_day_change, 1)}
+                </b>
+              </span>
+              <span className="opt-nse-row">
+                <em>Sensex</em>
+                <b className={data?.sensex_day_change == null ? "" : data.sensex_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                  {data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
+                </b>
+              </span>
+            </div>
+            <div className="opt-nse-right">
               <em>Expected</em>
               <b className={data?.sensex_expected_change == null ? "" : data.sensex_expected_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
                 {data?.sensex_expected_change == null ? "—" : fmtSigned(data.sensex_expected_change, 1)}
               </b>
-            </span>
+            </div>
           </div>
-          <span className="opt-spot-sub">
-            N {data?.nifty_day_change == null ? "—" : fmtSigned(data.nifty_day_change, 1)}
-          </span>
         </div>
         <div className="opt-spot-chip">
           <span className="opt-spot-label">

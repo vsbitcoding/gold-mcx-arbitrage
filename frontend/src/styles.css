@@ -4767,12 +4767,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .oh-div-pos { color: var(--green); font-weight: 700; }
 .oh-div-neg { color: var(--red); font-weight: 700; }
 
-/* DAY Δ chip: divergence + Sensex actual + Expected side by side (big) */
-.opt-day-chip { min-width: 0; }
-.opt-day-vals { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
-.opt-day-item { display: inline-flex; align-items: baseline; gap: 7px; }
-.opt-day-item em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--text-muted); }
-.opt-day-item b { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
-.opt-day-item b.opt-div-pos { color: var(--green); }
-.opt-day-item b.opt-div-neg { color: var(--red); }
-@media (max-width: 640px) { .opt-day-vals { gap: 12px; } .opt-day-item b { font-size: 16px; } }
+/* Day-change box (client sketch): Nifty & Sensex stacked | Expected beside */
+.opt-nse-chip { display: flex; align-items: center; }
+.opt-nse-grid { display: flex; align-items: stretch; gap: 14px; }
+.opt-nse-left { display: flex; flex-direction: column; justify-content: center; gap: 5px; padding-right: 14px; border-right: 1px solid var(--border); }
+.opt-nse-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.opt-nse-row em, .opt-nse-right em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.opt-nse-row b, .opt-nse-right b { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.opt-nse-right { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.opt-nse-right b { font-size: 18px; }
+.opt-nse-row b.opt-div-pos, .opt-nse-right b.opt-div-pos { color: var(--green); }
+.opt-nse-row b.opt-div-neg, .opt-nse-right b.opt-div-neg { color: var(--red); }
+@media (max-width: 640px) { .opt-nse-row b { font-size: 14.5px; } .opt-nse-right b { font-size: 16px; } }
