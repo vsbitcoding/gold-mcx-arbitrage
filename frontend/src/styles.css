@@ -1870,7 +1870,9 @@ body.dark .opt-matrix-pro tbody td.opt-subcol-spread {
   display: flex;
   flex-direction: column;
   min-width: 140px;
-  flex: 1 1 auto;
+  /* flex-basis 0 → chips share the row by RATIO, not by content width,
+     so changing digit counts can never resize/flicker the boxes */
+  flex: 1 1 0;
 }
 .opt-spot-label {
   font-size: 10px;
@@ -4767,24 +4769,31 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .oh-div-pos { color: var(--green); font-weight: 700; }
 .oh-div-neg { color: var(--red); font-weight: 700; }
 
-/* Day-change: ONE box, 3 clean segments — Divergence | Nifty & Sensex | Expected */
+/* Day-change: ONE box, 3 clean segments — Divergence | Nifty & Sensex | Expected.
+   All numeric slots reserve a fixed digit width (tabular nums + min-width in ch)
+   so value changes NEVER shift or resize anything. */
+.opt-day-chip { flex: 2.4 1 0; min-width: 400px; }
 .opt-day-flex { display: flex; align-items: center; margin-top: 2px; }
-.opt-day-seg { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 18px; }
-.opt-day-flex > :first-child { padding-left: 2px; }
-.opt-day-flex > :last-child { padding-right: 4px; }
+.opt-day-seg { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 12px; min-width: 0; }
 .opt-day-seg em { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); }
-.opt-day-seg b { font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1.1; }
+.opt-day-seg b { font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1.1; min-width: 7.5ch; text-align: center; }
 .opt-day-hero { font-size: 22px; }
 .opt-day-big { font-size: 19px; }
-.opt-nse-left { display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 18px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
-.opt-nse-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.opt-nse-left { flex: 1.2 1 0; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 14px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+.opt-nse-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .opt-nse-row em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--text-muted); min-width: 44px; }
-.opt-nse-row b { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.opt-nse-row b { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 14.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); min-width: 7ch; text-align: right; }
 .opt-day-seg b.opt-div-pos, .opt-nse-row b.opt-div-pos { color: var(--green); }
 .opt-day-seg b.opt-div-neg, .opt-nse-row b.opt-div-neg { color: var(--red); }
-@media (max-width: 640px) {
-  .opt-day-seg { padding: 0 12px; }
-  .opt-nse-left { padding: 0 12px; }
+@media (max-width: 900px) {
+  .opt-day-chip { min-width: 340px; }
   .opt-day-hero { font-size: 19px; }
   .opt-day-big { font-size: 16.5px; }
+}
+@media (max-width: 720px) {
+  /* phones: day box takes its own full row; spot chips sit 2-up */
+  .opt-day-chip { flex: 1 1 100%; min-width: 100%; }
+  .opt-spot-chip { min-width: 43%; }
+  .opt-day-seg { padding: 0 8px; }
+  .opt-nse-left { padding: 0 10px; }
 }
