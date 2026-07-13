@@ -4773,7 +4773,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    All numeric slots reserve a fixed digit width (tabular nums + min-width in ch)
    so value changes NEVER shift or resize anything. */
 .opt-day-chip { flex: 2.4 1 0; min-width: 400px; }
-.opt-day-flex { display: flex; align-items: center; margin-top: 2px; }
+.opt-day-flex { display: flex; align-items: center; margin-top: 8px; }
 .opt-day-seg { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 12px; min-width: 0; }
 .opt-day-seg em { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); }
 .opt-day-seg b { font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1.1; min-width: 7.5ch; text-align: center; }
