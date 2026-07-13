@@ -146,19 +146,31 @@ export default function OptionsSpread() {
           <span className="opt-spot-sub">ATM {data?.nifty_atm ?? "—"}</span>
         </div>
         <div
-          className="opt-spot-chip"
+          className="opt-spot-chip opt-day-chip"
           title={"Day move vs previous close.\nSensex should move Nifty-change × 3.2;\ndivergence = actual Sensex change − expected.\n+ = Sensex stronger than ratio · − = weaker"}
         >
           <span className="opt-spot-label">
             {data?.day_divergence != null && <span className="live-dot" />}DAY Δ · S vs N×3.2
           </span>
-          <span className={`opt-spot-value ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
-            {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
-          </span>
+          <div className="opt-day-vals">
+            <span className={`opt-spot-value ${data?.day_divergence == null ? "" : data.day_divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+              {data?.day_divergence == null ? "—" : fmtSigned(data.day_divergence, 1)}
+            </span>
+            <span className="opt-day-item">
+              <em>Sensex</em>
+              <b className={data?.sensex_day_change == null ? "" : data.sensex_day_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                {data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
+              </b>
+            </span>
+            <span className="opt-day-item">
+              <em>Expected</em>
+              <b className={data?.sensex_expected_change == null ? "" : data.sensex_expected_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                {data?.sensex_expected_change == null ? "—" : fmtSigned(data.sensex_expected_change, 1)}
+              </b>
+            </span>
+          </div>
           <span className="opt-spot-sub">
             N {data?.nifty_day_change == null ? "—" : fmtSigned(data.nifty_day_change, 1)}
-            {" · S "}{data?.sensex_day_change == null ? "—" : fmtSigned(data.sensex_day_change, 1)}
-            {" · exp "}{data?.sensex_expected_change == null ? "—" : fmtSigned(data.sensex_expected_change, 1)}
           </span>
         </div>
         <div className="opt-spot-chip">

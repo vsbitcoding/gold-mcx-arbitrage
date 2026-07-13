@@ -4766,3 +4766,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .opt-spot-value.opt-div-neg { color: var(--red); }
 .oh-div-pos { color: var(--green); font-weight: 700; }
 .oh-div-neg { color: var(--red); font-weight: 700; }
+
+/* DAY Δ chip: divergence + Sensex actual + Expected side by side (big) */
+.opt-day-chip { min-width: 0; }
+.opt-day-vals { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.opt-day-item { display: inline-flex; align-items: baseline; gap: 7px; }
+.opt-day-item em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.opt-day-item b { font-family: 'Roboto Mono', ui-monospace, monospace; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.opt-day-item b.opt-div-pos { color: var(--green); }
+.opt-day-item b.opt-div-neg { color: var(--red); }
+@media (max-width: 640px) { .opt-day-vals { gap: 12px; } .opt-day-item b { font-size: 16px; } }
