@@ -4767,8 +4767,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .oh-div-pos { color: var(--green); font-weight: 700; }
 .oh-div-neg { color: var(--red); font-weight: 700; }
 
-/* Day-change box (client sketch): Nifty & Sensex stacked | Expected beside */
-.opt-nse-chip { display: flex; align-items: center; }
+/* Day-change: ONE box — divergence | Nifty & Sensex stacked | Expected */
+.opt-day-flex { display: flex; align-items: center; gap: 16px; }
+.opt-day-flex .opt-nse-grid { border-left: 1px solid var(--border); padding-left: 16px; }
 .opt-nse-grid { display: flex; align-items: stretch; gap: 14px; }
 .opt-nse-left { display: flex; flex-direction: column; justify-content: center; gap: 5px; padding-right: 14px; border-right: 1px solid var(--border); }
 .opt-nse-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
