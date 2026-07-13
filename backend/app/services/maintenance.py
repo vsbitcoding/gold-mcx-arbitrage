@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import activity, extra_instruments, mcxccl_service, span_service
+from app.services import activity, extra_instruments, mcxccl_service, options_history_service, span_service
 
 log = logging.getLogger("maintenance")
 
@@ -122,6 +122,7 @@ def _loop() -> None:
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
     last_mcxccl_attempt: datetime | None = None
+    last_optsnap: dict[str, str | None] = {"10:00": None, "15:00": None}
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -140,9 +141,10 @@ def _loop() -> None:
             ):
                 pruned = _prune_history()
                 act_pruned = _prune_activity()
+                snap_pruned = options_history_service.prune()
                 log.info(
-                    "Nightly prune: %d history rows, %d activity rows.",
-                    pruned, act_pruned,
+                    "Nightly prune: %d history rows, %d activity rows, %d option snapshots.",
+                    pruned, act_pruned, snap_pruned,
                 )
                 if pruned > 0:
                     _vacuum()
@@ -152,6 +154,19 @@ def _loop() -> None:
             if last_rollover_check != today_str and now.hour >= 9:
                 _check_calculator_rollover(rollover_logged)
                 last_rollover_check = today_str
+
+            # Twice-daily Nifty/Sensex options-board snapshot (10:00 & 15:00 IST) —
+            # replaces the client's manual screenshots. In-memory read + one tiny
+            # INSERT; the service itself skips weekends / cold feed / missed windows
+            # (so a late restart can never store mislabelled data).
+            for _slot, (_h, _m) in (("10:00", (10, 0)), ("15:00", (15, 0))):
+                if last_optsnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
+                    try:
+                        msg = options_history_service.snapshot(_slot)
+                        log.info("Options snapshot %s: %s", _slot, msg)
+                    except Exception as e:
+                        log.warning("Options snapshot %s raised: %s", _slot, e)
+                    last_optsnap[_slot] = today_str
 
             # Daily SPAN margin refresh — once per IST day at 08:30 IST (before market open).
             if last_span_refresh != today_str and (now.hour, now.minute) >= (8, 30):

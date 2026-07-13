@@ -119,6 +119,17 @@ export const api = {
   calcQuotes: () => request("/api/calculator/quotes"),
   // Options spread (Nifty / Sensex PE) — side: "below" (ATM+9) | "above" (ATM+15)
   optionsSpread: (side) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : "")),
+  // Stored 10:00/15:00 IST board snapshots (weekday compare) — fetched on demand, no polling
+  optionsHistory: (p = {}) => {
+    const q = new URLSearchParams();
+    if (p.weekday) q.set("weekday", p.weekday);
+    if (p.slot) q.set("slot", p.slot);
+    if (p.side) q.set("side", p.side);
+    if (p.weeks) q.set("weeks", p.weeks);
+    if (p.date) q.set("date", p.date);
+    const s = q.toString();
+    return request("/api/options/history" + (s ? `?${s}` : ""));
+  },
   // Commodity BIG-vs-MINI option spread (gold | silver | crude | natgas)
   goldOptions: (commodity = "gold") => request("/api/gold-options/spread?commodity=" + encodeURIComponent(commodity)),
   // Base-metal calendar spreads (Metal tab)

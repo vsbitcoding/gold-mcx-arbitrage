@@ -231,6 +231,28 @@ class DailySpread(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class OptionsSnapshot(Base):
+    """Twice-daily (10:00 & 15:00 IST) snapshot of the full Nifty/Sensex PE
+    options board — replaces the client's manual 10am/3pm screenshots. One row
+    per (snap_date, slot); payload_json stores the raw 'below' + 'above' boards
+    (square-off is derived from 'above' at read time). ~2 small rows per
+    trading day, pruned after ~370 days.
+    """
+    __tablename__ = "options_snapshot"
+
+    id = Column(Integer, primary_key=True)
+    snap_date = Column(String(10), nullable=False, index=True)   # 'YYYY-MM-DD' IST
+    slot = Column(String(5), nullable=False, index=True)         # '10:00' | '15:00'
+    weekday = Column(Integer, nullable=False, index=True)        # 0=Mon .. 6=Sun (IST, set at write)
+    nifty_spot = Column(Float, nullable=True)
+    sensex_spot = Column(Float, nullable=True)
+    india_vix = Column(Float, nullable=True)
+    nifty_atm = Column(Integer, nullable=True)
+    sensex_atm = Column(Integer, nullable=True)
+    payload_json = Column(Text, nullable=False)                  # {"captured_at", "below": {...}, "above": {...}}
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class BullionPdf(Base):
     """The latest scraped 'Warehouse & Vault Wise Stock Position' PDF (~47 KB),
     kept so the dashboard can View/Download it from our own server (no Akamai or
@@ -250,3 +272,4 @@ class BullionPdf(Base):
 # same PDF date / same calendar day simply finds the rows already present).
 Index("ix_bullion_date_comm", BullionStock.as_on_date, BullionStock.commodity, unique=True)
 Index("ix_dailyspread_date_pair", DailySpread.snap_date, DailySpread.pair_name, unique=True)
+Index("ix_optsnap_date_slot", OptionsSnapshot.snap_date, OptionsSnapshot.slot, unique=True)

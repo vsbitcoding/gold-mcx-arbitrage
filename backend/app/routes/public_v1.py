@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_service, othercomm_service, premium_feed, price_service, signal_service
+from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_history_service, options_service, othercomm_service, premium_feed, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -238,6 +238,32 @@ def public_options_spread(
         "strike_pairing": "sensex_strike = round_to_100(sensex_spot − (nifty_spot − nifty_strike) × 3.2)",
         "status": options_service.status(),
         **options_service.get_spread_table(side if side in ("above", "squareoff") else "below"),
+    }
+
+
+@router.get("/options-history")
+def public_options_history(
+    weekday: str | None = Query(None, description="mon..sun or 0..6 (0=Mon) → last N same-weekday boards; omit = latest snapshot days"),
+    slot: str = Query("both", description="10:00 | 15:00 | both"),
+    side: str = Query("below", description="below | above | squareoff — same row shapes as /options-spread"),
+    weeks: int = Query(7, ge=1, le=52, description="how many most-recent matching days (default 7)"),
+    date: str | None = Query(None, description="YYYY-MM-DD → that day's snapshot(s) instead of a weekday series"),
+    _key: str = Depends(require_api_key),
+):
+    """History of the Nifty/Sensex PE board, auto-captured at 10:00 & 15:00 IST
+    each trading day (replaces manual screenshots).
+
+    Example: /api/v1/options-history?weekday=mon&slot=10:00&weeks=7
+       → the last 7 Mondays' 10am boards, newest first.
+    Each snapshot's weeks[].rows[] has exactly the /options-spread row shape,
+    so the same renderer works. `count` can be < weeks (holidays have no
+    snapshot) — render what is returned. Data is static once written: fetch on
+    demand, no polling needed.
+    """
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        **options_history_service.get_history(weekday=weekday, slot=slot, side=side, weeks=weeks, date=date),
     }
 
 

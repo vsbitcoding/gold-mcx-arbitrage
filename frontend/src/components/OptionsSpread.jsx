@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
+import OptionsHistory from "./OptionsHistory.jsx";
 
 function fmtExpiry(iso) {
   if (!iso) return "—";
@@ -40,8 +41,17 @@ export default function OptionsSpread() {
   useEffect(() => {
     try { localStorage.setItem("opt_side", side); } catch { /* ignore */ }
   }, [side]);
+  // Live board vs stored History (10am/3pm snapshots) — survives refresh.
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem("opt_view") === "history" ? "history" : "live"; }
+    catch { return "live"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("opt_view", view); } catch { /* ignore */ }
+  }, [view]);
 
   useEffect(() => {
+    if (view !== "live") return; // History view: static data, no polling
     let alive = true;
     async function load() {
       try {
@@ -52,7 +62,7 @@ export default function OptionsSpread() {
     load();
     const t = setInterval(load, 2000);
     return () => { alive = false; clearInterval(t); };
-  }, [side]);
+  }, [side, view]);
 
   const matrix = useMemo(() => {
     if (!data?.weeks?.length) return null;
@@ -100,19 +110,29 @@ export default function OptionsSpread() {
     <div className="opt-page">
       <div className="opt-head">
         <h2>Nifty / Sensex — PE Options Spread</h2>
-        <div className="opt-side-toggle" role="tablist">
-          <button className={side === "below" ? "active" : ""} onClick={() => setSide("below")}>
-            ▼ Below ATM <span className="opt-side-sub">10</span>
-          </button>
-          <button className={side === "above" ? "active" : ""} onClick={() => setSide("above")}>
-            ▲ Above ATM <span className="opt-side-sub">15</span>
-          </button>
-          <button className={side === "squareoff" ? "active" : ""} onClick={() => setSide("squareoff")}>
-            ⤢ Square off ITM <span className="opt-side-sub">15</span>
-          </button>
+        <div className="opt-head-toggles">
+          <div className="opt-side-toggle opt-view-toggle" role="tablist" aria-label="View">
+            <button className={view === "live" ? "active" : ""} onClick={() => setView("live")}>● Live</button>
+            <button className={view === "history" ? "active" : ""} onClick={() => setView("history")}>◷ History</button>
+          </div>
+          <div className="opt-side-toggle" role="tablist">
+            <button className={side === "below" ? "active" : ""} onClick={() => setSide("below")}>
+              ▼ Below ATM <span className="opt-side-sub">10</span>
+            </button>
+            <button className={side === "above" ? "active" : ""} onClick={() => setSide("above")}>
+              ▲ Above ATM <span className="opt-side-sub">15</span>
+            </button>
+            <button className={side === "squareoff" ? "active" : ""} onClick={() => setSide("squareoff")}>
+              ⤢ Square off ITM <span className="opt-side-sub">15</span>
+            </button>
+          </div>
         </div>
       </div>
 
+      {view === "history" ? (
+        <OptionsHistory side={side} />
+      ) : (
+      <>
       {err && <div className="settings-banner danger">⚠ {err}</div>}
 
       <div className="opt-spot-bar">
@@ -239,6 +259,8 @@ export default function OptionsSpread() {
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
     </div>
   );
