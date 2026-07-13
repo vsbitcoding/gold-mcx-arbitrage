@@ -20,7 +20,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.services import dhan_auth, pair_registry
 from app.services.broadcaster import broadcaster
-from app.services.market_data import quote_store
+from app.services.market_data import prev_close_store, quote_store
 from app.services.snapshot import build_live_payload
 
 log = logging.getLogger("dhan_feed")
@@ -262,6 +262,17 @@ def _run_real_feed_thread() -> None:
                     short = subs[sec_id].get("short", "?")
                     log.info("FIRST tick %s/%s: ltp=%s depth=%s",
                              short, key, data.get("LTP"), bool(data.get("depth")))
+
+                # One-shot "Previous Close" packet (sent per instrument at
+                # subscribe) → keep for day-change / index-divergence display.
+                if t == "Previous Close":
+                    try:
+                        pc = float(data.get("prev_close") or 0)
+                        if pc > 0:
+                            prev_close_store[sec_id] = pc
+                    except (TypeError, ValueError):
+                        pass
+                    return
 
                 try:
                     ltp = float(data.get("LTP") or 0)

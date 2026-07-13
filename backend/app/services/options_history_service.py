@@ -197,6 +197,11 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
             "india_vix": r.india_vix,
             "nifty_atm": r.nifty_atm,
             "sensex_atm": r.sensex_atm,
+            # day-change vs prev close + N×3.2 divergence (present in snapshots
+            # taken after 2026-07-13; None for older ones)
+            "nifty_day_change": board.get("nifty_day_change"),
+            "sensex_day_change": board.get("sensex_day_change"),
+            "day_divergence": board.get("day_divergence"),
             "side": side,
             "weeks": board.get("weeks", []),
         })

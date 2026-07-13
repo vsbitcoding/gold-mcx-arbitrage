@@ -35,7 +35,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from app.services.instrument_resolver import _download_csv, _parse_expiry
-from app.services.market_data import quote_store
+from app.services.market_data import prev_close_store, quote_store
 
 log = logging.getLogger("options_service")
 
@@ -404,6 +404,20 @@ def get_spread_table(side: str = "below") -> dict:
             "rows": rows,
         })
 
+    # Day change vs previous close + index divergence (client analytic):
+    # Sensex "should" move nifty_change × 3.2; divergence = actual − expected.
+    # Positive → Sensex stronger than the ratio implies; negative → weaker.
+    nifty_prev = prev_close_store.get(NIFTY_SPOT_ID)
+    sensex_prev = prev_close_store.get(SENSEX_SPOT_ID)
+    nifty_change = round(nifty_spot - nifty_prev, 2) if (nifty_spot and nifty_prev) else None
+    sensex_change = round(sensex_spot - sensex_prev, 2) if (sensex_spot and sensex_prev) else None
+    sensex_expected = round(nifty_change * NIFTY_TO_SENSEX_RATIO, 2) if nifty_change is not None else None
+    divergence = (
+        round(sensex_change - sensex_expected, 2)
+        if (sensex_change is not None and sensex_expected is not None)
+        else None
+    )
+
     return {
         "side": side,
         "nifty_spot": nifty_spot,
@@ -411,6 +425,12 @@ def get_spread_table(side: str = "below") -> dict:
         "india_vix": india_vix,
         "nifty_atm": nifty_atm_live,
         "sensex_atm": sensex_atm_live,
+        "nifty_prev_close": nifty_prev,
+        "sensex_prev_close": sensex_prev,
+        "nifty_day_change": nifty_change,
+        "sensex_day_change": sensex_change,
+        "sensex_expected_change": sensex_expected,
+        "day_divergence": divergence,
         "weeks": weeks_out,
     }
 

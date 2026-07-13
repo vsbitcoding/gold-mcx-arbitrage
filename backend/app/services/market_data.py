@@ -25,6 +25,12 @@ class Quote:
     timestamp: float = 0.0
 
 
+# Previous-day close per security_id, from Dhan's one-shot "Previous Close"
+# packet sent at (re)subscribe time. In-memory only; refreshed on every feed
+# reconnect. Used for day-change / index-divergence displays.
+prev_close_store: dict[str, float] = {}
+
+
 PERSIST_INTERVAL_SECONDS = 30
 
 

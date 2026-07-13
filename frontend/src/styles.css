@@ -4760,3 +4760,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   .oh-chip { padding: 5px 9px; font-size: 11.5px; }
   .oh-table { min-width: 520px; }
 }
+
+/* Day-change divergence (S vs N×3.2) */
+.opt-spot-value.opt-div-pos { color: var(--green); }
+.opt-spot-value.opt-div-neg { color: var(--red); }
+.oh-div-pos { color: var(--green); font-weight: 700; }
+.oh-div-neg { color: var(--red); font-weight: 700; }

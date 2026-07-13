@@ -130,6 +130,9 @@ export default function OptionsHistory({ side }) {
                       <div className="oh-sub">
                         N {s.nifty_spot != null ? fmtNum(s.nifty_spot, 0) : "—"} · S {s.sensex_spot != null ? fmtNum(s.sensex_spot, 0) : "—"}
                         {s.india_vix != null && <> · VIX {fmtNum(s.india_vix, 1)}</>}
+                        {s.day_divergence != null && (
+                          <> · <span className={s.day_divergence >= 0 ? "oh-div-pos" : "oh-div-neg"} title="Sensex day-move vs Nifty×3.2">Δ {fmtSigned(s.day_divergence, 0)}</span></>
+                        )}
                       </div>
                     </th>
                   ))}
