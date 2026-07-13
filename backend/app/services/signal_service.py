@@ -3,7 +3,8 @@ tracking (watch-only — no trade firing).
 
 Design (kept fully off the live-feed hot path):
   • DAILY batch (background): pull each front-month cross pair's full available
-    daily history (~1+ yr) → compute (a) the current band (20-day mean ± 1.5σ)
+    daily history (~1+ yr) → % spread series (spread ÷ small-leg value × 100,
+    client logic) → compute (a) the current band (20-day mean ± 1.5σ, in %)
     and (b) a per-pair PROBABILITY table — walk-forward, bucketed by how
     stretched the spread was (z), what % reached target within MAXHOLD days.
     Heavy, but runs once/day and only stores a tiny summary in memory.
@@ -345,8 +346,11 @@ def refresh_model() -> int:
         bm = MULTIPLIERS.get(p["big"], 1.0)
         sm = MULTIPLIERS.get(p["small"], 1.0)
         days = sorted(set(big) & set(small))
+        # % SPREAD series (client logic): spread ÷ small-leg value × 100 — bands in %
+        # stay comparable as prices move; converted back to value at fire time.
         # cleaned series WITH dates (mirror of _clean: trim 3 + drop 12-MAD outliers)
-        ser = [(d, round(big[d] * bm - small[d] * sm, 2)) for d in days]
+        ser = [(d, round((big[d] * bm - small[d] * sm) / (small[d] * sm) * 100, 4))
+               for d in days if small[d]]
         if len(ser) >= 10:
             ser = ser[3:]
             _med = statistics.median([v for _, v in ser])
@@ -364,9 +368,10 @@ def refresh_model() -> int:
         buckets, overall = _aggregate(_backtest(vals))
         new[p["name"]] = {
             "label": p.get("label"),
-            "mean": round(mean, 1), "sd": round(sd, 1),
-            "upper": round(mean + ENTRY_K * sd, 1), "lower": round(mean - ENTRY_K * sd, 1),
-            "target": round(mean, 1), "n": len(vals),
+            # all band fields are in % of the small-leg value (4dp — % values are small)
+            "mean": round(mean, 4), "sd": round(sd, 4),
+            "upper": round(mean + ENTRY_K * sd, 4), "lower": round(mean - ENTRY_K * sd, 4),
+            "target": round(mean, 4), "n": len(vals),
             "buckets": buckets, "overall": overall,
         }
         bars.append(len(vals))
@@ -436,14 +441,24 @@ def _mid(snap):
     return (dec + inc) / 2.0
 
 
-def _too_noisy(s, sd):
+def _small_value(snap) -> float | None:
+    """Live small/near-leg value (price × multiplier) — the denominator that
+    converts between spread VALUE (points) and the model's % space."""
+    mult = MULTIPLIERS.get(snap.get("small"), 1.0)
+    sb, sa = snap.get("small_bid"), snap.get("small_ask")
+    px = (sb + sa) / 2.0 if (sb and sa) else (sb or sa)
+    return px * mult if px else None
+
+
+def _too_noisy(s, sd_pct, small_value):
     """Liquidity guard: True when the spread's bid/ask width (increase − decrease)
     is wide vs the band's σ → illiquid pair, the mid is unreliable, so any signal
-    would be noise. Keeps the fast junk signals (e.g. Silver Mic/Mini) from firing."""
+    would be noise. σ is in % → convert to value via the small-leg denominator."""
     dec, inc = s.get("decrease_spread"), s.get("increase_spread")
-    if dec is None or inc is None:
+    if dec is None or inc is None or not small_value:
         return True
-    return bool(sd) and sd > 0 and (inc - dec) > LIQ_K * sd
+    sd_val = sd_pct * small_value / 100.0 if sd_pct else 0
+    return sd_val > 0 and (inc - dec) > LIQ_K * sd_val
 
 
 def _load_open():
@@ -530,11 +545,14 @@ def _tick():
                 continue
             s = snaps.get(name)
             mid = _mid(s) if s else None
-            if mid is None:
+            small_value = _small_value(s) if s else None
+            if mid is None or not small_value:
                 _pending.pop(name, None)
                 continue
-            direction = "narrow" if mid >= model["upper"] else "widen" if mid <= model["lower"] else None
-            if direction is None or _too_noisy(s, model["sd"]):
+            # Compare in % space (model bands are %), fire/store in VALUE (points).
+            mid_pct = mid / small_value * 100.0
+            direction = "narrow" if mid_pct >= model["upper"] else "widen" if mid_pct <= model["lower"] else None
+            if direction is None or _too_noisy(s, model["sd"], small_value):
                 _pending.pop(name, None)        # no extreme, or pair too illiquid → don't fire
                 continue
             if model.get("label") in open_labels:
@@ -544,10 +562,12 @@ def _tick():
             if p and p["direction"] == direction:
                 if now - p["since"] >= DEBOUNCE_SECONDS:
                     sd = model["sd"] or 1.0
-                    z = (mid - model["mean"]) / sd
+                    z = (mid_pct - model["mean"]) / sd
                     prob, exp_days = _prob_for(model, z)
                     entry = round(mid, 1)
-                    target = model["target"]
+                    # % band target → concrete spread VALUE at today's price (client:
+                    # "convert % band to spread value")
+                    target = round(model["target"] * small_value / 100.0, 1)
                     # Tradeability: skip if the live buy/sell gap is wide vs the expected
                     # profit — on a wide gap you fill at bid/ask, far from the mid, so the
                     # signal isn't realistically tradeable (esp. near-expiry illiquid contracts).
@@ -626,8 +646,10 @@ def evaluate_all(snaps: list[dict]) -> dict:
             continue
         model = _model.get(name) or {}
         mid = _mid(s)
-        if mid is not None and model.get("sd"):
-            cur, z = round(mid, 1), round((mid - model["mean"]) / model["sd"], 2)
+        small_value = _small_value(s)
+        if mid is not None and model.get("sd") and small_value:
+            mid_pct = mid / small_value * 100.0
+            cur, z = round(mid, 1), round((mid_pct - model["mean"]) / model["sd"], 2)
         else:
             cur, z = a["entry"], a.get("z_at_entry")
         out[name] = _disp(name, s, a, cur, z)
