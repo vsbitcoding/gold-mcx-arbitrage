@@ -1,13 +1,17 @@
 """Fire-once mean-reversion SIGNAL engine with historical probability + accuracy
 tracking (watch-only — no trade firing).
 
-Design (kept fully off the live-feed hot path):
-  • DAILY batch (background): pull each front-month cross pair's full available
-    daily history (~1+ yr) → % spread series (spread ÷ small-leg value × 100,
-    client logic) → compute (a) the current band (20-day mean ± 1.5σ, in %)
-    and (b) a per-pair PROBABILITY table — walk-forward, bucketed by how
-    stretched the spread was (z), what % reached target within MAXHOLD days.
-    Heavy, but runs once/day and only stores a tiny summary in memory.
+Design (kept fully off the live-feed hot path) — client's chosen mode:
+**4H % band + warehouse-stock filter** (backtested: 4H band 97.8%/10 mo;
+with the stock filter 100%, 0 losses, on the stock-data window):
+  • DAILY batch (background): pull each front-month cross pair's 60-min history
+    (~10 months, Dhan's intraday depth) → 4H bars → % spread series
+    (spread ÷ small-leg value × 100) → (a) the current band (20-bar mean ± 1.5σ,
+    in %) and (b) a per-pair PROBABILITY table — walk-forward, bucketed by z.
+    A light band-only refresh rolls the 20-bar band forward every 4 hours.
+  • STOCK FILTER at fire time: the latest MCXCCL warehouse-stock move, read via
+    the pair's stock↔spread correlation sign, must point the same way as the
+    signal — otherwise no fire (see _stock_allows).
   • TICK (background, ~3s, the single writer): compare each pair's live mid-spread
     to its band. On a confirmed extreme it FIRES ONE frozen Signal (direction,
     entry, target, probability%) → persisted to DB. It then tracks the open
@@ -26,10 +30,10 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from app.config import MULTIPLIERS, settings
+from app.config import MULTIPLIERS
 from app.database import SessionLocal
 from app.models import Signal
-from app.services import dhan_auth, pair_registry
+from app.services import pair_registry
 
 log = logging.getLogger("signal_service")
 
@@ -40,8 +44,8 @@ STOP_MULT = 3.0                   # stop sits 3× the entry→target distance th
 SIGNAL_WINDOW_OPEN = 9 * 60 + 10    # 09:10 AM
 SIGNAL_WINDOW_CLOSE = 22 * 60 + 30  # 10:30 PM
 ROLL_DAYS = 7                     # within this many days of expiry → roll signals to the NEXT month (near-expiry = illiquid, untradeable)
-LOOKBACK_DAYS = 800               # request long; API returns the contract's full life
-MAXHOLD_DAYS = 10                 # trading days to reach target = "right" (for probability)
+MAXHOLD_BARS = 36                 # 4H bars to reach target = "right" (≈10 trading days; ~3.6 bars/day)
+INTRADAY_DAYS = 320               # 60-min history to request (Dhan keeps ~10 months)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
 MAX_AGE_SECONDS = 14 * 24 * 3600  # live signal expires (=wrong) if target not hit in ~10 trading days
 MIN_HOLD_SECONDS = 60 * 60        # a signal that hits target faster than this = noise → discarded
@@ -73,29 +77,24 @@ _state: dict = {"last_refresh": None, "models": 0}
 _bt_grid: list | None = None      # backtest of every STRAT_GRID combo over ~1yr history
 
 
-# ───────────────────────── Dhan history ─────────────────────────
-def _dhan():
-    from dhanhq import dhanhq
-    from dhanhq.dhan_context import DhanContext
-    tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN, settings.DHAN_TOTP_SECRET)
-    return dhanhq(DhanContext(tok.client_id, tok.access_token))
+# ───────────────────────── Dhan history (4H bars) ─────────────────────────
+# 60-min candles → 4H %-spread bars, shared with the research backtester.
+# Uses the live feed's in-process token (never mints its own).
+from app.services.research_backtest import _bars_4h, _intraday_60  # noqa: E402
 
 
-def _daily_closes(dhan, sid: str) -> dict:
-    to = datetime.now().strftime("%Y-%m-%d")
-    frm = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-    res = dhan.historical_daily_data(security_id=str(sid), exchange_segment="MCX_COMM",
-                                     instrument_type="FUTCOM", from_date=frm, to_date=to)
-    data = res.get("data", res) if isinstance(res, dict) else res
-    closes = data.get("close") if isinstance(data, dict) else None
-    ts = (data.get("timestamp") or data.get("start_Time")) if isinstance(data, dict) else None
-    out = {}
-    for t, c in zip(ts or [], closes or []):
-        try:
-            out[datetime.fromtimestamp(float(t)).strftime("%Y-%m-%d")] = c
-        except Exception:
-            pass
-    return out
+def _pair_series_4h(p: dict, closes_cache: dict, token: str) -> list:
+    """[(date_str, pct)] 4H %-spread bars for a pair (cached per contract)."""
+    def closes(sid):
+        sid = str(sid)
+        if sid not in closes_cache:
+            closes_cache[sid] = _intraday_60(sid, token, INTRADAY_DAYS)
+        return closes_cache[sid]
+    big = closes(p["big_security_id"])
+    small = closes(p["small_security_id"])
+    if not big or not small:
+        return []
+    return _bars_4h(big, small, MULTIPLIERS.get(p["big"], 1.0), MULTIPLIERS.get(p["small"], 1.0))
 
 
 def _clean(vals: list) -> list:
@@ -110,7 +109,7 @@ def _clean(vals: list) -> list:
 # ───────────────────────── probability model ─────────────────────────
 def _backtest(vals: list) -> list[tuple]:
     """Walk-forward (no lookahead). Returns [(abs_z, hit_bool, days)] for every
-    ±ENTRY_K σ event, hit = reverted to the rolling mean within MAXHOLD_DAYS."""
+    ±ENTRY_K σ event, hit = reverted to the rolling mean within MAXHOLD_BARS."""
     res = []
     i = WINDOW
     n = len(vals)
@@ -126,7 +125,7 @@ def _backtest(vals: list) -> list[tuple]:
             target = m
             short = z > 0
             hit, j = False, 0
-            for j in range(1, MAXHOLD_DAYS + 1):
+            for j in range(1, MAXHOLD_BARS + 1):
                 if i + j >= n:
                     break
                 px = vals[i + j]
@@ -147,13 +146,15 @@ def _aggregate(res: list[tuple]):
         if sel:
             buckets.append({"zmin": zmin, "zmax": zmax,
                             "rate": round(sum(1 for r in sel if r[1]) / len(sel) * 100, 1),
-                            "n": len(sel), "avg_days": round(statistics.mean([r[2] for r in sel]), 1)})
+                            "n": len(sel),
+                            # r[2] is 4H BARS → convert to days (~3.6 bars/trading day)
+                            "avg_days": round(statistics.mean([r[2] for r in sel]) / 3.6, 1)})
         else:
             buckets.append({"zmin": zmin, "zmax": zmax, "rate": None, "n": 0, "avg_days": None})
     overall = None
     if res:
         overall = {"rate": round(sum(1 for r in res if r[1]) / len(res) * 100, 1),
-                   "n": len(res), "avg_days": round(statistics.mean([r[2] for r in res]), 1)}
+                   "n": len(res), "avg_days": round(statistics.mean([r[2] for r in res]) / 3.6, 1)}
     return buckets, overall
 
 
@@ -167,7 +168,7 @@ def _combo_bt(vals: list, k: float, t: float | None = None, s: float | None = No
                          (stop_mult=1.0 → 1:1, 2.0 → 1:2, …).
       else             → target = entry moved `t`·σ toward the mean;
                          stop   = entry moved `s`·σ away from the mean.
-    Win = target reached before stop within MAXHOLD_DAYS.
+    Win = target reached before stop within MAXHOLD_BARS.
     Returns (wins, losses, timeouts, [days_to_win]).
     """
     win = loss = timeout = 0
@@ -192,7 +193,7 @@ def _combo_bt(vals: list, k: float, t: float | None = None, s: float | None = No
                 target = entry - t * sd if short else entry + t * sd
                 stop = entry + s * sd if short else entry - s * sd
             outcome, j = None, 0
-            for j in range(1, MAXHOLD_DAYS + 1):
+            for j in range(1, MAXHOLD_BARS + 1):
                 if i + j >= n:
                     break
                 px = vals[i + j]
@@ -234,7 +235,7 @@ def _yearly_bt(vals: list, dates: list, stop_mult: float) -> dict:
             d = abs(entry - m)
             stop = entry + stop_mult * d if short else entry - stop_mult * d
             outcome, j = None, 0
-            for j in range(1, MAXHOLD_DAYS + 1):
+            for j in range(1, MAXHOLD_BARS + 1):
                 if i + j >= n:
                     break
                 px = vals[i + j]
@@ -262,7 +263,8 @@ def _summarize_bt(win: int, loss: int, timeout: int, days: list) -> dict:
         "trades": total, "win": win, "loss": loss, "timeout": timeout,
         "win_rate": round(win / decisive * 100, 1) if decisive else None,
         "timeout_pct": round(timeout / total * 100, 1) if total else None,
-        "avg_days": round(statistics.mean(days), 1) if days else None,
+        # `days` holds 4H BARS → convert (~3.6 bars/trading day)
+        "avg_days": round(statistics.mean(days) / 3.6, 1) if days else None,
     }
 
 
@@ -308,30 +310,13 @@ def refresh_model() -> int:
     pairs = [pf for ps in groups.values() if (pf := _pick_front(ps))]
     log.info("Signal fronts (roll within %dd → next month): %s", ROLL_DAYS,
              ", ".join(f"{p.get('label')}={p.get('expiry_short')}" for p in pairs))
-    try:
-        dhan = _dhan()
-    except Exception as e:
-        log.warning("signal model: dhan/token failed: %s", e)
+    from app.services import dhan_feed
+    token = dhan_feed.get_live_token()
+    if not token:
+        log.info("signal model: feed token not ready yet — will retry")
         return 0
 
     cache: dict[str, dict] = {}
-    def closes(sid):
-        sid = str(sid)
-        if sid in cache:
-            return cache[sid]
-        c = {}
-        for attempt in range(3):
-            try:
-                c = _daily_closes(dhan, sid)
-            except Exception as e:
-                log.warning("hist pull failed sid=%s: %s", sid, e)
-                c = {}
-            if c:
-                break
-            time.sleep(1.0 + attempt)
-        cache[sid] = c
-        time.sleep(0.45)
-        return cache[sid]
 
     new: dict[str, dict] = {}
     grid_acc = [[0, 0, 0, []] for _ in STRAT_GRID]   # per-combo (win, loss, timeout, days)
@@ -339,18 +324,11 @@ def refresh_model() -> int:
     bars: list[int] = []
     dmin, dmax = None, None
     for p in pairs:
-        big = closes(p["big_security_id"])
-        small = closes(p["small_security_id"])
-        if not big or not small:
-            continue
-        bm = MULTIPLIERS.get(p["big"], 1.0)
-        sm = MULTIPLIERS.get(p["small"], 1.0)
-        days = sorted(set(big) & set(small))
-        # % SPREAD series (client logic): spread ÷ small-leg value × 100 — bands in %
-        # stay comparable as prices move; converted back to value at fire time.
+        # 4H %-spread bars (client logic: spread ÷ small-leg value × 100; % bands
+        # stay comparable as prices move; converted back to value at fire time).
+        ser = _pair_series_4h(p, cache, token)
+        days = [d for d, _ in ser]
         # cleaned series WITH dates (mirror of _clean: trim 3 + drop 12-MAD outliers)
-        ser = [(d, round((big[d] * bm - small[d] * sm) / (small[d] * sm) * 100, 4))
-               for d in days if small[d]]
         if len(ser) >= 10:
             ser = ser[3:]
             _med = statistics.median([v for _, v in ser])
@@ -368,6 +346,9 @@ def refresh_model() -> int:
         buckets, overall = _aggregate(_backtest(vals))
         new[p["name"]] = {
             "label": p.get("label"),
+            # contract refs for the 4-hourly band-only refresh + stock filter
+            "big_sid": p["big_security_id"], "small_sid": p["small_security_id"],
+            "big_key": p["big"], "small_key": p["small"],
             # all band fields are in % of the small-leg value (4dp — % values are small)
             "mean": round(mean, 4), "sd": round(sd, 4),
             "upper": round(mean + ENTRY_K * sd, 4), "lower": round(mean - ENTRY_K * sd, 4),
@@ -431,6 +412,68 @@ def refresh_model() -> int:
              c13.get("win_rate"), c13.get("trades"),
              ", ".join(f"{y['year']}={y['win_rate']}%" for y in yr13))
     return len(new)
+
+
+def refresh_band() -> int:
+    """Light 4-hourly band update: re-pull ~12 days of 60-min data per contract
+    and recompute just the rolling 20-bar % band (the probability model stays
+    from the daily build). ~2 calls per pair → negligible load."""
+    from app.services import dhan_feed
+    token = dhan_feed.get_live_token()
+    if not token or not _model:
+        return 0
+    updated = 0
+    cache: dict = {}
+    for name, m in list(_model.items()):
+        try:
+            big = cache.setdefault(str(m["big_sid"]), _intraday_60(m["big_sid"], token, 12))
+            small = cache.setdefault(str(m["small_sid"]), _intraday_60(m["small_sid"], token, 12))
+            series = _bars_4h(big, small, MULTIPLIERS.get(m["big_key"], 1.0), MULTIPLIERS.get(m["small_key"], 1.0))
+            vals = [v for _, v in series]
+            if len(vals) < WINDOW:
+                continue
+            win = vals[-WINDOW:]
+            mean = statistics.mean(win)
+            sd = statistics.pstdev(win)
+            if sd <= 0:
+                continue
+            m.update(mean=round(mean, 4), sd=round(sd, 4),
+                     upper=round(mean + ENTRY_K * sd, 4), lower=round(mean - ENTRY_K * sd, 4),
+                     target=round(mean, 4))
+            updated += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("band refresh %s failed: %s", name, e)
+    if updated:
+        _state["last_band_refresh"] = datetime.now().isoformat(timespec="seconds")
+        log.info("Signal band refresh: %d pairs updated", updated)
+    return updated
+
+
+def _stock_allows(small_key: str, pair_name: str, direction: str) -> bool:
+    """Client's stock filter: fire only when the latest warehouse-stock move,
+    read through the pair's stock↔spread correlation sign, points the SAME way
+    as the signal. No stock data / no correlation / flat stock → no fire
+    (this strictness is exactly what produced the 0-loss backtest)."""
+    try:
+        from app.services import mcxccl_service
+        rep = mcxccl_service.report()                       # 60s-cached, no extra load
+        label = next((k for k, v in mcxccl_service._LABEL_TO_KEY.items() if v == small_key), None)
+        if not label:
+            return False
+        r = None
+        for c in rep.get("correlation") or []:
+            if c["pair_name"] == pair_name and (r is None or abs(c["r"]) > abs(r)):
+                r = c["r"]
+        ser = (rep.get("stock_history") or {}).get(label) or []
+        if r is None or len(ser) < 2:
+            return False
+        chg = ser[-1]["units"] - ser[-2]["units"]
+        if chg == 0:
+            return False
+        expected_up = (chg > 0) == (r > 0)   # stock move × corr sign → expected spread direction
+        return direction == ("widen" if expected_up else "narrow")
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # ───────────────────────── live state machine (single writer) ─────────────────────────
@@ -554,6 +597,9 @@ def _tick():
             direction = "narrow" if mid_pct >= model["upper"] else "widen" if mid_pct <= model["lower"] else None
             if direction is None or _too_noisy(s, model["sd"], small_value):
                 _pending.pop(name, None)        # no extreme, or pair too illiquid → don't fire
+                continue
+            if not _stock_allows(s.get("small"), name, direction):
+                _pending.pop(name, None)        # warehouse-stock direction doesn't confirm → skip
                 continue
             if model.get("label") in open_labels:
                 _pending.pop(name, None)        # one open signal per pair at a time (across rolled expiries)
@@ -708,8 +754,10 @@ def get_accuracy() -> dict:
 
 def status() -> dict:
     return {"models": _state["models"], "last_refresh": _state["last_refresh"],
+            "timeframe": "4H", "stock_filter": True,
+            "last_band_refresh": _state.get("last_band_refresh"),
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
-            "maxhold_days": MAXHOLD_DAYS,
+            "maxhold_days": round(MAXHOLD_BARS / 3.6),
             "pairs": sorted({m.get("label") for m in _model.values() if m.get("label")}),
             "rr": f"1:{STOP_MULT:g}"}          # live risk:reward
 
@@ -726,12 +774,17 @@ def _loop() -> None:
     except Exception as e:
         log.warning("load open signals failed: %s", e)
     last_model_date = None
+    last_band_at = 0.0
     while True:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
             if today != last_model_date:
                 if refresh_model() > 0:
                     last_model_date = today
+                    last_band_at = time.time()
+            elif time.time() - last_band_at >= 4 * 3600:   # roll the 4H band forward
+                refresh_band()
+                last_band_at = time.time()
             if _model:
                 _tick()
         except Exception as e:

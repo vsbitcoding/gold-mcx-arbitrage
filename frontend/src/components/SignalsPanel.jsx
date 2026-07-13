@@ -100,7 +100,8 @@ export default function SignalsPanel({ signals }) {
         signals.length === 0 ? (
           <div className="empty-state" style={{ padding: "24px 16px", lineHeight: 1.6 }}>
             No open signals right now.<br />
-            A signal fires automatically when a cross-spread holds at an extreme (±1.5σ).
+            A signal fires automatically when a cross-spread holds at an extreme
+            (±1.5σ on the 4H % band) <b>and</b> the warehouse-stock direction confirms it.
           </div>
         ) : (
           <div className="signal-list">
