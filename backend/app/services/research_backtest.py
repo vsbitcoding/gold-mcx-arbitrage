@@ -89,8 +89,12 @@ def _bars_4h(big: dict[int, float], small: dict[int, float], bm: float, sm: floa
     return [buckets[k] for k in sorted(buckets)]
 
 
-def _walk(series) -> list[dict]:
-    """Walk-forward trades on 4H % bars — production rules (mean target, 1:3)."""
+def _walk(series, target_frac: float = 1.0, maxhold: int = MAXHOLD_BARS) -> list[dict]:
+    """Walk-forward trades on 4H % bars.
+
+    target_frac: how much of the entry→mean reversion to take (1.0 = full mean,
+    0.75 = exit at 75% of the way — hits sooner → fewer timeouts, smaller move).
+    Stop stays 3× the TAKEN distance (constant 1:3 risk:reward per variant)."""
     vals = [v for _, v in series]
     dates = [d for d, _ in series]
     trades = []
@@ -106,11 +110,11 @@ def _walk(series) -> list[dict]:
         if abs(z) >= ENTRY_K:
             entry = vals[i]
             short = z > 0                      # spread high → expect narrow
-            target = m
-            dist = abs(entry - m)
+            dist = abs(entry - m) * target_frac
+            target = entry - dist if short else entry + dist
             stop = entry + STOP_MULT * dist if short else entry - STOP_MULT * dist
             outcome, j = "timeout", 0
-            for j in range(1, MAXHOLD_BARS + 1):
+            for j in range(1, maxhold + 1):
                 if i + j >= n:
                     break
                 px = vals[i + j]
@@ -121,7 +125,7 @@ def _walk(series) -> list[dict]:
                     if px >= target: outcome = "win"; break
                     if px <= stop:   outcome = "loss"; break
             trades.append({"date": dates[i], "direction": "narrow" if short else "widen",
-                           "outcome": outcome})
+                           "outcome": outcome, "bars": j or 1})
             i += (j or 1) + 1
         else:
             i += 1
@@ -133,8 +137,12 @@ def _summ(trades: list[dict]) -> dict:
     loss = sum(1 for t in trades if t["outcome"] == "loss")
     timeout = sum(1 for t in trades if t["outcome"] == "timeout")
     dec = win + loss
+    win_bars = [t["bars"] for t in trades if t["outcome"] == "win" and t.get("bars")]
     return {"trades": len(trades), "win": win, "loss": loss, "timeout": timeout,
-            "win_rate": round(win / dec * 100, 1) if dec else None}
+            "win_rate": round(win / dec * 100, 1) if dec else None,
+            "timeout_pct": round(timeout / len(trades) * 100, 1) if trades else None,
+            # ~3.6 four-hour bars per MCX trading day (09:00–23:30)
+            "avg_days_to_win": round(statistics.mean(win_bars) / 3.6, 1) if win_bars else None}
 
 
 def run(days: int = 185) -> None:
@@ -179,7 +187,8 @@ def run(days: int = 185) -> None:
             prev = [v for dt, v in ser if dt <= d]
             return prev[-1] - prev[-2] if len(prev) >= 2 else None
 
-        all_trades: list[tuple[dict, dict]] = []   # (trade, pair)
+        all_trades: list[tuple[dict, dict]] = []   # (trade, pair) — baseline variant
+        series_by_pair: dict[str, dict] = {}
         used, bars_total, span_from, span_to = 0, 0, None, None
         for p in pairs:
             big = _intraday_60(p["big_security_id"], token, days)
@@ -193,8 +202,29 @@ def run(days: int = 185) -> None:
             bars_total += len(series)
             span_from = min(span_from or series[0][0], series[0][0])
             span_to = max(span_to or series[-1][0], series[-1][0])
+            series_by_pair[p["name"]] = {"label": p.get("label"), "small": p.get("small"), "series": series}
             for t in _walk(series):
                 all_trades.append((t, p))
+
+        # Persist the built 4H series → future sweeps run standalone (no Dhan,
+        # no token, no deploy): /tmp/research_4h_series.json
+        try:
+            import json as _json
+            with open("/tmp/research_4h_series.json", "w") as f:
+                _json.dump({"built_at": datetime.now().isoformat(timespec="seconds"),
+                            "days": days, "pairs": series_by_pair}, f)
+        except Exception as e:  # noqa: BLE001
+            log.warning("series dump failed: %s", e)
+
+        # Timeout-reduction sweep: target fraction × max-hold (only-% strategy)
+        sweep = []
+        for frac in (1.0, 0.75, 0.5):
+            for hold in (36, 18):
+                trades_v = []
+                for info in series_by_pair.values():
+                    trades_v.extend(_walk(info["series"], target_frac=frac, maxhold=hold))
+                sweep.append({"target": f"{int(frac * 100)}% reversion", "maxhold_bars": hold,
+                              "maxhold_days": round(hold / 3.6, 1), **_summ(trades_v)})
 
         # (A) % band alone — full window
         a_full = _summ([t for t, _ in all_trades])
@@ -226,6 +256,7 @@ def run(days: int = 185) -> None:
             only_pct_full=a_full,
             only_pct_overlap=_summ(overlap),
             pct_plus_stock={**_summ(b_take), "filtered_out": b_skip},
+            sweep=sweep,
         )
         log.info("4H research backtest: %s", _result["msg"])
     except Exception as e:  # noqa: BLE001
