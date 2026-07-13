@@ -28,7 +28,7 @@ def get_accuracy(user: str = Depends(get_current_user)):
 
 
 @router.post("/backtest-4h")
-def start_backtest_4h(days: int = Query(185, ge=30, le=365), user: str = Depends(get_current_user)):
+def start_backtest_4h(days: int = Query(185, ge=30, le=1100), user: str = Depends(get_current_user)):
     """One-off research: 4H %-band accuracy, alone vs + stock filter (read-only)."""
     started = research_backtest.start(days)
     return {"started": started, "status": research_backtest.status()}
