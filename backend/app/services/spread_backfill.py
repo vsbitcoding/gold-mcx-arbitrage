@@ -47,32 +47,46 @@ def _is_bullion(pair: dict) -> bool:
 
 
 def _hist_closes(sid: str, token: str, days: int) -> tuple[dict[str, float] | None, str | None]:
-    """date('YYYY-MM-DD') -> daily close for one MCX contract."""
+    """date('YYYY-MM-DD') -> daily close for one MCX contract.
+
+    Dhan rejects (DH-905) windows starting before a contract was listed, so on
+    that error we retry with progressively shorter windows — a late-listed far
+    month then contributes whatever history it actually has."""
     to = datetime.now().date()
-    frm = to - timedelta(days=days + 7)
-    try:
-        r = requests.post(
-            _HIST_URL,
-            headers={"access-token": token, "client-id": settings.DHAN_CLIENT_ID,
-                     "Content-Type": "application/json"},
-            json={"securityId": str(sid), "exchangeSegment": "MCX_COMM",
-                  "instrument": "FUTCOM",
-                  "fromDate": frm.isoformat(), "toDate": to.isoformat()},
-            timeout=30,
-        )
-    except Exception as e:  # noqa: BLE001
-        return None, f"request error: {e}"
-    if r.status_code != 200:
-        return None, f"http {r.status_code}: {r.text[:120]}"
-    d = r.json()
-    out: dict[str, float] = {}
-    for ts, close in zip(d.get("timestamp") or [], d.get("close") or []):
+    windows = [w for w in (days, 90, 45, 21) if w <= days] or [days]
+    last_err = "no data"
+    for win in windows:
+        frm = to - timedelta(days=win + 7)
         try:
-            if close:
-                out[datetime.fromtimestamp(ts).date().isoformat()] = float(close)
-        except (TypeError, ValueError, OSError):
-            continue
-    return out, None
+            r = requests.post(
+                _HIST_URL,
+                headers={"access-token": token, "client-id": settings.DHAN_CLIENT_ID,
+                         "Content-Type": "application/json"},
+                json={"securityId": str(sid), "exchangeSegment": "MCX_COMM",
+                      "instrument": "FUTCOM",
+                      "fromDate": frm.isoformat(), "toDate": to.isoformat()},
+                timeout=30,
+            )
+        except Exception as e:  # noqa: BLE001
+            return None, f"request error: {e}"
+        if r.status_code == 200:
+            d = r.json()
+            out: dict[str, float] = {}
+            for ts, close in zip(d.get("timestamp") or [], d.get("close") or []):
+                try:
+                    if close:
+                        out[datetime.fromtimestamp(ts).date().isoformat()] = float(close)
+                except (TypeError, ValueError, OSError):
+                    continue
+            if out:
+                return out, None
+            last_err = "empty response"
+        else:
+            last_err = f"http {r.status_code}: {r.text[:100]}"
+            if "DH-905" not in r.text:
+                return None, last_err   # real error — don't hammer retries
+        time.sleep(0.3)
+    return None, last_err
 
 
 def run(days: int = 185) -> None:
