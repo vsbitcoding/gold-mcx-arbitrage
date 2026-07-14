@@ -91,10 +91,6 @@ button { font-family: inherit; }
 .c-rate { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; font-size: 15px; }
 .c-rate.buy { color: var(--green); }
 .c-rate.sell { color: var(--red); }
-.c-rate.up { animation: flashUp .8s; }
-.c-rate.down { animation: flashDn .8s; }
-@keyframes flashUp { 0% { background: var(--green-bg); } 100% { background: transparent; } }
-@keyframes flashDn { 0% { background: var(--red-bg); } 100% { background: transparent; } }
 .c-code { color: var(--muted); font-variant-numeric: tabular-nums; }
 .c-ord, .c-act, .c-tg, .c-nudge { white-space: nowrap; }
 .ref-pill { font-size: 12px; font-weight: 700; background: var(--gold-bg); color: var(--gold-ink); padding: 3px 9px; border-radius: 20px; border: 1px solid var(--gold-line); }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 
 const fmt = (v) => (v == null ? "—" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -22,7 +22,6 @@ export default function ScripMaster() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
-  const prevRates = useRef({});
   const modalOpen = editing !== null;
 
   useEffect(() => { try { localStorage.setItem("gk_admin_tpl", template); } catch {} }, [template]);
@@ -51,19 +50,6 @@ export default function ScripMaster() {
 
   const templates = data?.templates?.length ? data.templates : [template];
   const rows = (data?.scrips || []).filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
-
-  function flashCls(s, side) {
-    const p = prevRates.current[s.id];
-    const cur = side === "buy" ? s.buy_rate : s.sell_rate;
-    const was = p ? (side === "buy" ? p.buy : p.sell) : null;
-    if (was == null || cur == null || was === cur) return "";
-    return cur > was ? "up" : "down";
-  }
-  useEffect(() => {
-    const m = {};
-    (data?.scrips || []).forEach((s) => { m[s.id] = { buy: s.buy_rate, sell: s.sell_rate }; });
-    prevRates.current = m;
-  }, [data]);
 
   async function put(s, patch) {
     const body = { ...s, ...patch, template };
@@ -172,9 +158,9 @@ export default function ScripMaster() {
                         : <span className="ref-pill">{refLabel[s.ref_key] || s.ref_key}</span>}
                   </td>
                   <td className="c-num">{s.buy_parity ?? 0}</td>
-                  <td className={`c-rate buy ${flashCls(s, "buy")}`}>{fmt(s.buy_rate)}</td>
+                  <td className="c-rate buy">{fmt(s.buy_rate)}</td>
                   <td className="c-num">{s.sell_parity ?? 0}</td>
-                  <td className={`c-rate sell ${flashCls(s, "sell")}`}>{fmt(s.sell_rate)}</td>
+                  <td className="c-rate sell">{fmt(s.sell_rate)}</td>
                   <td className="c-tg"><Toggle on={s.visible} onClick={() => toggle(s, "visible")} /></td>
                   <td className="c-tg"><Toggle on={s.allow_trade} onClick={() => toggle(s, "allow_trade")} /></td>
                   <td className="c-code">{s.code || "—"}</td>
