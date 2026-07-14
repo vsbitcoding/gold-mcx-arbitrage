@@ -65,7 +65,7 @@ button { font-family: inherit; }
 .nav-tab.soon { opacity: .55; }
 .nav-right { display: flex; align-items: center; gap: 8px; flex: none; }
 
-.content { padding: 18px 20px 40px; max-width: 1500px; width: 100%; margin: 0 auto; }
+.content { padding: 18px 20px 40px; width: 100%; }  /* full width — no cap */
 
 /* ===== scrip master ===== */
 .sm-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -128,8 +128,20 @@ body.dark .modal-ov { background: rgba(0,0,0,.6); }
 .soon-panel h2 { margin: 14px 0 6px; }
 .soon-panel p { color: var(--muted); margin: 0 0 16px; }
 
+/* ===== responsive ===== */
+@media (max-width: 1100px) {
+  .sm-table th, .sm-table td { padding: 9px 10px; }
+  .c-rate { font-size: 14px; }
+}
 @media (max-width: 700px) {
   .nav { gap: 10px; padding: 0 12px; }
   .nav-name { display: none; }
-  .content { padding: 12px 12px 32px; }
+  .content { padding: 12px 10px 32px; }
+  .sm-bar { gap: 8px; }
+  .sm-search { min-width: 0; flex: 1 1 140px; }
+  .sm-table { min-width: 860px; }         /* table scrolls sideways inside its card */
+  .sm-table th, .sm-table td { padding: 8px 8px; font-size: 13px; }
+  .c-rate { font-size: 13.5px; }
+  .mini { min-width: 26px; height: 26px; }
+  .modal { width: 100%; }
 }

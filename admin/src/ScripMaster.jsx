@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 
 const fmt = (v) => (v == null ? "—" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -23,18 +23,32 @@ export default function ScripMaster() {
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const modalOpen = editing !== null;
+  const lastJson = useRef("");
 
   useEffect(() => { try { localStorage.setItem("gk_admin_tpl", template); } catch {} }, [template]);
 
   async function load(tpl = template) {
-    try { const d = await api.listScrips(tpl); setData(d); setErr(""); }
-    catch (e) { setErr(e.message); }
+    try {
+      const d = await api.listScrips(tpl);
+      const j = JSON.stringify(d);
+      if (j !== lastJson.current) {       // re-render ONLY when something changed
+        lastJson.current = j;
+        setData(d);
+      }
+      setErr("");
+    } catch (e) { setErr(e.message); }
   }
-  useEffect(() => { setData(null); load(template); }, [template]);
+  useEffect(() => { lastJson.current = ""; setData(null); load(template); }, [template]);
   useEffect(() => {
     if (modalOpen) return;               // pause live poll while editing
-    const t = setInterval(() => load(template), 2000);
-    return () => clearInterval(t);
+    let t = setInterval(() => load(template), 2000);
+    // pause polling when the tab is hidden — zero wasted requests/server load
+    const onVis = () => {
+      if (document.hidden) { if (t) { clearInterval(t); t = null; } }
+      else { load(template); if (!t) t = setInterval(() => load(template), 2000); }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { if (t) clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
   }, [modalOpen, template]);
 
   const refLabel = useMemo(() => {

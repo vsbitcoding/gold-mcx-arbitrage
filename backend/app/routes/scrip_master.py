@@ -4,6 +4,8 @@ Each scrip = a product whose Buy/Sell rate is computed LIVE from a reference
 (a market feed, or another scrip) plus a buy/sell parity. Reuses the existing
 live feeds via premium_feed.get_inputs() — no new market connections.
 """
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -13,6 +15,16 @@ from app.security import get_current_user
 from app.services import premium_feed
 
 router = APIRouter(prefix="/api/scrips", tags=["scrip-master"])
+
+# Read cache: the panel polls every 2s per open browser — collapse ALL of that
+# into ≤1 tiny SQLite read per second (rates come from in-memory feeds anyway).
+# Mutations invalidate immediately, so edits still show up on the next poll.
+_cache: dict = {}          # template -> (ts, payload)
+_CACHE_TTL = 1.0
+
+
+def _invalidate_cache() -> None:
+    _cache.clear()
 
 # Reference feeds offered to the dealer (label shown in the UI + how to read buy/sell).
 REFERENCES = [
@@ -99,6 +111,10 @@ class OrderIn(BaseModel):
 
 @router.get("")
 def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_user)):
+    now = time.time()
+    hit = _cache.get(template)
+    if hit and now - hit[0] < _CACHE_TTL:
+        return hit[1]
     db = SessionLocal()
     try:
         rows = (db.query(Scrip).filter(Scrip.template == template)
@@ -106,13 +122,15 @@ def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_use
         tpls = [t[0] for t in db.query(Scrip.template).distinct().order_by(Scrip.template).all()]
         if template not in tpls:
             tpls.append(template)
-        return {
+        payload = {
             "template": template,
             "templates": tpls,
             "references": REFERENCES,
             "scrips": _compute(rows),
             "scrip_refs": [{"id": s.id, "name": s.name} for s in rows],  # for "my scrip" chaining
         }
+        _cache[template] = (now, payload)
+        return payload
     finally:
         db.close()
 
@@ -125,6 +143,7 @@ def create_scrip(body: ScripIn, user: str = Depends(get_current_user)):
         s = Scrip(position=pos, **body.model_dump())
         db.add(s)
         db.commit()
+        _invalidate_cache()
         return {"id": s.id}
     finally:
         db.close()
@@ -140,6 +159,7 @@ def update_scrip(scrip_id: int, body: ScripIn, user: str = Depends(get_current_u
         for k, v in body.model_dump().items():
             setattr(s, k, v)
         db.commit()
+        _invalidate_cache()
         return {"ok": True}
     finally:
         db.close()
@@ -153,6 +173,7 @@ def delete_scrip(scrip_id: int, user: str = Depends(get_current_user)):
         if s:
             db.delete(s)
             db.commit()
+        _invalidate_cache()
         return {"ok": True}
     finally:
         db.close()
@@ -167,6 +188,7 @@ def reorder(body: OrderIn, user: str = Depends(get_current_user)):
             if s:
                 s.position = pos
         db.commit()
+        _invalidate_cache()
         return {"ok": True}
     finally:
         db.close()
@@ -232,6 +254,7 @@ def seed(user: str = Depends(get_current_user)):
                     o.ref_key = str(cost.id)
             seeded[tpl] = len(objs)
         db.commit()
+        _invalidate_cache()
         return {"seeded": seeded}
     finally:
         db.close()
