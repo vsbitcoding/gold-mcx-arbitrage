@@ -390,7 +390,12 @@ def _run_real_feed_thread() -> None:
             else:
                 log.exception("Feed loop error: %s — retrying in %ds", e, backoff)
                 _set_state(last_error=err_str[:200])
-                dhan_auth.invalidate()
+                # Auth-invalid (revoked/expired token) → also drop the DISK cache
+                # so the retry mints fresh. Benign errors keep the disk token —
+                # the retry reuses it (no new login → no 2-min limit, no cooldown).
+                auth_bad = any(k in err_str.lower() for k in
+                               ("invalid", "unauthor", "401", "dh-901", "authentication"))
+                dhan_auth.invalidate(disk=auth_bad)
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 120)
         finally:

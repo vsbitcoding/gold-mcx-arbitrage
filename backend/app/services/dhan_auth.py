@@ -4,7 +4,11 @@ Uses the official endpoint:
     POST https://auth.dhan.co/app/generateAccessToken
         ?dhanClientId=<id>&pin=<mpin>&totp=<6-digit code from TOTP secret>
 
-Token is cached in memory and refreshed when within 30 minutes of expiry.
+Token is cached in memory AND on disk (owner-only file, ~24h validity), so a
+backend deploy/restart REUSES the existing token instead of minting a new one:
+no TOTP wait, no "once every 2 minutes" limit, no 15-min cooldown risk — the
+feed is back in seconds. Minting happens only when no valid token exists or an
+auth-invalid error forces a fresh one (invalidate(disk=True)).
 """
 from __future__ import annotations
 
@@ -13,18 +17,23 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import struct
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 log = logging.getLogger("dhan_auth")
 
 DHAN_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 REFRESH_BEFORE_EXPIRY_SECONDS = 30 * 60  # refresh if token expires within 30 min
+# backend/.dhan_token_cache.json — untracked (gitignored) so `git reset --hard`
+# deploys never touch it; chmod 600 (holds a live trading token).
+_CACHE_FILE = Path(__file__).resolve().parents[2] / ".dhan_token_cache.json"
 
 
 def generate_totp(secret: str, period: int = 30, digits: int = 6) -> str:
@@ -55,6 +64,32 @@ class DhanToken:
 
 
 _cached: Optional[DhanToken] = None
+
+
+def _load_disk() -> Optional[DhanToken]:
+    """Valid token from the disk cache, or None."""
+    try:
+        d = json.loads(_CACHE_FILE.read_text())
+        tok = DhanToken(access_token=d["access_token"], expiry_epoch=float(d["expiry_epoch"]),
+                        client_id=d.get("client_id", ""), client_name=d.get("client_name", ""))
+        if tok.access_token and not tok.needs_refresh():
+            return tok
+    except FileNotFoundError:
+        pass
+    except Exception as e:  # noqa: BLE001 — corrupt cache → just re-mint
+        log.warning("token cache unreadable (%s) — will mint fresh", e)
+    return None
+
+
+def _save_disk(tok: DhanToken) -> None:
+    try:
+        _CACHE_FILE.write_text(json.dumps({
+            "access_token": tok.access_token, "expiry_epoch": tok.expiry_epoch,
+            "client_id": tok.client_id, "client_name": tok.client_name,
+        }))
+        os.chmod(_CACHE_FILE, 0o600)
+    except Exception as e:  # noqa: BLE001 — cache is an optimisation, never fatal
+        log.warning("token cache write failed: %s", e)
 
 
 def _parse_expiry(expiry_str: str) -> float:
@@ -116,14 +151,33 @@ def fetch_token(client_id: str, pin: str, totp_secret: str) -> DhanToken:
 
 
 def get_token(client_id: str, pin: str, totp_secret: str) -> DhanToken:
-    """Cached, auto-refreshing token getter."""
+    """Cached, auto-refreshing token getter: memory → disk → mint.
+
+    The disk hop is what makes deploys safe: after a restart (or a benign
+    in-memory invalidate) the still-valid token is reused — no new login."""
     global _cached
     if _cached and not _cached.needs_refresh():
         return _cached
+    disk = _load_disk()
+    if disk:
+        log.info("Reusing cached Dhan token (expires in %.1f h) — no fresh login needed.",
+                 disk.expires_in() / 3600)
+        _cached = disk
+        return _cached
     _cached = fetch_token(client_id, pin, totp_secret)
+    _save_disk(_cached)
     return _cached
 
 
-def invalidate() -> None:
+def invalidate(disk: bool = False) -> None:
+    """Drop the in-memory token. disk=True also deletes the on-disk cache —
+    use ONLY for auth-invalid errors (revoked/expired token), otherwise the
+    next get_token() harmlessly reloads the same valid token from disk."""
     global _cached
     _cached = None
+    if disk:
+        try:
+            _CACHE_FILE.unlink(missing_ok=True)
+            log.info("Disk token cache invalidated — next get_token() mints fresh.")
+        except Exception as e:  # noqa: BLE001
+            log.warning("token cache delete failed: %s", e)
