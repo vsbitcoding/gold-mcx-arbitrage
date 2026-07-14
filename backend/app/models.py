@@ -236,6 +236,31 @@ class DailySpread(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Scrip(Base):
+    """A product line in the new admin's Scrip Master (modern rebuild of the
+    dealer's rate board). Each scrip tracks a live reference (a market feed OR
+    another scrip) and adds a buy/sell parity → live Buy/Sell rate. Visible =
+    show on the public board/app; allow_trade = customer can order it.
+    """
+    __tablename__ = "scrips"
+
+    id = Column(Integer, primary_key=True)
+    template = Column(String(40), nullable=False, default="gurukrupa", index=True)
+    name = Column(String(80), nullable=False)
+    code = Column(String(20), nullable=True)
+    # reference: what this scrip's rate is based on
+    ref_type = Column(String(10), nullable=False, default="feed")   # feed | scrip | manual
+    ref_key = Column(String(40), nullable=True)                     # feed key OR referenced scrip id
+    buy_parity = Column(Float, nullable=True, default=0.0)
+    sell_parity = Column(Float, nullable=True, default=0.0)
+    buy_manual = Column(Float, nullable=True)                       # optional hard override
+    sell_manual = Column(Float, nullable=True)
+    visible = Column(Boolean, nullable=False, default=True)
+    allow_trade = Column(Boolean, nullable=False, default=False)
+    position = Column(Integer, nullable=False, default=0, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class OptionsSnapshot(Base):
     """Twice-daily (10:00 & 15:00 IST) snapshot of the full Nifty/Sensex PE
     options board — replaces the client's manual 10am/3pm screenshots. One row

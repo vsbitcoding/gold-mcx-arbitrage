@@ -13,14 +13,16 @@ PREV=$(cat "$PREV_REF_FILE" 2>/dev/null || git rev-parse HEAD~1 2>/dev/null || e
 if [ -n "$PREV" ] && [ "$PREV" != "$CURRENT" ]; then
     BACKEND_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- backend/ | wc -l)
     FRONTEND_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- frontend/ | wc -l)
+    ADMIN_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- admin/ | wc -l)
     DEPS_CHANGED=$(git diff --name-only "$PREV" "$CURRENT" -- backend/requirements.txt | wc -l)
 else
     BACKEND_CHANGED=1
     FRONTEND_CHANGED=1
+    ADMIN_CHANGED=1
     DEPS_CHANGED=1
 fi
 
-echo "==> Changes: backend=$BACKEND_CHANGED frontend=$FRONTEND_CHANGED deps=$DEPS_CHANGED"
+echo "==> Changes: backend=$BACKEND_CHANGED frontend=$FRONTEND_CHANGED admin=$ADMIN_CHANGED deps=$DEPS_CHANGED"
 
 if [ "$DEPS_CHANGED" -gt 0 ]; then
     echo "==> Reinstalling backend deps"
@@ -45,6 +47,20 @@ if [ "$FRONTEND_CHANGED" -gt 0 ]; then
     sudo find /var/www/arbitrage -type d -exec chmod 755 {} \;
     sudo find /var/www/arbitrage -type f -exec chmod 644 {} \;
     echo "==> Frontend live (no backend restart needed)"
+fi
+
+if [ "$ADMIN_CHANGED" -gt 0 ]; then
+    echo "==> Rebuilding admin panel (served at /admin/)"
+    cd "$APP_DIR/admin"
+    npm install --no-audit --no-fund --silent
+    npm run build
+    sudo mkdir -p /var/www/arbitrage/admin
+    sudo rm -rf /var/www/arbitrage/admin/assets
+    sudo cp -a "$APP_DIR/admin/dist/." /var/www/arbitrage/admin/
+    sudo chown -R www-data:www-data /var/www/arbitrage/admin
+    sudo find /var/www/arbitrage/admin -type d -exec chmod 755 {} \;
+    sudo find /var/www/arbitrage/admin -type f -exec chmod 644 {} \;
+    echo "==> Admin panel live at /admin/"
 fi
 
 if [ "$BACKEND_CHANGED" -gt 0 ]; then
