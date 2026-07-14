@@ -103,8 +103,12 @@ def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_use
     try:
         rows = (db.query(Scrip).filter(Scrip.template == template)
                 .order_by(Scrip.position, Scrip.id).all())
+        tpls = [t[0] for t in db.query(Scrip.template).distinct().order_by(Scrip.template).all()]
+        if template not in tpls:
+            tpls.append(template)
         return {
             "template": template,
+            "templates": tpls,
             "references": REFERENCES,
             "scrips": _compute(rows),
             "scrip_refs": [{"id": s.id, "name": s.name} for s in rows],  # for "my scrip" chaining
@@ -168,41 +172,66 @@ def reorder(body: OrderIn, user: str = Depends(get_current_user)):
         db.close()
 
 
+# Client's real products, copied from the old panel's two templates
+# (gurukrupa = B2B pricing, gurukrupab2c = B2C pricing — same scrips, own
+# parities/codes). ref "COST" = chained to the GOLD COST scrip of the template.
+_SEED = {
+    "gurukrupa": [
+        # name, code, ref_type, ref_key, buy_parity, sell_parity, visible, allow_trade
+        ("GOLD($)", "8868", "feed", "gold_spot", 0, 0, True, False),
+        ("SILVER($)", "8869", "feed", "silver_spot", 0, 0, False, False),
+        ("INR(₹)", "8870", "feed", "usdinr", 0, 0.01, True, False),
+        ("GOLD COST", "8871", "feed", "mcx_gold", 0, 0, True, False),
+        ("SILVER FUTURE", "8872", "feed", "mcx_silver", 0, 0, False, False),
+        ("GOLD 995 (1kg) IND-BIS T+0", "8873", "feed", "mcx_gold", -100, 100, False, False),
+        ("GOLD 995 (500gm) T+0", "8874", "feed", "mcx_gold", -100, 100, False, False),
+        ("GOLD 995 (1KG) IND-BIS 24th FEB", "8922", "feed", "mcx_gold", -150, 150, False, False),
+        ("GOLD 995 (500gm) 24th FEB", "8923", "feed", "mcx_gold", -200, 200, False, False),
+        ("GOLD 995 WITH GST IMP", "8924", "feed", "mcx_gold", 5000, 3900, False, False),
+        ("GOLD 999 WITH GST IMP", "8925", "scrip", "COST", -500, 4950, True, True),
+        ("GOLD 999 100 Grams", "8968", "feed", "mcx_gold", -1000, 1000, False, True),
+    ],
+    "gurukrupab2c": [
+        ("GOLD($)", "8957", "feed", "gold_spot", 0, 0, True, False),
+        ("SILVER($)", "8958", "feed", "silver_spot", 0, 0, False, False),
+        ("INR(₹)", "8959", "feed", "usdinr", 0, 0.01, True, False),
+        ("GOLD COST", "8960", "feed", "mcx_gold", 0, 0, True, False),
+        ("SILVER FUTURE", "8961", "feed", "mcx_silver", 0, 0, False, False),
+        ("GOLD 995 (1kg) IND-BIS T+0", "8962", "feed", "mcx_gold", -100, 100, False, False),
+        ("GOLD 995 (500gm) T+0", "8963", "feed", "mcx_gold", -100, 100, False, False),
+        ("GOLD 995 (1KG) IND-BIS 24th FEB", "8964", "feed", "mcx_gold", -150, 150, False, False),
+        ("GOLD 995 (500gm) 24th FEB", "8965", "feed", "mcx_gold", -200, 200, False, False),
+        ("GOLD 995 WITH GST IMP", "8966", "feed", "mcx_gold", 5000, 3150, False, False),
+        ("GOLD 999 WITH GST IMP", "8967", "feed", "mcx_gold", -500, 2450, True, True),
+    ],
+}
+
+
 @router.post("/seed")
 def seed(user: str = Depends(get_current_user)):
-    """One-time demo seed mirroring the client's current 12 products, so the new
-    panel shows real data immediately. No-op if scrips already exist."""
+    """Seed the client's real products for BOTH templates (values copied from
+    the old panel). Idempotent per template — skips a template that has rows."""
     db = SessionLocal()
+    seeded = {}
     try:
-        if db.query(Scrip.id).first():
-            return {"seeded": 0, "msg": "already has scrips"}
-        rows = [
-            ("GOLD($)", "8868", "feed", "gold_spot", 0, 0, True, False),
-            ("SILVER($)", "8869", "feed", "silver_spot", 0, 0, False, False),
-            ("INR(₹)", "8870", "feed", "usdinr", 0, 0.01, True, False),
-            ("GOLD COST", "8871", "feed", "mcx_gold", 0, 0, True, False),
-            ("SILVER FUTURE", "8872", "feed", "mcx_silver", 0, 0, False, False),
-            ("GOLD 995 (1kg) IND-BIS T+0", "8873", "feed", "mcx_gold", -100, 100, False, False),
-            ("GOLD 995 (500gm) T+0", "8874", "feed", "mcx_gold", -100, 100, False, False),
-            ("GOLD 995 (1KG) IND-BIS 24th FEB", "8922", "feed", "mcx_gold", -150, 150, False, False),
-            ("GOLD 995 (500gm) 24th FEB", "8923", "feed", "mcx_gold", -200, 200, False, False),
-            ("GOLD 995 WITH GST IMP", "8924", "feed", "mcx_gold", 5000, 3900, False, False),
-            ("GOLD 999 WITH GST IMP", "8925", "scrip", None, -500, 100, True, True),
-            ("GOLD 999 100 Grams", "8968", "feed", "mcx_gold", -1000, 1000, False, True),
-        ]
-        objs = []
-        for i, (name, code, rt, rk, bp, sp, vis, at) in enumerate(rows):
-            objs.append(Scrip(template="gurukrupa", name=name, code=code, ref_type=rt,
-                              ref_key=rk, buy_parity=bp, sell_parity=sp, visible=vis,
-                              allow_trade=at, position=i))
-        db.add_all(objs)
-        db.flush()
-        # link "GOLD 999 WITH GST IMP" → references the "GOLD COST" scrip
-        cost = next((o for o in objs if o.name == "GOLD COST"), None)
-        g999 = next((o for o in objs if o.name == "GOLD 999 WITH GST IMP"), None)
-        if cost and g999:
-            g999.ref_key = str(cost.id)
+        for tpl, rows in _SEED.items():
+            if db.query(Scrip.id).filter(Scrip.template == tpl).first():
+                seeded[tpl] = 0
+                continue
+            objs = []
+            for i, (name, code, rt, rk, bp, sp, vis, at) in enumerate(rows):
+                objs.append(Scrip(template=tpl, name=name, code=code, ref_type=rt,
+                                  ref_key=None if rk == "COST" else rk,
+                                  buy_parity=bp, sell_parity=sp, visible=vis,
+                                  allow_trade=at, position=i))
+            db.add_all(objs)
+            db.flush()
+            cost = next((o for o in objs if o.name == "GOLD COST"), None)
+            for o, (name, code, rt, rk, *_rest) in zip(objs, rows):
+                if rk == "COST" and cost:
+                    o.ref_key = str(cost.id)
+            seeded[tpl] = len(objs)
         db.commit()
-        return {"seeded": len(objs)}
+        return {"seeded": seeded}
     finally:
         db.close()

@@ -14,24 +14,29 @@ function Toggle({ on, onClick }) {
 }
 
 export default function ScripMaster() {
+  const [template, setTemplate] = useState(() => {
+    try { return localStorage.getItem("gk_admin_tpl") || "gurukrupa"; } catch { return "gurukrupa"; }
+  });
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
-  const [editing, setEditing] = useState(null); // scrip object or BLANK (add) or null
+  const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
-  const prevRates = useRef({}); // id -> {buy, sell} for flash
+  const prevRates = useRef({});
   const modalOpen = editing !== null;
 
-  async function load() {
-    try { const d = await api.listScrips(); setData(d); setErr(""); }
+  useEffect(() => { try { localStorage.setItem("gk_admin_tpl", template); } catch {} }, [template]);
+
+  async function load(tpl = template) {
+    try { const d = await api.listScrips(tpl); setData(d); setErr(""); }
     catch (e) { setErr(e.message); }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { setData(null); load(template); }, [template]);
   useEffect(() => {
     if (modalOpen) return;               // pause live poll while editing
-    const t = setInterval(load, 2000);
+    const t = setInterval(() => load(template), 2000);
     return () => clearInterval(t);
-  }, [modalOpen]);
+  }, [modalOpen, template]);
 
   const refLabel = useMemo(() => {
     const m = {};
@@ -44,6 +49,7 @@ export default function ScripMaster() {
     return m;
   }, [data]);
 
+  const templates = data?.templates?.length ? data.templates : [template];
   const rows = (data?.scrips || []).filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
 
   function flashCls(s, side) {
@@ -59,10 +65,22 @@ export default function ScripMaster() {
     prevRates.current = m;
   }, [data]);
 
-  async function toggle(s, field) {
-    const body = { ...s, [field]: !s[field] };
-    setData((d) => ({ ...d, scrips: d.scrips.map((x) => (x.id === s.id ? body : x)) })); // optimistic
+  async function put(s, patch) {
+    const body = { ...s, ...patch, template };
+    setData((d) => ({ ...d, scrips: d.scrips.map((x) => (x.id === s.id ? { ...x, ...patch } : x)) })); // optimistic
     try { await api.updateScrip(s.id, body); } catch (e) { setErr(e.message); load(); }
+  }
+  const toggle = (s, f) => put(s, { [f]: !s[f] });
+  // −5/+5 quick nudge (old panel behaviour): move this scrip's price by 5.
+  function nudge(s, d) {
+    if (s.buy_manual != null || s.sell_manual != null) {
+      put(s, {
+        buy_manual: s.buy_manual != null ? s.buy_manual + d : null,
+        sell_manual: s.sell_manual != null ? s.sell_manual + d : null,
+      });
+    } else {
+      put(s, { buy_parity: (s.buy_parity || 0) + d, sell_parity: (s.sell_parity || 0) + d });
+    }
   }
   async function move(s, dir) {
     const ids = rows.map((x) => x.id);
@@ -78,7 +96,7 @@ export default function ScripMaster() {
   }
   async function save() {
     setBusy(true); setErr("");
-    const body = { ...editing };
+    const body = { ...editing, template };
     ["buy_parity", "sell_parity", "buy_manual", "sell_manual"].forEach((k) => {
       body[k] = body[k] === "" || body[k] == null ? (k.includes("parity") ? 0 : null) : Number(body[k]);
     });
@@ -95,22 +113,25 @@ export default function ScripMaster() {
   return (
     <div className="sm">
       <div className="sm-bar">
-        <div className="sm-title">
-          Scrip Master <span className="sm-live"><i className="dot" /> live</span>
-        </div>
+        <span className="sm-live"><i className="dot" /> LIVE</span>
+        <label className="sm-tpl">
+          Template
+          <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+            {templates.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
         <input className="sm-search" placeholder="Search scrip…" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="grow" />
-        <button className="btn btn-gold" onClick={() => setEditing({ ...BLANK })}>＋ Add Scrip</button>
+        <button className="btn btn-gold" onClick={() => setEditing({ ...BLANK, template })}>＋ Add Scrip</button>
       </div>
 
       {err && <div className="sm-err">⚠ {err}</div>}
 
       {empty ? (
         <div className="soon-panel">
-          <div className="soon-ic">▤</div>
-          <h2>No scrips yet</h2>
-          <p>Load the current 12 products to preview the panel with live rates.</p>
-          <button className="btn btn-gold" onClick={seed} disabled={busy}>{busy ? "Loading…" : "Load demo data"}</button>
+          <h2>No scrips in “{template}”</h2>
+          <p>Load the current products (both templates) to preview with live rates.</p>
+          <button className="btn btn-gold" onClick={seed} disabled={busy}>{busy ? "Loading…" : "Load products"}</button>
         </div>
       ) : (
         <div className="sm-scroll">
@@ -119,6 +140,7 @@ export default function ScripMaster() {
               <tr>
                 <th className="c-ord"></th>
                 <th className="c-name">Scrip Name</th>
+                <th className="c-nudge"></th>
                 <th>Reference</th>
                 <th className="c-num">Buy Parity</th>
                 <th className="c-rate">Buy Rate</th>
@@ -138,6 +160,10 @@ export default function ScripMaster() {
                     <button className="mini" onClick={() => move(s, 1)} title="Down">↓</button>
                   </td>
                   <td className="c-name">{s.name}</td>
+                  <td className="c-nudge">
+                    <button className="mini nudge" onClick={() => nudge(s, -5)} title="Rate −5">−5</button>
+                    <button className="mini nudge" onClick={() => nudge(s, +5)} title="Rate +5">+5</button>
+                  </td>
                   <td className="c-ref">
                     {s.ref_type === "scrip"
                       ? <span className="ref-pill scrip">↳ {scripName[String(s.ref_key)] || "scrip"}</span>
@@ -166,7 +192,7 @@ export default function ScripMaster() {
       {modalOpen && (
         <div className="modal-ov" onClick={(e) => { if (e.target.classList.contains("modal-ov")) setEditing(null); }}>
           <div className="modal">
-            <div className="modal-h">{editing.id ? "Edit Scrip" : "Add Scrip"}</div>
+            <div className="modal-h">{editing.id ? "Edit Scrip" : `Add Scrip — ${template}`}</div>
             <div className="modal-b">
               <div className="fld"><label>Scrip Name</label>
                 <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} autoFocus /></div>
