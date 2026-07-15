@@ -42,3 +42,4 @@ Gurukrupa Bullion_CC/
 
 # Live Dhan token cache (owner-only; survives git reset so deploys reuse the token)
 .dhan_token_cache.json
+.scrip_hl.json

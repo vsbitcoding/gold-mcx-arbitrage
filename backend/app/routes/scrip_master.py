@@ -4,7 +4,10 @@ Each scrip = a product whose Buy/Sell rate is computed LIVE from a reference
 (a market feed, or another scrip) plus a buy/sell parity. Reuses the existing
 live feeds via premium_feed.get_inputs() — no new market connections.
 """
+import json
 import time
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -15,6 +18,51 @@ from app.security import get_current_user
 from app.services import premium_feed
 
 router = APIRouter(prefix="/api/scrips", tags=["scrip-master"])
+
+# ── Day High/Low tracker (like the old panel/app's L:/H:) ──────────────────
+# In-memory, keyed per template+scrip, reset each IST day; flushed to a tiny
+# untracked JSON file at most every 60s so restarts keep the day's H/L.
+_HL_FILE = Path(__file__).resolve().parents[2] / ".scrip_hl.json"
+_hl: dict = {}
+_hl_last_flush = 0.0
+try:
+    _hl = json.loads(_HL_FILE.read_text())
+except Exception:  # noqa: BLE001 — fresh start is fine
+    _hl = {}
+
+
+def _track_hl(template: str, rows: list[dict]) -> None:
+    """Update per-scrip day low/high from the freshly computed rates and stamp
+    `low`/`high` onto each row (tracks the sell rate; falls back to buy)."""
+    global _hl_last_flush
+    today = datetime.now().date().isoformat()   # server TZ = IST
+    changed = False
+    for r in rows:
+        v = r.get("sell_rate") if r.get("sell_rate") is not None else r.get("buy_rate")
+        k = f"{template}:{r['id']}"
+        h = _hl.get(k)
+        if v is None:
+            r["low"] = h.get("lo") if h and h.get("d") == today else None
+            r["high"] = h.get("hi") if h and h.get("d") == today else None
+            continue
+        if not h or h.get("d") != today:
+            _hl[k] = h = {"d": today, "lo": v, "hi": v}
+            changed = True
+        else:
+            if v < h["lo"]:
+                h["lo"] = v
+                changed = True
+            if v > h["hi"]:
+                h["hi"] = v
+                changed = True
+        r["low"], r["high"] = round(h["lo"], 4), round(h["hi"], 4)
+    now = time.time()
+    if changed and now - _hl_last_flush > 60:
+        try:
+            _HL_FILE.write_text(json.dumps(_hl))
+            _hl_last_flush = now
+        except Exception:  # noqa: BLE001 — H/L persistence is best-effort
+            pass
 
 # Read cache: the panel polls every 2s per open browser — collapse ALL of that
 # into ≤1 tiny SQLite read per second (rates come from in-memory feeds anyway).
@@ -109,8 +157,9 @@ class OrderIn(BaseModel):
     order: list[int]  # scrip ids in the desired display order
 
 
-@router.get("")
-def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_user)):
+def build_board(template: str) -> dict:
+    """Full computed board for a template (cached ~1s). Shared by the admin
+    grid AND the public app/website board endpoint."""
     now = time.time()
     hit = _cache.get(template)
     if hit and now - hit[0] < _CACHE_TTL:
@@ -122,17 +171,24 @@ def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_use
         tpls = [t[0] for t in db.query(Scrip.template).distinct().order_by(Scrip.template).all()]
         if template not in tpls:
             tpls.append(template)
+        computed = _compute(rows)
+        _track_hl(template, computed)
         payload = {
             "template": template,
             "templates": tpls,
             "references": REFERENCES,
-            "scrips": _compute(rows),
+            "scrips": computed,
             "scrip_refs": [{"id": s.id, "name": s.name} for s in rows],  # for "my scrip" chaining
         }
         _cache[template] = (now, payload)
         return payload
     finally:
         db.close()
+
+
+@router.get("")
+def list_scrips(template: str = "gurukrupa", user: str = Depends(get_current_user)):
+    return build_board(template)
 
 
 @router.post("")
@@ -225,6 +281,17 @@ _SEED = {
         ("GOLD 995 (500gm) 24th FEB", "8965", "feed", "mcx_gold", -200, 200, False, False),
         ("GOLD 995 WITH GST IMP", "8966", "feed", "mcx_gold", 5000, 3150, False, False),
         ("GOLD 999 WITH GST IMP", "8967", "feed", "mcx_gold", -500, 2450, True, True),
+    ],
+    # copied from the old panel's gurukrupasilver template (app's SILVER RATES tab)
+    "gurukrupasilver": [
+        ("GOLD($)", "8915", "feed", "gold_spot", 0, 0, False, False),
+        ("SILVER($)", "8916", "feed", "silver_spot", 0, 0, True, False),
+        ("INR(₹)", "8917", "feed", "usdinr", 0, 0.05, True, False),
+        ("GOLD FUTURE", "8918", "feed", "mcx_gold", 0, 0, False, False),
+        ("SILVER COST", "8919", "feed", "mcx_silver", 0, 0, True, False),
+        ("SILVER IMPORTED (30kgs) 24th FEB", "8920", "feed", "mcx_silver", -100, 5000, False, True),
+        ("SILVER 999", "8931", "feed", "mcx_silver", -20, 5000, False, True),
+        ("SILVER WITH GST", "8921", "feed", "mcx_silver", 0, -1100, True, True),
     ],
 }
 

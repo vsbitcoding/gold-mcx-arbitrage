@@ -241,6 +241,33 @@ def public_options_spread(
     }
 
 
+@router.get("/board")
+def public_board(
+    template: str = Query("gurukrupa", description="gurukrupa (LIVE RATES) | gurukrupasilver (SILVER RATES) | gurukrupab2c"),
+    _key: str = Depends(require_api_key),
+):
+    """Customer-facing live rate board (powers the app's LIVE RATES / SILVER
+    RATES screens and the public website).
+
+    Returns only VISIBLE scrips of the template, in display order, each with
+    live buy/sell plus the day's low/high (IST day, tracked server-side).
+    Poll every 2s while the screen is foregrounded; pause in background.
+    """
+    from app.routes import scrip_master  # shared cached builder (~1s TTL)
+
+    b = scrip_master.build_board(template if template in ("gurukrupa", "gurukrupab2c", "gurukrupasilver") else "gurukrupa")
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "template": b["template"],
+        "scrips": [
+            {"name": s["name"], "code": s["code"], "buy": s["buy_rate"], "sell": s["sell_rate"],
+             "low": s.get("low"), "high": s.get("high"), "trade": s["allow_trade"]}
+            for s in b["scrips"] if s["visible"]
+        ],
+    }
+
+
 @router.get("/options-history")
 def public_options_history(
     weekday: str | None = Query(None, description="mon..sun or 0..6 (0=Mon) → last N same-weekday boards; omit = latest snapshot days"),
