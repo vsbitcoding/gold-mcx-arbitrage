@@ -79,6 +79,8 @@ REFERENCES = [
     {"key": "gold_spot", "label": "Gold Spot ($)"},
     {"key": "silver_spot", "label": "Silver Spot ($)"},
     {"key": "usdinr", "label": "USD / INR"},
+    {"key": "crude_intl", "label": "Crude WTI ($)"},
+    {"key": "brent_intl", "label": "Brent ($)"},
     {"key": "mcx_gold", "label": "MCX Gold (fut)"},
     {"key": "mcx_silver", "label": "MCX Silver (fut)"},
 ]
@@ -91,10 +93,13 @@ def _feed_pairs() -> dict:
     mg = d.get("mcx_gold") or {}
     ms = d.get("mcx_silver") or {}
     xau, xag, inr = d.get("xauusd"), d.get("xagusd"), d.get("usdinr")
+    wti, brent = d.get("wti"), d.get("brent")
     return {
         "gold_spot": (xau, xau),
         "silver_spot": (xag, xag),
         "usdinr": (inr, inr),
+        "crude_intl": (wti, wti),
+        "brent_intl": (brent, brent),
         "mcx_gold": (mg.get("bid") or mg.get("ltp"), mg.get("ask") or mg.get("ltp")),
         "mcx_silver": (ms.get("bid") or ms.get("ltp"), ms.get("ask") or ms.get("ltp")),
     }

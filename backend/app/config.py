@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     PREMIUM_FEED_ENABLED: bool = True
     DERIV_APP_ID: str = "1089"
     TWELVEDATA_API_KEY: str = ""
+    # Finnhub free WS (WTI + Brent crude for the app board). ONE connection per
+    # key — this server must be the only consumer of this key.
+    FINNHUB_API_KEY: str = ""
 
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
