@@ -181,3 +181,17 @@ def invalidate(disk: bool = False) -> None:
             log.info("Disk token cache invalidated — next get_token() mints fresh.")
         except Exception as e:  # noqa: BLE001
             log.warning("token cache delete failed: %s", e)
+
+
+def current_expires_in() -> Optional[float]:
+    """Seconds left on whichever token would be used next (memory, else the
+    raw disk file — no refresh-margin filter, may be negative). None = no
+    token cached anywhere. Lets the feed distinguish an expired-token error
+    flood from a genuine Dhan rate-limit."""
+    if _cached:
+        return _cached.expires_in()
+    try:
+        d = json.loads(_CACHE_FILE.read_text())
+        return float(d["expiry_epoch"]) - time.time()
+    except Exception:  # noqa: BLE001
+        return None

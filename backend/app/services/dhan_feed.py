@@ -95,6 +95,28 @@ _last_reconnect_epoch: float = 0.0
 RECONNECT_GRACE_SECONDS = 300
 
 
+def _safe_close_active(timeout: float = 15.0) -> None:
+    """close_connection() on a disposable thread. The SDK's close can hang
+    forever on a half-dead socket — exactly that froze the watchdog thread
+    from 16-Jul 09:17 until the 21-Jul restart, so no caller may ever invoke
+    it directly."""
+    feed = _active_feed
+    if not feed:
+        return
+
+    def _closer() -> None:
+        try:
+            feed.close_connection()
+        except Exception as e:  # noqa: BLE001
+            log.warning("close_connection() failed: %s", e)
+
+    t = threading.Thread(target=_closer, daemon=True, name="dhan-close")
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        log.warning("close_connection() still hung after %.0fs — abandoning it.", timeout)
+
+
 def _trigger_reconnect(reason: str) -> None:
     global _active_feed, _last_reconnect_epoch
     if time.time() - _last_reconnect_epoch < RECONNECT_GRACE_SECONDS:
@@ -110,43 +132,46 @@ def _trigger_reconnect(reason: str) -> None:
     _last_reconnect_epoch = time.time()
     log.warning("Watchdog forcing reconnect: %s", reason)
     dhan_auth.invalidate()
-    try:
-        if _active_feed:
-            _active_feed.close_connection()
-    except Exception as e:
-        log.warning("close_connection() failed: %s", e)
+    _safe_close_active()
 
 
 def _watchdog() -> None:
+    log.info("Watchdog thread started.")
     last_postmarket_open = None
     while True:
         time.sleep(60)
-        with _state_lock:
-            expiry = _state["token_expiry_epoch"]
-            mode = _state["mode"]
-            last_tick = _state["last_tick_epoch"]
+        # The whole iteration is armored: one unexpected exception must never
+        # kill this thread (a dead watchdog = no token pre-refresh and no
+        # silent-feed recovery until the next service restart).
+        try:
+            with _state_lock:
+                expiry = _state["token_expiry_epoch"]
+                mode = _state["mode"]
+                last_tick = _state["last_tick_epoch"]
 
-        if expiry and (expiry - time.time()) < 30 * 60:
-            _trigger_reconnect("token expiring")
-            continue
-        if mode == "live" and is_market_open() and last_tick:
-            age = time.time() - last_tick
-            if age > 180:
-                _trigger_reconnect(f"no tick for {int(age)}s during market hours")
+            if expiry and (expiry - time.time()) < 30 * 60:
+                _trigger_reconnect("token expiring")
                 continue
-        ist = _ist_now()
-        today = ist.date()
-        # Post-open fresh subscription — delayed to 09:17-09:25 IST.
-        # Was 09:01-09:05 but Dhan's WS is at its worst exactly at market open;
-        # waiting 15 minutes lets their side stabilise and avoids the 429 storm.
-        if (
-            ist.weekday() < 5
-            and ist.hour == 9
-            and 17 <= ist.minute <= 25
-            and last_postmarket_open != today
-        ):
-            _trigger_reconnect("post-open fresh subscription")
-            last_postmarket_open = today
+            if mode == "live" and is_market_open() and last_tick:
+                age = time.time() - last_tick
+                if age > 180:
+                    _trigger_reconnect(f"no tick for {int(age)}s during market hours")
+                    continue
+            ist = _ist_now()
+            today = ist.date()
+            # Post-open fresh subscription — delayed to 09:17-09:25 IST.
+            # Was 09:01-09:05 but Dhan's WS is at its worst exactly at market open;
+            # waiting 15 minutes lets their side stabilise and avoids the 429 storm.
+            if (
+                ist.weekday() < 5
+                and ist.hour == 9
+                and 17 <= ist.minute <= 25
+                and last_postmarket_open != today
+            ):
+                _trigger_reconnect("post-open fresh subscription")
+                last_postmarket_open = today
+        except Exception as e:  # noqa: BLE001
+            log.exception("Watchdog iteration failed: %s — continuing.", e)
 
 
 def _run_real_feed_thread() -> None:
@@ -323,12 +348,10 @@ def _run_real_feed_thread() -> None:
 
             def _force_close():
                 """Force close the SDK so feed.run() exits — without this the
-                SDK retries internally every ~2s forever, extending Dhan's ban."""
-                try:
-                    if _active_feed:
-                        _active_feed.close_connection()
-                except Exception as e:
-                    log.warning("force_close: close_connection() failed: %s", e)
+                SDK retries internally every ~2s forever, extending Dhan's ban.
+                Uses the hang-proof helper: a close that blocks must not freeze
+                the SDK callback thread."""
+                _safe_close_active()
 
             def on_error(_instance, err):
                 msg = str(err)
@@ -371,21 +394,41 @@ def _run_real_feed_thread() -> None:
             # If we exited because of rate-limit, use long cool-down (5 min).
             # Otherwise reset to fast backoff for benign disconnects.
             if rate_limited_flag["hit"]:
-                cool = 900
-                log.warning("Rate-limited by Dhan — cooling down for %ds before reconnect.", cool)
-                _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
-                time.sleep(cool)
-                backoff = 5
+                # An EXPIRED token produces the same error flood as a genuine
+                # rate-limit (handshake rejected every ~2s). Cooling down 900s
+                # for that ate the 09:00 market open on 20/21-Jul — instead,
+                # re-auth immediately and only cool down on a real 429.
+                rem = dhan_auth.current_expires_in()
+                if rem is None or rem < dhan_auth.REFRESH_BEFORE_EXPIRY_SECONDS:
+                    log.warning(
+                        "Error flood but token is expired/expiring (%s) — "
+                        "re-authing now instead of cooling down.",
+                        "no token" if rem is None else f"{rem / 60:.0f} min left")
+                    dhan_auth.invalidate(disk=True)
+                    backoff = 5
+                else:
+                    cool = 900
+                    log.warning("Rate-limited by Dhan — cooling down for %ds before reconnect.", cool)
+                    _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
+                    time.sleep(cool)
+                    backoff = 5
             else:
                 backoff = 5
         except Exception as e:
             err_str = str(e)
             # Dhan rate-limit: cool down 5 min instead of fast retry
             if "429" in err_str or "rate" in err_str.lower():
-                cool = 900
-                log.warning("Feed loop hit rate-limit — cooling down for %ds: %s", cool, err_str[:120])
-                _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
-                time.sleep(cool)
+                rem = dhan_auth.current_expires_in()
+                if rem is None or rem < dhan_auth.REFRESH_BEFORE_EXPIRY_SECONDS:
+                    log.warning("Rate-limit-looking error with expired/expiring token — re-authing now: %s",
+                                err_str[:120])
+                    dhan_auth.invalidate(disk=True)
+                    time.sleep(5)
+                else:
+                    cool = 900
+                    log.warning("Feed loop hit rate-limit — cooling down for %ds: %s", cool, err_str[:120])
+                    _set_state(last_error=f"Dhan rate-limited; cooling down {cool}s")
+                    time.sleep(cool)
                 backoff = 5
             else:
                 log.exception("Feed loop error: %s — retrying in %ds", e, backoff)
