@@ -97,9 +97,14 @@ async def _finnhub_loop() -> None:
                 for sym in _FINNHUB_SYMS:
                     await ws.send(json.dumps({"type": "subscribe", "symbol": sym}))
                 log.info("Premium: Finnhub WS connected (WTI + Brent)")
-                async for raw in ws:
-                    if _stop.is_set():
-                        break
+                while not _stop.is_set():
+                    # Zombie guard: a kicked/half-dead socket can stay "open"
+                    # while delivering nothing (seen 21-Jul: 18h stale). Crude
+                    # trades ~24/5, so 5 min of silence = dead → force reconnect.
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=300)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError("no Finnhub data for 5 min — forcing reconnect")
                     try:
                         m = json.loads(raw)
                     except Exception:
