@@ -4816,25 +4816,60 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .oh-board-dot { opacity: 0.5; }
 .oh-board-slot { color: var(--accent); font-weight: 600; }
 
-/* Nifty/Sensex option-premium Calculator (client sketch 22-Jul) */
-.ocalc-wrap { display: flex; justify-content: center; padding: 26px 8px; }
-.ocalc-card {
-  background: var(--bg-surface-alt); border: 1px solid var(--border);
-  border-radius: 12px; padding: 22px 26px; width: min(640px, 100%);
-  display: flex; flex-direction: column; gap: 14px;
+/* Nifty/Sensex Premium Calculator — popup (client sketch 22-Jul) */
+.ocalc-open-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  background: var(--accent-bg); color: var(--accent-ink);
+  border: 1px solid var(--accent); font-weight: 700; font-size: 13px;
+  transition: filter .15s ease;
 }
-.ocalc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ocalc-label { flex: 1 1 150px; font-weight: 600; font-size: 14px; }
-.ocalc-label em { display: block; font-style: normal; font-size: 11px; color: var(--text-secondary); font-weight: 500; }
-.ocalc-price { width: 110px; text-align: right; }
-.ocalc-mult { width: 74px; text-align: right; }
-.ocalc-x, .ocalc-eq { color: var(--text-secondary); font-weight: 600; }
-.ocalc-val { min-width: 110px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
-.ocalc-answer { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px; }
-.ocalc-result { margin-left: auto; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ocalc-open-btn:hover { filter: brightness(1.05); }
+
+.ocalc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: 14px;
+  padding: 20px 22px;
+  width: min(520px, 94vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  animation: slide-up 0.22s ease;
+}
+.ocalc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.ocalc-head h3 { margin: 0; font-size: 17px; font-weight: 800; }
+.ocalc-close {
+  border: none; background: transparent; color: var(--text-secondary);
+  font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.ocalc-close:hover { color: var(--text-primary); }
+
+.ocalc-grid {
+  display: grid;
+  grid-template-columns: 1fr 118px 18px 78px minmax(110px, auto);
+  gap: 12px 8px; align-items: center;
+}
+.ocalc-ghead { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.ocalc-right { text-align: right; }
+.ocalc-name { font-weight: 700; font-size: 14px; }
+.ocalc-name em { font-style: normal; font-size: 10.5px; color: var(--text-secondary); margin-left: 4px; }
+.ocalc-price, .ocalc-mult { text-align: right; width: 100%; }
+.ocalc-x { text-align: center; color: var(--text-secondary); font-weight: 700; }
+.ocalc-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14.5px; }
+
+.ocalc-answer {
+  margin-top: 18px; padding: 14px 16px;
+  background: var(--bg-surface-alt); border: 1px solid var(--border);
+  border-radius: 10px; display: flex; align-items: center; justify-content: space-between;
+}
+.ocalc-answer-lbl { font-weight: 800; font-size: 14px; }
+.ocalc-answer-lbl em { display: block; font-style: normal; font-weight: 500; font-size: 11px; color: var(--text-secondary); }
+.ocalc-result { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .ocalc-result.pos { color: var(--pos, #1a7f37); }
 .ocalc-result.neg { color: var(--neg, #c62828); }
-@media (max-width: 560px) {
+
+@media (max-width: 480px) {
   .ocalc-card { padding: 16px; }
-  .ocalc-label { flex-basis: 100%; }
+  .ocalc-grid { grid-template-columns: 1fr 96px 14px 64px minmax(84px, auto); gap: 10px 6px; }
+  .ocalc-result { font-size: 22px; }
 }

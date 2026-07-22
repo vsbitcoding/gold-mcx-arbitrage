@@ -19,11 +19,10 @@ export default function OptionsSpread() {
   }, [side]);
   // Live board vs stored History (10am/3pm snapshots) — survives refresh.
   const [view, setView] = useState(() => {
-    try {
-      const v = localStorage.getItem("opt_view");
-      return ["history", "calculator"].includes(v) ? v : "live";
-    } catch { return "live"; }
+    try { return localStorage.getItem("opt_view") === "history" ? "history" : "live"; }
+    catch { return "live"; }
   });
+  const [calcOpen, setCalcOpen] = useState(false);
   useEffect(() => {
     try { localStorage.setItem("opt_view", view); } catch { /* ignore */ }
   }, [view]);
@@ -50,9 +49,10 @@ export default function OptionsSpread() {
           <div className="opt-side-toggle opt-view-toggle" role="tablist" aria-label="View">
             <button className={view === "live" ? "active" : ""} onClick={() => setView("live")}>● Live</button>
             <button className={view === "history" ? "active" : ""} onClick={() => setView("history")}>◷ History</button>
-            <button className={view === "calculator" ? "active" : ""} onClick={() => setView("calculator")}>⌸ Calculator</button>
           </div>
-          {view !== "calculator" && (
+          <button type="button" className="ocalc-open-btn" onClick={() => setCalcOpen(true)}>
+            ⌸ Calculator
+          </button>
           <div className="opt-side-toggle" role="tablist">
             <button className={side === "below" ? "active" : ""} onClick={() => setSide("below")}>
               ▼ Below ATM <span className="opt-side-sub">10</span>
@@ -64,20 +64,19 @@ export default function OptionsSpread() {
               ⤢ Square off ITM <span className="opt-side-sub">15</span>
             </button>
           </div>
-          )}
         </div>
       </div>
 
       {view === "history" ? (
         <OptionsHistory side={side} />
-      ) : view === "calculator" ? (
-        <OptionsCalculator />
       ) : (
         <>
           {err && <div className="settings-banner danger">⚠ {err}</div>}
           <OptionsBoard data={data} side={side} live />
         </>
       )}
+
+      <OptionsCalculator open={calcOpen} onClose={() => setCalcOpen(false)} />
     </div>
   );
 }
