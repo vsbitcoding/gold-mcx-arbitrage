@@ -16,3 +16,4 @@ dhanhq>=2.0.2
 # After install run: playwright install chromium
 playwright>=1.40.0
 pdfplumber>=0.11.0
+ib_async==2.1.0

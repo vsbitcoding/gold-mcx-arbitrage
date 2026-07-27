@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     # Premium-calc live inputs (isolated feed): XAU/USD via Deriv WS, USD/INR via TwelveData.
     PREMIUM_FEED_ENABLED: bool = True
     DERIV_APP_ID: str = "1089"
+    # IB Gateway (paper login, headless on this server) — spot XAU/XAG in
+    # real-time for free; COMEX/NYMEX futures once the account is funded and
+    # subscribed. Deriv delisted frxXAUUSD/frxXAGUSD (27-Jul), IBKR replaced it.
+    IBKR_ENABLED: bool = True
+    IBKR_HOST: str = "127.0.0.1"
+    IBKR_PORT: int = 4002
+    IBKR_CLIENT_ID: int = 21
     TWELVEDATA_API_KEY: str = ""
     # Finnhub free WS (WTI + Brent crude for the app board). ONE connection per
     # key — this server must be the only consumer of this key.

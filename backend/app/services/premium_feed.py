@@ -1,6 +1,7 @@
 """Live premium-calc inputs — ISOLATED, in-memory, zero DB.
 
-  XAU/USD + XAG/USD : Deriv public WebSocket  (real-time tick, free)
+  XAU/USD + XAG/USD : IB Gateway on this server (real-time, free — Deriv
+                      delisted frxXAUUSD/frxXAGUSD, caught frozen 27-Jul)
   USD/INR           : TwelveData spot         (polled every ~2 min, free — barely moves)
   WTI + Brent crude : Finnhub free WebSocket  (OANDA-priced, real-time — for the
                       international CRUDE($) scrips on the app board)
@@ -32,6 +33,7 @@ _state = {
     "xauusd": None, "xauusd_ts": 0.0,
     "xagusd": None, "xagusd_ts": 0.0,
     "deriv_connected": False,
+    "ibkr_connected": False,
     "usdinr": None, "usdinr_ts": 0.0,
     "wti": None, "wti_ts": 0.0,
     "brent": None, "brent_ts": 0.0,
@@ -45,7 +47,70 @@ _FINNHUB_WSS = "wss://ws.finnhub.io?token={key}"
 _FINNHUB_SYMS = {"OANDA:WTICO_USD": "wti", "OANDA:BCO_USD": "brent"}
 
 
-# ── XAU/USD via Deriv WebSocket (real-time) ──────────────────────────────
+# ── XAU/USD + XAG/USD via IB Gateway (real-time, free) ───────────────────
+# Deriv delisted frxXAUUSD/frxXAGUSD (froze 22-Jul, caught 27-Jul), so spot
+# metals now come from the paper IB Gateway running on this server: secType
+# CMDTY on SMART, marketDataType 1 = real-time, no subscription, no funding.
+async def _ibkr_loop() -> None:
+    from ib_async import IB, Contract  # lazy — a missing lib disables only this thread
+
+    while not _stop.is_set():
+        ib = IB()
+        try:
+            await ib.connectAsync(settings.IBKR_HOST, settings.IBKR_PORT,
+                                  clientId=settings.IBKR_CLIENT_ID, timeout=20)
+            ib.reqMarketDataType(1)  # real-time
+            tickers = {}
+            for sym, key in (("XAUUSD", "xauusd"), ("XAGUSD", "xagusd")):
+                c = Contract(secType="CMDTY", symbol=sym, exchange="SMART", currency="USD")
+                await ib.qualifyContractsAsync(c)
+                tickers[key] = ib.reqMktData(c, "", False, False)
+            log.info("Premium: IB Gateway connected (XAU/USD + XAG/USD real-time)")
+
+            stale_since = time.time()
+            while not _stop.is_set() and ib.isConnected():
+                await asyncio.sleep(1)
+                fresh = False
+                for key, t in tickers.items():
+                    # mid of bid/ask; spot metals have no "last" on this feed
+                    bid, ask = t.bid, t.ask
+                    px = None
+                    if bid == bid and ask == ask and bid and ask:
+                        px = (float(bid) + float(ask)) / 2
+                    elif t.last == t.last and t.last:
+                        px = float(t.last)
+                    if px and px != _state.get(key):
+                        _state[key] = round(px, 4)
+                        _state[key + "_ts"] = time.time()
+                        fresh = True
+                if fresh:
+                    stale_since = time.time()
+                    _state["ibkr_connected"] = True
+                elif time.time() - stale_since > 600:
+                    # Same zombie guard as the other feeds: metals trade
+                    # Sun ~22:00 – Fri ~21:00 UTC, so 10 min of silence during
+                    # the week means the subscription died → reconnect.
+                    raise RuntimeError("no IBKR spot ticks for 10 min — forcing reconnect")
+        except Exception as e:  # noqa: BLE001
+            _state["ibkr_connected"] = False
+            log.warning("Premium: IB Gateway error: %s (reconnect in 15s)", e)
+            if _stop.wait(15):
+                break
+        finally:
+            try:
+                ib.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _ibkr_thread() -> None:
+    try:
+        asyncio.run(_ibkr_loop())
+    except Exception as e:  # noqa: BLE001
+        log.error("Premium: IBKR thread stopped: %s", e)
+
+
+# ── XAU/USD via Deriv WebSocket — RETIRED 27-Jul (symbols delisted) ───────
 async def _deriv_loop() -> None:
     import websockets  # lazy — a missing lib disables only this thread
     url = _DERIV_WSS.format(app_id=settings.DERIV_APP_ID or "1089")
@@ -184,11 +249,12 @@ def get_inputs() -> dict:
     return {
         "xauusd": _state["xauusd"],
         "xauusd_age": round(now - _state["xauusd_ts"], 1) if _state["xauusd_ts"] else None,
-        "xauusd_source": "Deriv (live)",
+        "xauusd_source": "IBKR spot (live)",
         "xagusd": _state["xagusd"],
         "xagusd_age": round(now - _state["xagusd_ts"], 1) if _state["xagusd_ts"] else None,
-        "xagusd_source": "Deriv (live)",
-        "deriv_connected": _state["deriv_connected"],
+        "xagusd_source": "IBKR spot (live)",
+        "deriv_connected": _state["ibkr_connected"],  # legacy key: UI 'spot feed connected' flag
+        "ibkr_connected": _state["ibkr_connected"],
         "usdinr": _state["usdinr"],
         "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
         "usdinr_source": "TwelveData spot",
@@ -207,8 +273,9 @@ def start_in_background() -> None:
     if not settings.PREMIUM_FEED_ENABLED:
         log.info("Premium feed disabled")
         return
-    threading.Thread(target=_deriv_thread, daemon=True, name="premium-deriv").start()
+    if settings.IBKR_ENABLED:
+        threading.Thread(target=_ibkr_thread, daemon=True, name="premium-ibkr").start()
     threading.Thread(target=_usdinr_thread, daemon=True, name="premium-usdinr").start()
     if settings.FINNHUB_API_KEY:
         threading.Thread(target=_finnhub_thread, daemon=True, name="premium-finnhub").start()
-    log.info("Premium feed started (Deriv XAU/XAG + TwelveData USD/INR + Finnhub WTI/Brent, in-memory)")
+    log.info("Premium feed started (IBKR XAU/XAG + TwelveData USD/INR + Finnhub WTI/Brent, in-memory)")
