@@ -1,7 +1,8 @@
 """Live premium-calc inputs — ISOLATED, in-memory, zero DB.
 
-  XAU/USD + XAG/USD : IB Gateway on this server (real-time, free — Deriv
-                      delisted frxXAUUSD/frxXAGUSD, caught frozen 27-Jul)
+  XAU/USD + XAG/USD : Finnhub free WebSocket (OANDA-priced, real-time) —
+                      Deriv delisted its metals 22-Jul; IBKR's API licence
+                      forbids displaying its data outside IBKR trading
   USD/INR           : TwelveData spot         (polled every ~2 min, free — barely moves)
   WTI + Brent crude : Finnhub free WebSocket  (OANDA-priced, real-time — for the
                       international CRUDE($) scrips on the app board)
@@ -44,7 +45,15 @@ _stop = threading.Event()
 _DERIV_WSS = "wss://ws.derivws.com/websockets/v3?app_id={app_id}"
 _TD_URL = "https://api.twelvedata.com/price?symbol=USD/INR&apikey={key}"
 _FINNHUB_WSS = "wss://ws.finnhub.io?token={key}"
-_FINNHUB_SYMS = {"OANDA:WTICO_USD": "wti", "OANDA:BCO_USD": "brent"}
+_FINNHUB_SYMS = {
+    "OANDA:WTICO_USD": "wti",
+    "OANDA:BCO_USD": "brent",
+    # Spot metals moved here 27-Jul: Deriv delisted them, and IBKR's API data
+    # is contractually limited to trading on the IBKR account itself (no
+    # display/redistribution), so it cannot feed this dashboard or the app.
+    "OANDA:XAU_USD": "xauusd",
+    "OANDA:XAG_USD": "xagusd",
+}
 
 
 # ── XAU/USD + XAG/USD via IB Gateway (real-time, free) ───────────────────
@@ -249,11 +258,11 @@ def get_inputs() -> dict:
     return {
         "xauusd": _state["xauusd"],
         "xauusd_age": round(now - _state["xauusd_ts"], 1) if _state["xauusd_ts"] else None,
-        "xauusd_source": "IBKR spot (live)",
+        "xauusd_source": "Finnhub spot (live)",
         "xagusd": _state["xagusd"],
         "xagusd_age": round(now - _state["xagusd_ts"], 1) if _state["xagusd_ts"] else None,
-        "xagusd_source": "IBKR spot (live)",
-        "deriv_connected": _state["ibkr_connected"],  # legacy key: UI 'spot feed connected' flag
+        "xagusd_source": "Finnhub spot (live)",
+        "deriv_connected": _state["finnhub_connected"],  # legacy key: UI 'spot feed connected' flag
         "ibkr_connected": _state["ibkr_connected"],
         "usdinr": _state["usdinr"],
         "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
@@ -273,8 +282,9 @@ def start_in_background() -> None:
     if not settings.PREMIUM_FEED_ENABLED:
         log.info("Premium feed disabled")
         return
-    if settings.IBKR_ENABLED:
-        threading.Thread(target=_ibkr_thread, daemon=True, name="premium-ibkr").start()
+    # NOTE: no IBKR thread — the signed Market Data API Supplement limits API
+    # data to trading on the IBKR account only (no electronic display, no
+    # ingestion into third-party-accessible systems). Metals come from Finnhub.
     threading.Thread(target=_usdinr_thread, daemon=True, name="premium-usdinr").start()
     if settings.FINNHUB_API_KEY:
         threading.Thread(target=_finnhub_thread, daemon=True, name="premium-finnhub").start()
