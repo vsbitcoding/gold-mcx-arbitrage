@@ -55,9 +55,17 @@ async def _deriv_loop() -> None:
                 await ws.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
                 await ws.send(json.dumps({"ticks": "frxXAGUSD", "subscribe": 1}))
                 log.info("Premium: Deriv WS connected (XAU/USD + XAG/USD)")
-                async for raw in ws:
-                    if _stop.is_set():
-                        break
+                while not _stop.is_set():
+                    # Zombie guard: the socket can stay "open" (pings answered)
+                    # while the tick SUBSCRIPTION is silently dropped — caught
+                    # 27-Jul after 4.8 days of frozen XAU/XAG. Metals trade
+                    # Sun~22:00 IST → Sat ~02:00 IST, so 10 min of silence in
+                    # market hours = dead; a weekend reconnect every 10 min is
+                    # harmless (Deriv is free and reconnect is cheap).
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=600)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError("no Deriv ticks for 10 min — forcing reconnect")
                     try:
                         m = json.loads(raw)
                     except Exception:
