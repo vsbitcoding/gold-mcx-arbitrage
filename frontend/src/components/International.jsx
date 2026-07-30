@@ -179,7 +179,10 @@ export default function International() {
                     <td className={`intl-call ${cItm ? "itm" : ""}`}>{num(r.call?.ask)}</td>
                     <td className={`intl-call strong ${cItm ? "itm" : ""}`}>{num(cM)}</td>
                     <td className="intl-strike-col">
-                      {num(r.strike)}{atm && <span className="atm-badge">ATM</span>}
+                      <span className="intl-strike">
+                        <span className="intl-strike-n">{num(r.strike)}</span>
+                        {atm && <span className="atm-badge">ATM</span>}
+                      </span>
                     </td>
                     <td className={`intl-put strong ${pItm ? "itm" : ""}`}>{num(pM)}</td>
                     <td className={`intl-put ${pItm ? "itm" : ""}`}>{num(r.put?.bid)}</td>
