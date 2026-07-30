@@ -10,11 +10,11 @@ const NAV_ITEMS = [
   { key: "calculator", label: "ETF vs MCX" },
   { key: "making", label: "Making Price" },
   { key: "premium", label: "Premium" },
-  { key: "intl", label: "International" },
   { key: "options", label: "Nifty / Sensex" },
   { key: "goldopt", label: "Commodity Options" },
   { key: "stock", label: "Bullion Stock" },
   { key: "signals", label: "⚡ Signals" },
+  { key: "intl", label: "International" },
 ];
 
 // Clean monochrome line icons (match the app's drawer look).

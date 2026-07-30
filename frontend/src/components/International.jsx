@@ -59,6 +59,9 @@ export default function International() {
   const opts = ib.crude_options || {};
   const rows = opts.rows || [];
   const clMid = cf.bid != null && cf.ask != null ? (cf.bid + cf.ask) / 2 : null;
+  const atmStrike = clMid != null && rows.length
+    ? rows.reduce((best, r) => (Math.abs(r.strike - clMid) < Math.abs(best - clMid) ? r.strike : best), rows[0].strike)
+    : null;
 
   return (
     <div className="intl-page">
@@ -96,7 +99,10 @@ export default function International() {
             <thead>
               <tr>
                 <th colSpan={2} className="intl-call">CALL</th>
-                <th className="intl-strike-col">STRIKE</th>
+                <th className="intl-strike-col">
+                  STRIKE
+                  {clMid != null && <em>CL {num(clMid)}</em>}
+                </th>
                 <th colSpan={2} className="intl-put">PUT</th>
               </tr>
               <tr className="intl-chain-sub">
@@ -107,7 +113,7 @@ export default function International() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const atm = clMid != null && Math.abs(r.strike - clMid) < 0.26;
+                const atm = r.strike === atmStrike;
                 return (
                   <tr key={r.strike} className={atm ? "atm-row" : ""}>
                     <td className="intl-call">{num(r.call?.bid)}</td>
