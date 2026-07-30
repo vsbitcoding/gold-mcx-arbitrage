@@ -4876,43 +4876,38 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 /* ===== International market tab (COMEX/NYMEX + free spot feeds) ===== */
 .intl-page { padding: 4px 0 32px; }
-.intl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.intl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .intl-head h2 { margin: 0; font-size: 19px; font-weight: 800; }
 .intl-status { font-size: 11.5px; font-weight: 700; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); }
 .intl-status.on { color: var(--pos, #1a7f37); border-color: currentColor; }
 .intl-status.off { color: var(--neg, #c62828); border-color: currentColor; }
 
 .intl-section-title {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: baseline; gap: 8px;
   font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--text-secondary); margin: 24px 0 10px;
+  color: var(--text-secondary); margin: 20px 0 10px;
 }
+.intl-section-title:first-of-type { margin-top: 4px; }
 .intl-section-title em { font-style: normal; font-weight: 500; text-transform: none; letter-spacing: 0; opacity: .75; }
 
-.intl-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.intl-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px; }
 .intl-card {
   background: var(--bg-surface); border: 1px solid var(--border);
-  border-left: 3px solid var(--border); border-radius: 10px; padding: 11px 13px;
+  border-left: 3px solid var(--border); border-radius: 10px; padding: 10px 12px;
 }
 .intl-card.gold { border-left-color: #c9a227; }
 .intl-card.silver { border-left-color: #9aa4ad; }
 .intl-card.crude { border-left-color: #6b8e5a; }
-.intl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.intl-card-title { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-secondary); }
-.intl-card-price { font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 3px 0 2px; letter-spacing: -.01em; }
-.intl-card-ba { display: flex; gap: 12px; font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.intl-card-title { font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--text-secondary); }
+.intl-card-price { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 2px 0 2px; letter-spacing: -.01em; }
+.intl-card-ba { display: flex; gap: 11px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .intl-card-ba b { color: var(--text-primary); font-weight: 700; }
-.intl-card-sub { margin-top: 5px; font-size: 10px; color: var(--text-secondary); opacity: .85; }
-.intl-age { font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
-.intl-age.ok { color: var(--pos, #1a7f37); background: rgba(26,127,55,.12); }
-.intl-age.warn { color: #a06b00; background: rgba(160,107,0,.12); }
-.intl-age.bad { color: var(--neg, #c62828); background: rgba(198,40,40,.12); }
+.intl-card-sub { margin-top: 5px; font-size: 9.5px; color: var(--text-secondary); opacity: .8; }
 
-/* option chain — compact + centred, not stretched across the page */
-.intl-chain-wrap {
-  overflow-x: auto; border: 1px solid var(--border); border-radius: 12px;
-  max-width: 660px; background: var(--bg-surface);
-}
+/* chain (left) + comparison panel (right) — fills the page, no dead space */
+.intl-split { display: grid; grid-template-columns: minmax(0, 640px) minmax(260px, 1fr); gap: 22px; align-items: start; }
+
+.intl-chain-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
 .intl-chain { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .intl-chain th, .intl-chain td { padding: 6px 14px; text-align: right; font-size: 13px; }
 .intl-chain tbody td { border-top: 1px solid var(--border); }
@@ -4922,7 +4917,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .intl-chain .intl-call { background: rgba(26,127,55,.055); }
 .intl-chain .intl-put { background: rgba(198,40,40,.055); }
 .intl-chain .intl-strike-col {
-  text-align: center; font-weight: 800; width: 118px;
+  text-align: center; font-weight: 800; width: 116px;
   background: var(--bg-surface-alt); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
 }
 .intl-chain thead .intl-strike-col em {
@@ -4933,6 +4928,27 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .intl-chain tr.atm-row td { font-weight: 800; box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .intl-chain tr.atm-row .atm-badge { margin-left: 6px; }
 
+.intl-cmp-box {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+}
+.intl-cmp-title {
+  font-size: 11.5px; font-weight: 800; margin-bottom: 8px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.intl-cmp-title span { font-weight: 500; font-size: 10px; color: var(--text-secondary); text-transform: none; }
+.intl-cmp-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-top: 1px solid var(--border);
+}
+.intl-cmp-row:first-of-type { border-top: none; }
+.intl-cmp-label { font-size: 12.5px; font-weight: 600; }
+.intl-cmp-label em { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--text-secondary); }
+.intl-cmp-value { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.intl-cmp-value.pos { color: var(--pos, #1a7f37); }
+.intl-cmp-value.neg { color: var(--neg, #c62828); }
+
+@media (max-width: 1100px) { .intl-split { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
   .intl-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
   .intl-card-price { font-size: 18px; }
