@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     IBKR_HOST: str = "127.0.0.1"
     IBKR_PORT: int = 4002
     IBKR_CLIENT_ID: int = 21
+    # International COMEX/NYMEX feed (own connection + clientId so it can never
+    # disturb anything else). Subscriptions: COMEX L1 + NYMEX L1.
+    IBKR_FEED_ENABLED: bool = True
+    IBKR_FEED_CLIENT_ID: int = 22
     TWELVEDATA_API_KEY: str = ""
     # Finnhub free WS (WTI + Brent crude for the app board). ONE connection per
     # key — this server must be the only consumer of this key.
