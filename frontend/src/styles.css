@@ -4876,8 +4876,18 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 /* ===== International market tab (COMEX/NYMEX + free spot feeds) ===== */
 .intl-page { padding: 4px 0 32px; }
-.intl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.intl-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
 .intl-head h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.intl-sub { margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); }
+.intl-status.warn { color: #b26a00; border-color: currentColor; }
+
+/* numbered badge — the client's own 1..6 list */
+.intl-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 5px; flex: 0 0 auto;
+  background: var(--accent, #2f6feb); color: #fff;
+  font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
 .intl-status { font-size: 11.5px; font-weight: 700; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); }
 .intl-status.on { color: var(--pos, #1a7f37); border-color: currentColor; }
 .intl-status.off { color: var(--neg, #c62828); border-color: currentColor; }
@@ -4890,20 +4900,35 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .intl-section-title:first-of-type { margin-top: 4px; }
 .intl-section-title em { font-style: normal; font-weight: 500; text-transform: none; letter-spacing: 0; opacity: .75; }
 
-.intl-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px; }
+.intl-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 4px; }
 .intl-card {
   background: var(--bg-surface); border: 1px solid var(--border);
-  border-left: 3px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  border-top: 3px solid var(--border); border-radius: 12px; padding: 11px 14px 12px;
+  transition: box-shadow .15s ease, transform .15s ease;
 }
-.intl-card.gold { border-left-color: #c9a227; }
-.intl-card.silver { border-left-color: #9aa4ad; }
-.intl-card.crude { border-left-color: #6b8e5a; }
-.intl-card-title { font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--text-secondary); }
-.intl-card-price { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 2px 0 2px; letter-spacing: -.01em; }
-.intl-card-ba { display: flex; gap: 11px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.intl-card-ba b { color: var(--text-primary); font-weight: 700; }
-.intl-card-note { margin-top: 4px; font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: .3px; }
-.intl-card-sub { margin-top: 5px; font-size: 9.5px; color: var(--text-secondary); opacity: .8; }
+.intl-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,.09); transform: translateY(-1px); }
+.intl-card.waiting { opacity: .55; }
+.intl-card-head { display: flex; align-items: center; gap: 7px; }
+.intl-card.gold { border-top-color: #c9a227; }
+.intl-card.gold .intl-num { background: #c9a227; }
+.intl-card.silver { border-top-color: #8d99a3; }
+.intl-card.silver .intl-num { background: #8d99a3; }
+.intl-card.crude { border-top-color: #6b8e5a; }
+.intl-card.crude .intl-num { background: #6b8e5a; }
+.intl-card-title { font-size: 10.5px; font-weight: 800; letter-spacing: .05em; color: var(--text-primary); }
+.intl-card-price { font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 6px 0 7px; letter-spacing: -.015em; }
+.intl-card-price i { font-style: normal; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-left: 4px; }
+.intl-card-ba { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; font-variant-numeric: tabular-nums; }
+.intl-card-ba span { padding: 4px 7px; border-radius: 6px; color: var(--text-secondary); letter-spacing: .03em; }
+.intl-card-ba .bidcell { background: rgba(26,127,55,.10); }
+.intl-card-ba .askcell { background: rgba(198,40,40,.10); }
+.intl-card-ba b { display: block; margin-top: 1px; font-size: 12.5px; color: var(--text-primary); font-weight: 700; }
+.intl-card-sub {
+  margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border);
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 9.5px; color: var(--text-secondary);
+}
+.intl-spread { font-variant-numeric: tabular-nums; opacity: .8; white-space: nowrap; }
 
 /* chain (left) + comparison panel (right) — fills the page, no dead space */
 .intl-split { display: grid; grid-template-columns: minmax(0, 640px) minmax(260px, 1fr); gap: 22px; align-items: start; }
@@ -4949,9 +4974,10 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .intl-cmp-value.pos { color: var(--pos, #1a7f37); }
 .intl-cmp-value.neg { color: var(--neg, #c62828); }
 
+@media (max-width: 1250px) { .intl-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .intl-split { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
   .intl-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .intl-card-price { font-size: 18px; }
+  .intl-card-price { font-size: 20px; }
   .intl-chain th, .intl-chain td { padding: 6px 8px; font-size: 12px; }
 }
