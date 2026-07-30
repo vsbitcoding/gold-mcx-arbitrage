@@ -13,7 +13,7 @@ const num = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
 const signed = (v, d = 2) =>
   v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d);
 
-function Card({ title, sub, bid, ask, decimals = 2, accent }) {
+function Card({ title, sub, bid, ask, decimals = 2, accent, note }) {
   const mid = bid != null && ask != null ? (bid + ask) / 2 : (bid ?? ask);
   return (
     <div className={`intl-card ${accent || ""}`}>
@@ -25,6 +25,7 @@ function Card({ title, sub, bid, ask, decimals = 2, accent }) {
         <span>bid <b>{num(bid, decimals)}</b></span>
         <span>ask <b>{num(ask, decimals)}</b></span>
       </div>
+      {note && <div className="intl-card-note">{note}</div>}
       {sub && <div className="intl-card-sub">{sub}</div>}
     </div>
   );
@@ -69,22 +70,26 @@ export default function International() {
   const ib = d.ibkr || {};
   const sp = d.spot || {};
   const gf = ib.gold_future || {}, sf = ib.silver_future || {}, cf = ib.crude_future || {};
+  const bf = ib.brent_future || {};
+  const xs = ib.gold_spot || {}, ys = ib.silver_spot || {};   // XAU/XAG spot — IBKR
   const opts = ib.crude_options || {};
   const rows = opts.rows || [];
 
   const mid = (o) => (o?.bid != null && o?.ask != null ? (o.bid + o.ask) / 2 : (o?.bid ?? o?.ask ?? null));
   const gcMid = mid(gf), siMid = mid(sf), clMid = mid(cf);
+  const xauMid = mid(xs), xagMid = mid(ys);
   const inr = sp.usdinr?.price ?? null;
   const mcxGold = mid(d.mcx?.gold), mcxSilver = mid(d.mcx?.silver);
 
   const atmStrike = clMid != null && rows.length
     ? rows.reduce((best, r) => (Math.abs(r.strike - clMid) < Math.abs(best - clMid) ? r.strike : best), rows[0].strike)
     : null;
+  const atmRow = atmStrike != null ? rows.find((r) => r.strike === atmStrike) : null;
 
   // Derived: future − spot basis, and COMEX converted to the MCX quoting basis.
-  const goldBasis = gcMid != null && sp.gold?.price != null ? gcMid - sp.gold.price : null;
-  const silverBasis = siMid != null && sp.silver?.price != null ? siMid - sp.silver.price : null;
-  const crudeBasis = clMid != null && sp.wti?.price != null ? clMid - sp.wti.price : null;
+  const goldBasis = gcMid != null && xauMid != null ? gcMid - xauMid : null;
+  const silverBasis = siMid != null && xagMid != null ? siMid - xagMid : null;
+  const crudeBasis = clMid != null && mid(bf) != null ? mid(bf) - clMid : null;
   // COMEX gold $/oz → ₹ per 10 g   |   COMEX silver $/oz → ₹ per kg
   const gcInr = gcMid != null && inr != null ? (gcMid * inr / GRAMS_PER_OZ) * 10 : null;
   const siInr = siMid != null && inr != null ? siMid * inr * OZ_PER_KG : null;
@@ -100,26 +105,36 @@ export default function International() {
         </span>
       </div>
 
-      {/* ── All live prices, one full-width grid ─────────────────────── */}
-      <div className="intl-section-title">COMEX / NYMEX <em>IBKR real-time</em></div>
+      {/* ── The 6 items the client buys from IBKR ────────────────────── */}
+      <div className="intl-section-title">
+        IBKR REAL-TIME <em>the 6 international items</em>
+      </div>
       <div className="intl-cards">
-        <Card title="GOLD COMEX FUTURE" accent="gold"
-          sub={gf.symbol ? `${gf.symbol} · ${gf.expiry || ""}` : null}
+        <Card title="1 · GOLD SPOT (XAU/USD)" accent="gold" sub="IBKR · CMDTY spot"
+          bid={xs.bid} ask={xs.ask} />
+        <Card title="2 · SILVER SPOT (XAG/USD)" accent="silver" sub="IBKR · CMDTY spot"
+          bid={ys.bid} ask={ys.ask} decimals={3} />
+        <Card title="3 · GOLD COMEX FUTURE" accent="gold"
+          sub={gf.symbol ? `${gf.symbol} · ${gf.expiry || ""}` : "COMEX"}
           bid={gf.bid} ask={gf.ask} />
-        <Card title="SILVER COMEX FUTURE" accent="silver"
-          sub={sf.symbol ? `${sf.symbol} · ${sf.expiry || ""}` : null}
+        <Card title="4 · SILVER COMEX FUTURE" accent="silver"
+          sub={sf.symbol ? `${sf.symbol} · ${sf.expiry || ""}` : "COMEX"}
           bid={sf.bid} ask={sf.ask} decimals={3} />
-        <Card title="CRUDE FUTURE (NYMEX)" accent="crude"
-          sub={cf.symbol ? `${cf.symbol} · ${cf.expiry || ""}` : null}
+        <Card title="5 · CRUDE FUTURE (WTI)" accent="crude"
+          sub={cf.symbol ? `${cf.symbol} · ${cf.expiry || ""}` : "NYMEX"}
           bid={cf.bid} ask={cf.ask} />
-        <Card title="GOLD SPOT (XAU/USD)" accent="gold"
-          sub={sp.gold?.source} bid={sp.gold?.price} ask={sp.gold?.price} />
-        <Card title="SILVER SPOT (XAG/USD)" accent="silver"
-          sub={sp.silver?.source} bid={sp.silver?.price} ask={sp.silver?.price} decimals={3} />
-        <Card title="CRUDE WTI SPOT" accent="crude"
-          sub={sp.wti?.source} bid={sp.wti?.price} ask={sp.wti?.price} />
-        <Card title="BRENT SPOT" accent="crude"
-          sub={sp.brent?.source} bid={sp.brent?.price} ask={sp.brent?.price} />
+        <Card title="6 · CRUDE OPTIONS" accent="crude"
+          sub={`NYMEX · ${rows.length} strikes live${opts.expiry ? ` · ${opts.expiry}` : ""}`}
+          bid={atmRow?.call?.bid} ask={atmRow?.call?.ask}
+          note={atmStrike != null ? `ATM ${num(atmStrike)} call` : "loading…"} />
+      </div>
+
+      {/* ── Everything else we already stream, for comparison ────────── */}
+      <div className="intl-section-title">OTHER LIVE FEEDS <em>for comparison</em></div>
+      <div className="intl-cards">
+        <Card title="BRENT FUTURE" accent="crude"
+          sub={bf.symbol ? `IBKR · ${bf.symbol}` : "IBKR · NYMEX"}
+          bid={bf.bid} ask={bf.ask} />
         <Card title="USD / INR" sub={sp.usdinr?.source}
           bid={sp.usdinr?.price} ask={sp.usdinr?.price} decimals={4} />
         <Card title="MCX GOLD (fut)" accent="gold" sub="Dhan · ₹/10g"
@@ -182,7 +197,7 @@ export default function International() {
             <div className="intl-cmp-title">Future − Spot <span>basis</span></div>
             <CmpRow label="Gold" hint="GC − XAU" value={goldBasis} />
             <CmpRow label="Silver" hint="SI − XAG" value={silverBasis} decimals={3} />
-            <CmpRow label="Crude" hint="CL − WTI" value={crudeBasis} />
+            <CmpRow label="Crude" hint="BZ − CL" value={crudeBasis} />
           </div>
 
           <div className="intl-cmp-box">

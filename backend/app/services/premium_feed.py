@@ -1,10 +1,10 @@
 """Live premium-calc inputs — ISOLATED, in-memory, zero DB.
 
-  XAU/USD + XAG/USD : Finnhub free WebSocket (OANDA-priced, real-time) —
-                      Deriv delisted its metals 22-Jul; IBKR's API licence
-                      forbids displaying its data outside IBKR trading
+  XAU/USD + XAG/USD : IBKR real-time spot, read from services/ibkr_feed (the
+                      client's paid COMEX/NYMEX account — 30-Jul, his decision;
+                      Finnhub retired, Deriv delisted its metals 22-Jul)
   USD/INR           : TwelveData spot         (polled every ~2 min, free — barely moves)
-  WTI + Brent crude : Finnhub free WebSocket  (OANDA-priced, real-time — for the
+  WTI + Brent crude : IBKR CL / BZ futures, also via ibkr_feed (for the
                       international CRUDE($) scrips on the app board)
   MCX gold + silver : read from the EXISTING Dhan quote_store (no new subscription)
 
@@ -12,9 +12,10 @@ Nothing here touches the Dhan feed, its subscriptions, or the database. Three ti
 daemon threads hold the latest values in memory; the route just reads them. If a
 source drops it reconnects on its own — it can never affect the live feed.
 
-Finnhub note: ONE WebSocket connection per API key (verified — a second
-connection kicks the first). Production key must be used ONLY by this server;
-the reconnect loop below recovers automatically if it ever gets kicked.
+Rollback: the Finnhub WebSocket code below is intact but dormant. Set
+FINNHUB_ENABLED=true and IBKR_SPOTS_ENABLED=false in .env to switch back in one
+restart. (Finnhub allows ONE WebSocket connection per key — a second kicks the
+first — so its key must be used only by this server.)
 """
 from __future__ import annotations
 
@@ -253,8 +254,51 @@ def _mcx(short: str) -> dict | None:
         return None
 
 
+def _ibkr_spots() -> dict:
+    """Spot metals + crude/Brent from the IBKR feed (mid of bid/ask)."""
+    try:
+        from app.services import ibkr_feed
+        d = ibkr_feed.get_data()
+    except Exception:  # noqa: BLE001
+        return {}
+
+    def mid(o):
+        if not o:
+            return None, None
+        b, a = o.get("bid"), o.get("ask")
+        if b and a:
+            return round((b + a) / 2, 4), o.get("age")
+        v = b or a or o.get("last")
+        return (round(v, 4) if v else None), o.get("age")
+
+    xau, xau_age = mid(d.get("gold_spot"))
+    xag, xag_age = mid(d.get("silver_spot"))
+    wti, wti_age = mid(d.get("crude_future"))
+    brent, brent_age = mid(d.get("brent_future"))
+    return {"xau": xau, "xau_age": xau_age, "xag": xag, "xag_age": xag_age,
+            "wti": wti, "wti_age": wti_age, "brent": brent, "brent_age": brent_age,
+            "connected": d.get("connected")}
+
+
 def get_inputs() -> dict:
     now = time.time()
+    ib = _ibkr_spots() if settings.IBKR_SPOTS_ENABLED else {}
+    if ib.get("xau"):
+        return {
+            "xauusd": ib["xau"], "xauusd_age": ib["xau_age"], "xauusd_source": "IBKR spot (live)",
+            "xagusd": ib["xag"], "xagusd_age": ib["xag_age"], "xagusd_source": "IBKR spot (live)",
+            "deriv_connected": bool(ib.get("connected")),
+            "ibkr_connected": bool(ib.get("connected")),
+            "usdinr": _state["usdinr"],
+            "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
+            "usdinr_source": "TwelveData spot",
+            "wti": ib["wti"], "wti_age": ib["wti_age"],
+            "brent": ib["brent"], "brent_age": ib["brent_age"],
+            "finnhub_connected": bool(ib.get("connected")),
+            "mcx_gold": _mcx("gold"),
+            "mcx_silver": _mcx("silver"),
+            "server_time": now,
+        }
     return {
         "xauusd": _state["xauusd"],
         "xauusd_age": round(now - _state["xauusd_ts"], 1) if _state["xauusd_ts"] else None,
@@ -282,10 +326,9 @@ def start_in_background() -> None:
     if not settings.PREMIUM_FEED_ENABLED:
         log.info("Premium feed disabled")
         return
-    # NOTE: no IBKR thread — the signed Market Data API Supplement limits API
-    # data to trading on the IBKR account only (no electronic display, no
-    # ingestion into third-party-accessible systems). Metals come from Finnhub.
+    # No IBKR thread here — ibkr_feed owns the single IB connection (golden
+    # rule: one connection per market source) and get_inputs() reads its dict.
     threading.Thread(target=_usdinr_thread, daemon=True, name="premium-usdinr").start()
-    if settings.FINNHUB_API_KEY:
+    if settings.FINNHUB_ENABLED and settings.FINNHUB_API_KEY:
         threading.Thread(target=_finnhub_thread, daemon=True, name="premium-finnhub").start()
-    log.info("Premium feed started (IBKR XAU/XAG + TwelveData USD/INR + Finnhub WTI/Brent, in-memory)")
+    log.info("Premium feed started (IBKR spots+crude via ibkr_feed, TwelveData USD/INR, Finnhub=%s)", settings.FINNHUB_ENABLED)

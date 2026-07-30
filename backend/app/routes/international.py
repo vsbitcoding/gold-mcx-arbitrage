@@ -1,9 +1,9 @@
 """International market screen — one read of two in-memory feeds, zero DB.
 
 Combines what the dashboard already streams:
-  IBKR   : COMEX gold/silver futures, NYMEX crude future + CL option chain
-  Finnhub: XAU/XAG spot, WTI/Brent spot
-  TwelveData: USD/INR
+  IBKR   : XAU/XAG spot, COMEX gold/silver futures, NYMEX crude future +
+           CL option chain, Brent future  (the client's 6 international items)
+  TwelveData: USD/INR (the only item IBKR cannot supply on an LLC account)
   Dhan   : MCX gold/silver (for side-by-side comparison)
 
 Everything here is a dict lookup — no database, no upstream call per request.
@@ -26,8 +26,8 @@ def international():
                      "source": pf.get("xauusd_source")},
             "silver": {"price": pf.get("xagusd"), "age": pf.get("xagusd_age"),
                        "source": pf.get("xagusd_source")},
-            "wti": {"price": pf.get("wti"), "age": pf.get("wti_age"), "source": "Finnhub"},
-            "brent": {"price": pf.get("brent"), "age": pf.get("brent_age"), "source": "Finnhub"},
+            "wti": {"price": pf.get("wti"), "age": pf.get("wti_age"), "source": "IBKR CL"},
+            "brent": {"price": pf.get("brent"), "age": pf.get("brent_age"), "source": "IBKR BZ"},
             "usdinr": {"price": pf.get("usdinr"), "age": pf.get("usdinr_age"),
                        "source": pf.get("usdinr_source")},
         },

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # disturb anything else). Subscriptions: COMEX L1 + NYMEX L1.
     IBKR_FEED_ENABLED: bool = True
     IBKR_FEED_CLIENT_ID: int = 22
+    # Spot metals + crude come from the IBKR feed (client's choice, 30-Jul).
+    # Flip IBKR_SPOTS_ENABLED off and FINNHUB_ENABLED on to roll back instantly.
+    IBKR_SPOTS_ENABLED: bool = True
+    FINNHUB_ENABLED: bool = False
     TWELVEDATA_API_KEY: str = ""
     # Finnhub free WS (WTI + Brent crude for the app board). ONE connection per
     # key — this server must be the only consumer of this key.

@@ -1,9 +1,11 @@
 """International COMEX/NYMEX feed via the local IB Gateway — ISOLATED, in-memory.
 
 Streams (real-time, subscription = COMEX L1 + NYMEX L1, USD 3.10/mo):
+  XAUUSD / XAGUSD  spot metals (CMDTY on SMART — free with the account)
   GC  COMEX gold future
   SI  COMEX silver future
   CL  NYMEX crude future  + its OPTION CHAIN (ATM window, calls + puts)
+  BZ  NYMEX Brent future
 
 Design constraints (client's rules):
   * NOTHING touches the Dhan feed — separate thread, separate TCP connection to
@@ -30,6 +32,9 @@ log = logging.getLogger("ibkr_feed")
 _WINDOW = 5
 
 _state: dict = {
+    "xau": None, "xau_ts": 0.0,          # spot metals (CMDTY on SMART)
+    "xag": None, "xag_ts": 0.0,
+    "bz": None, "bz_ts": 0.0, "bz_symbol": None, "bz_expiry": None,
     "gc": None, "gc_ts": 0.0, "gc_symbol": None, "gc_expiry": None,
     "si": None, "si_ts": 0.0, "si_symbol": None, "si_expiry": None,
     "cl": None, "cl_ts": 0.0, "cl_symbol": None, "cl_expiry": None,
@@ -50,7 +55,7 @@ def _px(t) -> dict:
 
 
 async def _loop() -> None:
-    from ib_async import IB, ContFuture, FuturesOption  # lazy — missing lib disables only this thread
+    from ib_async import IB, Contract, ContFuture, FuturesOption  # lazy — missing lib disables only this thread
 
     while not _stop.is_set():
         ib = IB()
@@ -60,12 +65,20 @@ async def _loop() -> None:
             ib.reqMarketDataType(1)  # real-time; gateway falls back to delayed on its own
 
             futs = {}
-            for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"), ("CL", "NYMEX", "cl")):
+            for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"),
+                                   ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz")):
                 c = ContFuture(sym, exch)
                 await ib.qualifyContractsAsync(c)
                 futs[key] = (c, ib.reqMktData(c, "", False, False))
                 _state[key + "_symbol"] = c.localSymbol
                 _state[key + "_expiry"] = c.lastTradeDateOrContractMonth
+
+            # Spot metals — same feed that used to come from Finnhub.
+            spots = {}
+            for sym, key in (("XAUUSD", "xau"), ("XAGUSD", "xag")):
+                c = Contract(secType="CMDTY", symbol=sym, exchange="SMART", currency="USD")
+                await ib.qualifyContractsAsync(c)
+                spots[key] = (c, ib.reqMktData(c, "", False, False))
 
             # Option chain metadata for CL (one call, cached for the session).
             cl_contract = futs["cl"][0]
@@ -119,7 +132,7 @@ async def _loop() -> None:
                 await asyncio.sleep(1)
                 now = time.time()
 
-                for key, (_c, t) in futs.items():
+                for key, (_c, t) in list(futs.items()) + list(spots.items()):
                     p = _px(t)
                     if p["bid"] or p["last"]:
                         _state[key] = p
@@ -180,6 +193,10 @@ def get_data() -> dict:
                           "symbol": _state["si_symbol"], "expiry": _state["si_expiry"]},
         "crude_future": {**(_state["cl"] or {}), "age": age("cl"),
                          "symbol": _state["cl_symbol"], "expiry": _state["cl_expiry"]},
+        "brent_future": {**(_state["bz"] or {}), "age": age("bz"),
+                         "symbol": _state["bz_symbol"], "expiry": _state["bz_expiry"]},
+        "gold_spot": {**(_state["xau"] or {}), "age": age("xau")},
+        "silver_spot": {**(_state["xag"] or {}), "age": age("xag")},
         "crude_options": {
             "expiry": _state["cl_options_expiry"],
             "age": age("cl_options"),

@@ -4902,6 +4902,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .intl-card-price { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 2px 0 2px; letter-spacing: -.01em; }
 .intl-card-ba { display: flex; gap: 11px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .intl-card-ba b { color: var(--text-primary); font-weight: 700; }
+.intl-card-note { margin-top: 4px; font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: .3px; }
 .intl-card-sub { margin-top: 5px; font-size: 9.5px; color: var(--text-secondary); opacity: .8; }
 
 /* chain (left) + comparison panel (right) — fills the page, no dead space */
