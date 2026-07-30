@@ -35,14 +35,13 @@ function Card({ n, title, sub, unit, bid, ask, decimals = 2, accent }) {
   );
 }
 
-function CmpRow({ label, hint, value, decimals = 2, plain }) {
+// Compact stat tile — label on top, value under it, so nothing is stretched
+// across half the screen the way a label→value row is on a wide monitor.
+function Stat({ label, hint, value, decimals = 2, plain }) {
   return (
-    <div className="intl-cmp-row">
-      <div className="intl-cmp-label">
-        {label}
-        {hint && <em>{hint}</em>}
-      </div>
-      <div className={`intl-cmp-value ${plain ? "" : value == null ? "" : value >= 0 ? "pos" : "neg"}`}>
+    <div className="intl-stat">
+      <div className="intl-stat-label">{label}<em>{hint}</em></div>
+      <div className={`intl-stat-value ${plain ? "" : value == null ? "" : value >= 0 ? "pos" : "neg"}`}>
         {plain ? num(value, decimals) : signed(value, decimals)}
       </div>
     </div>
@@ -126,81 +125,78 @@ export default function International() {
           bid={cf.bid} ask={cf.ask} />
       </div>
 
-      <div className="intl-split">
-        <div className="intl-split-main">
-          <div className="intl-section-title">
-            <span className="intl-num">6</span> CRUDE OPTIONS
-            <em>
-              NYMEX{expiry ? ` · expiry ${expiry}` : ""}
-              {rows.length ? ` · ${rows.length} strikes around the money` : ""}
-            </em>
-          </div>
-          {rows.length === 0 ? (
-            <div className="oh-note oh-slim">Option chain loading…</div>
-          ) : (
-            <div className="intl-chain-wrap">
-              <table className="intl-chain">
-                <thead>
-                  <tr>
-                    <th colSpan={2} className="intl-call">CALL</th>
-                    <th className="intl-strike-col">
-                      STRIKE
-                      {clMid != null && <em>CL {num(clMid)}</em>}
-                    </th>
-                    <th colSpan={2} className="intl-put">PUT</th>
-                  </tr>
-                  <tr className="intl-chain-sub">
-                    <th className="intl-call">Bid</th><th className="intl-call">Ask</th>
-                    <th className="intl-strike-col" />
-                    <th className="intl-put">Bid</th><th className="intl-put">Ask</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const atm = r.strike === atmStrike;
-                    return (
-                      <tr key={r.strike} className={atm ? "atm-row" : ""}>
-                        <td className="intl-call">{num(r.call?.bid)}</td>
-                        <td className="intl-call">{num(r.call?.ask)}</td>
-                        <td className="intl-strike-col">
-                          {num(r.strike)}{atm && <span className="atm-badge">ATM</span>}
-                        </td>
-                        <td className="intl-put">{num(r.put?.bid)}</td>
-                        <td className="intl-put">{num(r.put?.ask)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="intl-split-side">
-          <div className="intl-section-title">AT A GLANCE <em>from these 6 feeds</em></div>
-
-          <div className="intl-cmp-box">
-            <div className="intl-cmp-title">Future − Spot <span>premium / discount</span></div>
-            <CmpRow label="Gold" hint="future 3 − spot 1" value={goldBasis} />
-            <CmpRow label="Silver" hint="future 4 − spot 2" value={silverBasis} decimals={3} />
-          </div>
-
-          <div className="intl-cmp-box">
-            <div className="intl-cmp-title">Gold / Silver <span>ratio</span></div>
-            <CmpRow label="Spot" hint="XAU ÷ XAG" value={spotRatio} plain />
-            <CmpRow label="Future" hint="GC ÷ SI" value={futRatio} plain />
-          </div>
-
-          <div className="intl-cmp-box">
-            <div className="intl-cmp-title">
-              Crude ATM <span>{atmStrike != null ? `strike ${num(atmStrike)}` : "loading"}</span>
-            </div>
-            <CmpRow label="Call" hint="mid" value={callMid} plain />
-            <CmpRow label="Put" hint="mid" value={putMid} plain />
-            <CmpRow label="Straddle" hint="call + put" value={straddle} plain />
-          </div>
-        </div>
+      {/* Everything below is derived from the six feeds above — nothing else. */}
+      <div className="intl-stats">
+        <Stat label="Gold basis" hint="future − spot" value={goldBasis} />
+        <Stat label="Silver basis" hint="future − spot" value={silverBasis} decimals={3} />
+        <Stat label="Gold / Silver" hint="spot ratio" value={spotRatio} plain />
+        <Stat label="Gold / Silver" hint="future ratio" value={futRatio} plain />
+        <Stat label="Crude ATM" hint="nearest strike" value={atmStrike} plain />
+        <Stat label="ATM straddle" hint="call + put" value={straddle} plain />
       </div>
+
+      <div className="intl-section-title">
+        <span className="intl-num">6</span> CRUDE OPTIONS
+        <em>
+          NYMEX{expiry ? ` · expiry ${expiry}` : ""}
+          {clMid != null ? ` · underlying CL ${num(clMid)}` : ""}
+          {rows.length ? ` · ${rows.length} strikes around the money` : ""}
+        </em>
+      </div>
+      {rows.length === 0 ? (
+        <div className="oh-note oh-slim">Option chain loading…</div>
+      ) : (
+        <div className="intl-chain-wrap">
+          <table className="intl-chain">
+            <thead>
+              <tr>
+                <th colSpan={3} className="intl-call">CALL <em>buy right</em></th>
+                <th className="intl-strike-col">
+                  STRIKE
+                  {clMid != null && <em>CL {num(clMid)}</em>}
+                </th>
+                <th colSpan={3} className="intl-put">PUT <em>sell right</em></th>
+              </tr>
+              <tr className="intl-chain-sub">
+                <th className="intl-call">Bid</th>
+                <th className="intl-call">Ask</th>
+                <th className="intl-call">Mid</th>
+                <th className="intl-strike-col" />
+                <th className="intl-put">Mid</th>
+                <th className="intl-put">Bid</th>
+                <th className="intl-put">Ask</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const atm = r.strike === atmStrike;
+                const cItm = clMid != null && r.strike < clMid;   // call in-the-money
+                const pItm = clMid != null && r.strike > clMid;   // put in-the-money
+                const cM = mid(r.call), pM = mid(r.put);
+                return (
+                  <tr key={r.strike} className={atm ? "atm-row" : ""}>
+                    <td className={`intl-call ${cItm ? "itm" : ""}`}>{num(r.call?.bid)}</td>
+                    <td className={`intl-call ${cItm ? "itm" : ""}`}>{num(r.call?.ask)}</td>
+                    <td className={`intl-call strong ${cItm ? "itm" : ""}`}>{num(cM)}</td>
+                    <td className="intl-strike-col">
+                      {num(r.strike)}{atm && <span className="atm-badge">ATM</span>}
+                    </td>
+                    <td className={`intl-put strong ${pItm ? "itm" : ""}`}>{num(pM)}</td>
+                    <td className={`intl-put ${pItm ? "itm" : ""}`}>{num(r.put?.bid)}</td>
+                    <td className={`intl-put ${pItm ? "itm" : ""}`}>{num(r.put?.ask)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="intl-chain-legend">
+            <span><i className="sw call" /> Call side</span>
+            <span><i className="sw put" /> Put side</span>
+            <span><i className="sw itm" /> Shaded = in the money</span>
+            <span><i className="sw atm" /> ATM = strike nearest the crude price</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
