@@ -62,8 +62,52 @@ def _px(t) -> dict:
     return {"bid": v(t.bid), "ask": v(t.ask), "last": v(t.last)}
 
 
+async def _front_contract(ib, sym: str, exch: str):
+    """The contract the market is actually trading, by volume.
+
+    ContFuture rolls to the NEAREST live expiry, which is not the same thing.
+    On 31-Jul-2026 it picked COMEX gold October (1.8k lots, 4103.8) while every
+    terminal was quoting December (20.8k lots, 4134.9) - a $31 gap the client
+    would spot instantly. So: list the next few expiries, watch their volume for
+    a few seconds and take the busiest. Falls back to ContFuture when volume is
+    unavailable (weekends, holidays, first minutes of a session).
+    """
+    cont = ContFuture(sym, exch)
+    await ib.qualifyContractsAsync(cont)
+    try:
+        det = await ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD"))
+        near = sorted({d.contract.lastTradeDateOrContractMonth for d in det
+                       if d.contract.lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth})[:5]
+        probes = {}
+        for exp in near:
+            q = await ib.qualifyContractsAsync(Future(sym, exp, exch, currency="USD"))
+            if q:
+                probes[q[0]] = ib.reqMktData(q[0], "165", False, False)   # 165 = adds volume
+        if probes:
+            await asyncio.sleep(6)
+            best, best_vol = None, 0
+            for c, t in probes.items():
+                vol = float(t.volume) if (t.volume == t.volume and t.volume) else 0
+                if vol > best_vol:
+                    best, best_vol = c, vol
+            for c in probes:
+                if best is None or c.conId != best.conId:
+                    try:
+                        ib.cancelMktData(c)
+                    except Exception:  # noqa: BLE001
+                        pass
+            if best is not None:
+                if best.localSymbol != cont.localSymbol:
+                    log.info("IBKR: %s front month = %s (%s lots) instead of ContFuture's %s",
+                             sym, best.localSymbol, int(best_vol), cont.localSymbol)
+                return best
+    except Exception as e:  # noqa: BLE001 — never let this stop the feed
+        log.warning("IBKR: volume probe for %s failed (%s), using ContFuture", sym, e)
+    return cont
+
+
 async def _loop() -> None:
-    from ib_async import IB, Contract, ContFuture, FuturesOption  # lazy — missing lib disables only this thread
+    from ib_async import IB, Contract, ContFuture, Future, FuturesOption  # lazy — missing lib disables only this thread
 
     while not _stop.is_set():
         ib = IB()
@@ -75,8 +119,7 @@ async def _loop() -> None:
             futs = {}
             for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"),
                                    ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz")):
-                c = ContFuture(sym, exch)
-                await ib.qualifyContractsAsync(c)
+                c = await _front_contract(ib, sym, exch)
                 futs[key] = (c, ib.reqMktData(c, "", False, False))
                 _state[key + "_symbol"] = c.localSymbol
                 _state[key + "_expiry"] = c.lastTradeDateOrContractMonth
@@ -136,6 +179,7 @@ async def _loop() -> None:
             log.info("IBKR feed connected (GC/SI/CL + CL option chain)")
             last_window_check = 0.0
             stale_since = time.time()
+            rolled_at = time.time()
 
             while not _stop.is_set() and ib.isConnected():
                 await asyncio.sleep(1)
@@ -171,6 +215,12 @@ async def _loop() -> None:
                 clp = _state.get("cl") or {}
                 if clp.get("bid") and clp.get("ask"):
                     cl_mid = (clp["bid"] + clp["ask"]) / 2
+                # Contracts roll; re-run the volume probe once a day by
+                # reconnecting, which rebuilds every subscription cleanly.
+                if now - rolled_at > 86400:
+                    log.info("IBKR: daily front-month re-check")
+                    raise RuntimeError("daily contract roll check")
+
                 if cl_mid and now - last_window_check > 60:
                     last_window_check = now
                     if not window or cl_mid < window[0] or cl_mid > window[-1]:
