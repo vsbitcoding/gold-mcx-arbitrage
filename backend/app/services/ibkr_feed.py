@@ -43,7 +43,15 @@ _state: dict = {
     "cl_options_ts": 0.0,
     "connected": False,
     "delayed": False,            # True if the gateway fell back to delayed data
+    "stale": False,              # no price movement for a while (see the watchdog)
+    "last_tick": 0.0,            # epoch of the last price CHANGE on any instrument
 }
+
+# If not a single instrument changes price for this long we assume the
+# subscription died behind an open socket (IBKR error 1100 leaves ib.isConnected()
+# True) and force a full reconnect. COMEX/NYMEX trade ~23h a day, so real silence
+# this long only happens in the daily maintenance break, where a reconnect is free.
+_SILENCE_LIMIT = 600
 _stop = threading.Event()
 
 
@@ -127,18 +135,35 @@ async def _loop() -> None:
 
             log.info("IBKR feed connected (GC/SI/CL + CL option chain)")
             last_window_check = 0.0
+            stale_since = time.time()
 
             while not _stop.is_set() and ib.isConnected():
                 await asyncio.sleep(1)
                 now = time.time()
 
+                moved = False
                 for key, (_c, t) in list(futs.items()) + list(spots.items()):
                     p = _px(t)
                     if p["bid"] or p["last"]:
+                        if p != _state.get(key):
+                            moved = True
                         _state[key] = p
                         _state[key + "_ts"] = now
                         _state["connected"] = True
                     _state["delayed"] = t.marketDataType in (3, 4)
+
+                # Zombie guard. IBKR error 1100 ("connectivity lost") does NOT drop
+                # the local socket, so isConnected() keeps saying True while every
+                # price quietly freezes - exactly how the Deriv feed went unnoticed
+                # for 4.8 days. Any price change resets the clock.
+                if moved:
+                    stale_since = now
+                    _state["last_tick"] = now
+                    _state["stale"] = False
+                elif now - stale_since > _SILENCE_LIMIT:
+                    _state["stale"] = True
+                    raise RuntimeError(
+                        f"no IBKR price change for {int(now - stale_since)}s - forcing reconnect")
 
                 # Re-centre the option window at most once a minute, and only if
                 # the underlying has actually walked out of it.
@@ -184,9 +209,12 @@ def get_data() -> dict:
         ts = _state.get(k + "_ts") or 0
         return round(now - ts, 1) if ts else None
 
+    last = _state.get("last_tick") or 0
     return {
         "connected": _state["connected"],
         "delayed": _state["delayed"],
+        "stale": bool(_state.get("stale")),
+        "last_tick_age": round(now - last, 1) if last else None,
         "gold_future": {**(_state["gc"] or {}), "age": age("gc"),
                         "symbol": _state["gc_symbol"], "expiry": _state["gc_expiry"]},
         "silver_future": {**(_state["si"] or {}), "age": age("si"),
