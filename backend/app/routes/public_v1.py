@@ -454,12 +454,9 @@ def _quote(o: dict | None, name: str, symbol: str, unit: str, decimals: int) -> 
     }
 
 
-@router.get("/international")
-def public_international(_key: str = Depends(require_api_key)):
-    """The six international items from IBKR (COMEX + NYMEX real-time):
-    gold & silver spot, gold & silver COMEX futures, NYMEX crude future and the
-    crude option chain around the money. All mids/derived values are computed
-    here so the app only renders. Live data - poll every 2-5 s while visible."""
+def _international_payload() -> tuple[dict, str]:
+    """The international snapshot + a digest of just the prices, so the
+    WebSocket can skip pushing when nothing actually moved."""
     d = ibkr_feed.get_data()
 
     items = [
@@ -495,7 +492,8 @@ def public_international(_key: str = Depends(require_api_key)):
     if atm_row and atm_row["call"]["mid"] and atm_row["put"]["mid"]:
         straddle = round(atm_row["call"]["mid"] + atm_row["put"]["mid"], 2)
 
-    return {
+    payload = {
+        "type": "snapshot",
         "server_time": datetime.now(timezone.utc).isoformat(),
         "source": "Interactive Brokers (COMEX + NYMEX)",
         "connected": d.get("connected", False),
@@ -517,6 +515,115 @@ def public_international(_key: str = Depends(require_api_key)):
             "atm_straddle": straddle,
         },
     }
+    digest_input = json.dumps(
+        [[i["bid"], i["ask"]] for i in items]
+        + [[r["strike"], r["call"]["bid"], r["call"]["ask"], r["put"]["bid"], r["put"]["ask"]] for r in rows],
+        separators=(",", ":"),
+    )
+    return payload, hashlib.md5(digest_input.encode("utf-8")).hexdigest()
+
+
+@router.get("/international")
+def public_international(_key: str = Depends(require_api_key)):
+    """The six international items from IBKR (COMEX + NYMEX real-time):
+    gold & silver spot, gold & silver COMEX futures, NYMEX crude future and the
+    crude option chain around the money. All mids/derived values are computed
+    here so the client only renders. Poll every 2-5 s, or use the WebSocket at
+    /api/v1/international/stream to be pushed only on change."""
+    payload, _ = _international_payload()
+    payload.pop("type", None)
+    return payload
+
+
+@router.websocket("/international/stream")
+async def public_international_stream(
+    websocket: WebSocket,
+    api_key: str | None = Query(None, alias="api_key"),
+    key: str | None = Query(None),                  # same alias as /stream
+    interval: float = Query(1.0, ge=0.5, le=5.0),
+    keepalive: int = Query(15, ge=5, le=60, description="Heartbeat interval (s) when nothing moves"),
+):
+    """Live international stream (the six IBKR items + crude option chain).
+
+    Connect: wss://host/api/v1/international/stream?api_key=<KEY>&interval=1
+    Sends one snapshot immediately, then a new one every `interval` seconds
+    **only when a price actually changed**. A {"type":"heartbeat"} frame goes out
+    every `keepalive` seconds while the market is quiet.
+
+    Client may send "ping" -> server replies "pong".
+    """
+    token = api_key or key
+    if not verify_api_key_value(token):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    await websocket.accept()
+
+    stop = asyncio.Event()
+
+    async def receiver():
+        try:
+            while not stop.is_set():
+                msg = await websocket.receive_text()
+                if msg.strip().lower() == "ping":
+                    await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("intl WS receiver ended: %s", e)
+        finally:
+            stop.set()
+
+    async def pusher():
+        last_digest, last_send_at = None, 0.0
+        try:
+            payload, digest = _international_payload()
+            await websocket.send_json(payload)
+            last_digest = digest
+            last_send_at = asyncio.get_event_loop().time()
+
+            while not stop.is_set():
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=interval)
+                except asyncio.TimeoutError:
+                    pass
+                if stop.is_set():
+                    break
+
+                payload, digest = _international_payload()
+                now = asyncio.get_event_loop().time()
+                if digest != last_digest:
+                    await websocket.send_json(payload)
+                    last_digest, last_send_at = digest, now
+                elif (now - last_send_at) >= keepalive:
+                    await websocket.send_json({
+                        "type": "heartbeat",
+                        "server_time": payload["server_time"],
+                        "connected": payload["connected"],
+                    })
+                    last_send_at = now
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.exception("intl WS pusher error: %s", e)
+            try:
+                await websocket.send_json({"type": "error", "detail": "stream error, please reconnect"})
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            stop.set()
+
+    recv_task = asyncio.create_task(receiver())
+    push_task = asyncio.create_task(pusher())
+    try:
+        await asyncio.wait({recv_task, push_task}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        stop.set()
+        for t in (recv_task, push_task):
+            t.cancel()
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @router.get("/premium-inputs")
