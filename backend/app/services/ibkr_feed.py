@@ -72,6 +72,8 @@ async def _front_contract(ib, sym: str, exch: str):
     a few seconds and take the busiest. Falls back to ContFuture when volume is
     unavailable (weekends, holidays, first minutes of a session).
     """
+    from ib_async import ContFuture, Future   # same lazy import as _loop
+
     cont = ContFuture(sym, exch)
     await ib.qualifyContractsAsync(cont)
     try:
