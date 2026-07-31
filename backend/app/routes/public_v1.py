@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import extra_instruments, fcm_service, goldopt_service, mcxccl_service, metals_service, options_history_service, options_service, othercomm_service, premium_feed, price_service, signal_service
+from app.services import extra_instruments, fcm_service, goldopt_service, ibkr_feed, mcxccl_service, metals_service, options_history_service, options_service, othercomm_service, premium_feed, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -435,6 +435,87 @@ def public_price_table(_key: str = Depends(require_api_key)):
         "market_open": is_market_open(),
         "status": price_service.status(),
         **price_service.get_table(),
+    }
+
+
+def _quote(o: dict | None, name: str, symbol: str, unit: str, decimals: int) -> dict:
+    """One international instrument, with the mid already computed for the app."""
+    o = o or {}
+    bid, ask = o.get("bid"), o.get("ask")
+    mid = (bid + ask) / 2 if (bid and ask) else (bid or ask or o.get("last"))
+    return {
+        "name": name, "symbol": symbol, "unit": unit, "decimals": decimals,
+        "bid": bid, "ask": ask,
+        "mid": round(mid, decimals) if mid else None,
+        "spread": round(ask - bid, decimals) if (bid and ask) else None,
+        "contract": o.get("symbol"),          # e.g. "GCV6" (futures only)
+        "expiry": o.get("expiry"),            # e.g. "20261229" (futures only)
+        "age": o.get("age"),                  # seconds since the last tick
+    }
+
+
+@router.get("/international")
+def public_international(_key: str = Depends(require_api_key)):
+    """The six international items from IBKR (COMEX + NYMEX real-time):
+    gold & silver spot, gold & silver COMEX futures, NYMEX crude future and the
+    crude option chain around the money. All mids/derived values are computed
+    here so the app only renders. Live data - poll every 2-5 s while visible."""
+    d = ibkr_feed.get_data()
+
+    items = [
+        _quote(d.get("gold_spot"), "GOLD SPOT", "XAU/USD", "$/oz", 2),
+        _quote(d.get("silver_spot"), "SILVER SPOT", "XAG/USD", "$/oz", 3),
+        _quote(d.get("gold_future"), "GOLD FUTURE", "COMEX GC", "$/oz", 2),
+        _quote(d.get("silver_future"), "SILVER FUTURE", "COMEX SI", "$/oz", 3),
+        _quote(d.get("crude_future"), "CRUDE FUTURE", "NYMEX WTI CL", "$/bbl", 2),
+    ]
+    by = {i["symbol"]: i["mid"] for i in items}
+    xau, xag = by["XAU/USD"], by["XAG/USD"]
+    gc, si = by["COMEX GC"], by["COMEX SI"]
+    cl = by["NYMEX WTI CL"]
+
+    opts = d.get("crude_options") or {}
+    raw = opts.get("rows") or []
+    atm = min((r["strike"] for r in raw), key=lambda k: abs(k - cl)) if (raw and cl) else None
+    rows = []
+    for r in raw:
+        c, p = r.get("call") or {}, r.get("put") or {}
+        def m(x):
+            b, a = x.get("bid"), x.get("ask")
+            return round((b + a) / 2, 2) if (b and a) else (b or a)
+        rows.append({
+            "strike": r["strike"],
+            "atm": r["strike"] == atm,
+            "itm": None if not cl else ("call" if r["strike"] < cl else "put" if r["strike"] > cl else None),
+            "call": {"bid": c.get("bid"), "ask": c.get("ask"), "mid": m(c)},
+            "put": {"bid": p.get("bid"), "ask": p.get("ask"), "mid": m(p)},
+        })
+    atm_row = next((r for r in rows if r["atm"]), None)
+    straddle = None
+    if atm_row and atm_row["call"]["mid"] and atm_row["put"]["mid"]:
+        straddle = round(atm_row["call"]["mid"] + atm_row["put"]["mid"], 2)
+
+    return {
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "source": "Interactive Brokers (COMEX + NYMEX)",
+        "connected": d.get("connected", False),
+        "delayed": d.get("delayed", False),
+        "items": items,
+        "crude_options": {
+            "exchange": "NYMEX",
+            "expiry": opts.get("expiry"),        # "YYYYMMDD"
+            "underlying": cl,
+            "atm_strike": atm,
+            "age": opts.get("age"),
+            "rows": rows,
+        },
+        "summary": {
+            "gold_basis": round(gc - xau, 2) if (gc and xau) else None,
+            "silver_basis": round(si - xag, 3) if (si and xag) else None,
+            "gold_silver_ratio_spot": round(xau / xag, 2) if (xau and xag) else None,
+            "gold_silver_ratio_future": round(gc / si, 2) if (gc and si) else None,
+            "atm_straddle": straddle,
+        },
     }
 
 
