@@ -73,6 +73,9 @@ def _px(t) -> dict:
 # so a 3 a.m. reconnect cannot silently downgrade a good pick.
 _front_cache: dict[str, tuple] = {}
 _FRONT_TTL = 12 * 3600
+# A contract has to trade at least this much in a day before it is allowed to
+# displace ContFuture's choice.
+_MIN_FRONT_VOL = 1000
 
 
 async def _front_contract(ib, sym: str, exch: str):
@@ -101,7 +104,7 @@ async def _front_contract(ib, sym: str, exch: str):
         det = await ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD"))
         near = sorted({d.contract.lastTradeDateOrContractMonth for d in det
                        if d.contract.lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth})[:5]
-        best, best_vol = None, 0.0
+        vols: dict = {}
         for exp in near:
             q = await ib.qualifyContractsAsync(Future(sym, exp, exch, currency="USD"))
             c = q[0] if q else None
@@ -110,9 +113,25 @@ async def _front_contract(ib, sym: str, exch: str):
             bars = await ib.reqHistoricalDataAsync(
                 c, endDateTime="", durationStr="5 D", barSizeSetting="1 day",
                 whatToShow="TRADES", useRTH=False, formatDate=1)
-            vol = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
-            if vol > best_vol:
-                best, best_vol = c, vol
+            vols[c] = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
+        log.info("IBKR: %s volumes %s", sym,
+                 {c.localSymbol: int(v) for c, v in sorted(vols.items(), key=lambda kv: -kv[1])})
+
+        cont_vol = next((v for c, v in vols.items() if c.localSymbol == cont.localSymbol), 0.0)
+        best, best_vol = (None, 0.0)
+        for c, v in vols.items():
+            if v > best_vol:
+                best, best_vol = c, v
+
+        # Only overrule ContFuture for a contract that is genuinely the busy one.
+        # Without this, a stray 8-lot print on silver November beat September,
+        # whose history request had come back empty (03-Aug).
+        if best is not None and best.localSymbol != cont.localSymbol:
+            if best_vol < _MIN_FRONT_VOL or best_vol < cont_vol * 2:
+                log.info("IBKR: %s keeping ContFuture %s (%s lots) - %s only had %s",
+                         sym, cont.localSymbol, int(cont_vol), best.localSymbol, int(best_vol))
+                best, best_vol = cont, cont_vol
+
         if best is not None and best_vol > 0:
             if best.localSymbol != cont.localSymbol:
                 log.info("IBKR: %s front month = %s (%s lots/day) instead of ContFuture's %s",
