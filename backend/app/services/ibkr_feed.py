@@ -102,18 +102,23 @@ async def _front_contract(ib, sym: str, exch: str):
 
     try:
         det = await ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD"))
-        near = sorted({d.contract.lastTradeDateOrContractMonth for d in det
-                       if d.contract.lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth})[:5]
+        # Use the contracts IBKR hands back - they are already qualified. Building
+        # Future(sym, expiry) and re-qualifying is ambiguous on the active months
+        # (silver returned nothing but November that way on 03-Aug), so match the
+        # continuous contract's trading class and multiplier instead.
+        cands = sorted(
+            (d.contract for d in det
+             if d.contract.lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth
+             and d.contract.tradingClass == cont.tradingClass
+             and d.contract.multiplier == cont.multiplier),
+            key=lambda c: c.lastTradeDateOrContractMonth)[:5]
         vols: dict = {}
-        for exp in near:
-            q = await ib.qualifyContractsAsync(Future(sym, exp, exch, currency="USD"))
-            c = q[0] if q else None
-            if c is None:
-                continue
+        for c in cands:
             bars = await ib.reqHistoricalDataAsync(
                 c, endDateTime="", durationStr="5 D", barSizeSetting="1 day",
                 whatToShow="TRADES", useRTH=False, formatDate=1)
             vols[c] = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
+            await asyncio.sleep(0.3)          # stay inside IBKR's historical-data pacing
         log.info("IBKR: %s volumes %s", sym,
                  {c.localSymbol: int(v) for c, v in sorted(vols.items(), key=lambda kv: -kv[1])})
 
