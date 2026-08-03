@@ -474,18 +474,40 @@ def _international_payload() -> tuple[dict, str]:
     opts = d.get("crude_options") or {}
     raw = opts.get("rows") or []
     atm = min((r["strike"] for r in raw), key=lambda k: abs(k - cl)) if (raw and cl) else None
+
+    # Expiry on every leg, not only on the parent object. Consumers iterate the
+    # rows and build their own symbols, so an expiry that lives one level up
+    # simply never reaches the screen (client's terminal, 03-Aug).
+    exp = opts.get("expiry")                      # "YYYYMMDD"
+    exp_date = exp_display = None
+    dte = None
+    if exp and len(exp) == 8:
+        ed = datetime(int(exp[:4]), int(exp[4:6]), int(exp[6:8]), tzinfo=timezone.utc)
+        exp_date = ed.strftime("%Y-%m-%d")
+        exp_display = ed.strftime("%d-%b-%Y").upper()          # 05-AUG-2026
+        dte = (ed.date() - datetime.now(timezone.utc).date()).days
+
+    def strike_txt(k):
+        return f"{k:g}"
+
     rows = []
     for r in raw:
         c, p = r.get("call") or {}, r.get("put") or {}
         def m(x):
             b, a = x.get("bid"), x.get("ask")
             return round((b + a) / 2, 2) if (b and a) else (b or a)
+        k = r["strike"]
         rows.append({
-            "strike": r["strike"],
-            "atm": r["strike"] == atm,
-            "itm": None if not cl else ("call" if r["strike"] < cl else "put" if r["strike"] > cl else None),
-            "call": {"bid": c.get("bid"), "ask": c.get("ask"), "mid": m(c)},
-            "put": {"bid": p.get("bid"), "ask": p.get("ask"), "mid": m(p)},
+            "strike": k,
+            "expiry": exp,                        # same on every row, but always present
+            "expiry_date": exp_date,
+            "expiry_display": exp_display,
+            "atm": k == atm,
+            "itm": None if not cl else ("call" if k < cl else "put" if k > cl else None),
+            "call": {"symbol": f"CRUDE_OPT_{exp_display or exp}_{strike_txt(k)}_CE",
+                     "bid": c.get("bid"), "ask": c.get("ask"), "mid": m(c)},
+            "put": {"symbol": f"CRUDE_OPT_{exp_display or exp}_{strike_txt(k)}_PE",
+                    "bid": p.get("bid"), "ask": p.get("ask"), "mid": m(p)},
         })
     atm_row = next((r for r in rows if r["atm"]), None)
     straddle = None
@@ -501,7 +523,10 @@ def _international_payload() -> tuple[dict, str]:
         "items": items,
         "crude_options": {
             "exchange": "NYMEX",
-            "expiry": opts.get("expiry"),        # "YYYYMMDD"
+            "expiry": exp,                       # "YYYYMMDD"
+            "expiry_date": exp_date,             # "2026-08-05"
+            "expiry_display": exp_display,       # "05-AUG-2026"
+            "days_to_expiry": dte,
             "underlying": cl,
             "atm_strike": atm,
             "age": opts.get("age"),
