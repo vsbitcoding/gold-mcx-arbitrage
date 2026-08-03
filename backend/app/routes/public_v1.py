@@ -488,7 +488,9 @@ def _international_payload() -> tuple[dict, str]:
         dte = (ed.date() - datetime.now(timezone.utc).date()).days
 
     def strike_txt(k):
-        return f"{k:g}"
+        # 78.0 / 78.25 - matches how the client's terminal already prints strikes,
+        # so `symbol` is a drop-in for the string his code builds itself.
+        return str(k)
 
     rows = []
     for r in raw:
