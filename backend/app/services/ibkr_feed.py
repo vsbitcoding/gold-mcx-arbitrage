@@ -49,9 +49,16 @@ _state: dict = {
 
 # If not a single instrument changes price for this long we assume the
 # subscription died behind an open socket (IBKR error 1100 leaves ib.isConnected()
-# True) and force a full reconnect. COMEX/NYMEX trade ~23h a day, so real silence
-# this long only happens in the daily maintenance break, where a reconnect is free.
+# True) and force a full reconnect.
+#
+# A closed market looks identical to a dead subscription from here, and on the
+# night of 02-Aug that cost us: the market was shut, the watchdog fired every 11
+# minutes for an hour. So the limit doubles after each silent reconnect (up to an
+# hour) and resets the moment prices flow again - a genuinely dead feed is still
+# caught within ten minutes, a weekend costs two or three reconnects.
 _SILENCE_LIMIT = 600
+_SILENCE_MAX = 3600
+_silence_limit = _SILENCE_LIMIT
 _stop = threading.Event()
 
 
@@ -62,49 +69,65 @@ def _px(t) -> dict:
     return {"bid": v(t.bid), "ask": v(t.ask), "last": v(t.last)}
 
 
-async def _front_contract(ib, sym: str, exch: str):
-    """The contract the market is actually trading, by volume.
+# sym -> (contract, volume, picked_at). Survives reconnects inside the process
+# so a 3 a.m. reconnect cannot silently downgrade a good pick.
+_front_cache: dict[str, tuple] = {}
+_FRONT_TTL = 12 * 3600
 
-    ContFuture rolls to the NEAREST live expiry, which is not the same thing.
-    On 31-Jul-2026 it picked COMEX gold October (1.8k lots, 4103.8) while every
-    terminal was quoting December (20.8k lots, 4134.9) - a $31 gap the client
-    would spot instantly. So: list the next few expiries, watch their volume for
-    a few seconds and take the busiest. Falls back to ContFuture when volume is
-    unavailable (weekends, holidays, first minutes of a session).
+
+async def _front_contract(ib, sym: str, exch: str):
+    """The contract the market is actually trading, judged on traded volume.
+
+    ContFuture rolls to the NEAREST live expiry, which is not the same thing. On
+    31-Jul-2026 it picked COMEX gold October (4103.8) while every terminal quoted
+    December (4134.9) - a $31 gap the client spots instantly.
+
+    Volume is read from the LAST DAILY BAR, not the live ticker. Live volume is
+    zero whenever the market is shut, and that is exactly what broke it on 02-Aug:
+    a reconnect at 1 a.m. saw zeros everywhere and fell back to October again.
+    Daily bars answer the same question at any hour.
     """
     from ib_async import ContFuture, Future   # same lazy import as _loop
 
     cont = ContFuture(sym, exch)
     await ib.qualifyContractsAsync(cont)
+
+    cached = _front_cache.get(sym)
+    if cached and (time.time() - cached[2]) < _FRONT_TTL:
+        if cached[0].lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth:
+            return cached[0]                      # still valid, skip the probe
+
     try:
         det = await ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD"))
         near = sorted({d.contract.lastTradeDateOrContractMonth for d in det
                        if d.contract.lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth})[:5]
-        probes = {}
+        best, best_vol = None, 0.0
         for exp in near:
             q = await ib.qualifyContractsAsync(Future(sym, exp, exch, currency="USD"))
-            if q:
-                probes[q[0]] = ib.reqMktData(q[0], "165", False, False)   # 165 = adds volume
-        if probes:
-            await asyncio.sleep(6)
-            best, best_vol = None, 0
-            for c, t in probes.items():
-                vol = float(t.volume) if (t.volume == t.volume and t.volume) else 0
-                if vol > best_vol:
-                    best, best_vol = c, vol
-            for c in probes:
-                if best is None or c.conId != best.conId:
-                    try:
-                        ib.cancelMktData(c)
-                    except Exception:  # noqa: BLE001
-                        pass
-            if best is not None:
-                if best.localSymbol != cont.localSymbol:
-                    log.info("IBKR: %s front month = %s (%s lots) instead of ContFuture's %s",
-                             sym, best.localSymbol, int(best_vol), cont.localSymbol)
-                return best
+            c = q[0] if q else None
+            if c is None:
+                continue
+            bars = await ib.reqHistoricalDataAsync(
+                c, endDateTime="", durationStr="5 D", barSizeSetting="1 day",
+                whatToShow="TRADES", useRTH=False, formatDate=1)
+            vol = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
+            if vol > best_vol:
+                best, best_vol = c, vol
+        if best is not None and best_vol > 0:
+            if best.localSymbol != cont.localSymbol:
+                log.info("IBKR: %s front month = %s (%s lots/day) instead of ContFuture's %s",
+                         sym, best.localSymbol, int(best_vol), cont.localSymbol)
+            _front_cache[sym] = (best, best_vol, time.time())
+            return best
+        log.warning("IBKR: no volume found for any %s contract", sym)
     except Exception as e:  # noqa: BLE001 — never let this stop the feed
-        log.warning("IBKR: volume probe for %s failed (%s), using ContFuture", sym, e)
+        log.warning("IBKR: volume probe for %s failed (%s)", sym, e)
+
+    # Nothing usable from the probe: keep the last good pick rather than
+    # silently dropping back to the wrong month.
+    if cached and cached[0].lastTradeDateOrContractMonth >= cont.lastTradeDateOrContractMonth:
+        log.info("IBKR: keeping cached %s front month %s", sym, cached[0].localSymbol)
+        return cached[0]
     return cont
 
 
@@ -202,14 +225,18 @@ async def _loop() -> None:
                 # the local socket, so isConnected() keeps saying True while every
                 # price quietly freezes - exactly how the Deriv feed went unnoticed
                 # for 4.8 days. Any price change resets the clock.
+                global _silence_limit
                 if moved:
                     stale_since = now
                     _state["last_tick"] = now
                     _state["stale"] = False
-                elif now - stale_since > _SILENCE_LIMIT:
+                    _silence_limit = _SILENCE_LIMIT      # prices flowing: back to 10 min
+                elif now - stale_since > _silence_limit:
                     _state["stale"] = True
+                    _silence_limit = min(_silence_limit * 2, _SILENCE_MAX)
                     raise RuntimeError(
-                        f"no IBKR price change for {int(now - stale_since)}s - forcing reconnect")
+                        f"no IBKR price change for {int(now - stale_since)}s - forcing reconnect "
+                        f"(next check in {_silence_limit}s)")
 
                 # Re-centre the option window at most once a minute, and only if
                 # the underlying has actually walked out of it.
