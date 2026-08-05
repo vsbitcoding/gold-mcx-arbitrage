@@ -12,7 +12,6 @@ const iv = (v) => (v == null || v === 0 ? "—" : fmtNum(v, 2) + "%");
 
 function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi }) {
   const rows = data?.rows || [];
-  const cols = showOi ? 8 : 7;
   return (
     <div className="cru-chain">
       <div className="cru-chain-head">
@@ -35,7 +34,6 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
               <tr>
                 <th className="cru-side">Type</th>
                 <th className="cru-strike">Strike</th>
-                <th>LTP</th>
                 <th>Bid</th>
                 <th>Ask</th>
                 <th className="cru-iv-col">IV</th>
@@ -45,8 +43,10 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
             </thead>
             <tbody>
               {rows.map((r) => {
+                // PE sits above CE on the ATM row: puts run above the money and
+                // calls below, so this keeps each block unbroken (client, 05-Aug).
                 const legs = r.atm
-                  ? [["CE", r.ce], ["PE", r.pe]]
+                  ? [["PE", r.pe], ["CE", r.ce]]
                   : [[r.side, r.side === "CE" ? r.ce : r.pe]];
                 return legs.map(([side, leg], i) => (
                   <tr key={`${r.strike}-${side}`}
@@ -58,7 +58,6 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
                         {r.atm && <span className="atm-badge">ATM</span>}
                       </td>
                     ) : null}
-                    <td>{num(leg?.ltp ?? leg?.mid, priceDecimals)}</td>
                     <td>{num(leg?.bid, priceDecimals)}</td>
                     <td>{num(leg?.ask, priceDecimals)}</td>
                     <td className="cru-iv-col">{iv(leg?.iv)}</td>
@@ -152,6 +151,10 @@ export default function CrudeOil() {
         <div className="intl-stat">
           <div className="intl-stat-label">US future<em>$ per barrel</em></div>
           <div className="intl-stat-value">{num(us.future_price, 2)}</div>
+        </div>
+        <div className="intl-stat">
+          <div className="intl-stat-label">USD / INR<em>{d.usdinr?.source || "live"}</em></div>
+          <div className="intl-stat-value">{num(d.usdinr?.price, 3)}</div>
         </div>
       </div>
 

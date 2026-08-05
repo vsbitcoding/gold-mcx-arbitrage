@@ -5085,7 +5085,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* ── Crude Oil: MCX vs US option chains with implied volatility ───────── */
 .cru-page { padding: 4px 0 32px; }
 .cru-stats {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px; margin: 16px 0 18px;
 }
 .cru-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }

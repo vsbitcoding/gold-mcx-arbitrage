@@ -8,7 +8,7 @@ the money, the ATM row, 10 puts below.
 """
 from fastapi import APIRouter, Query
 
-from app.services import crude_iv_service, ibkr_feed
+from app.services import crude_iv_service, ibkr_feed, premium_feed
 
 router = APIRouter(prefix="/api", tags=["crude-iv"])
 
@@ -19,9 +19,14 @@ def _payload(window: int) -> dict:
     if window != 10 and us.get("rows"):
         atm = us.get("atm")
         us = {**us, "rows": [r for r in us["rows"] if abs(r["strike"] - atm) <= window * 0.5]} if atm else us
+    pf = premium_feed.get_inputs()
     return {
         "mcx": crude_iv_service.get_chain(window=window),
         "us": {**us, "connected": ib.get("connected"), "delayed": ib.get("delayed")},
+        # client wants the rate on this screen too - MCX quotes in rupees and
+        # the US chain in dollars, so it is the number he converts with
+        "usdinr": {"price": pf.get("usdinr"), "age": pf.get("usdinr_age"),
+                   "source": pf.get("usdinr_source")},
         "server_time": ib.get("server_time"),
     }
 
