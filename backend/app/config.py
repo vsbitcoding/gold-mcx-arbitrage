@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     IBKR_FEED_CLIENT_ID: int = 22
     # Spot metals + crude come from the IBKR feed (client's choice, 30-Jul).
     # Flip IBKR_SPOTS_ENABLED off and FINNHUB_ENABLED on to roll back instantly.
+    # MCX crude option chain with IV + greeks, via Dhan's REST option-chain
+    # endpoint (the WebSocket tick stream carries no IV). Reuses the live feed's
+    # cached token; Dhan allows one call per 3 s so the service polls every 5 s.
+    CRUDE_IV_ENABLED: bool = True
     IBKR_SPOTS_ENABLED: bool = True
     FINNHUB_ENABLED: bool = False
     TWELVEDATA_API_KEY: str = ""

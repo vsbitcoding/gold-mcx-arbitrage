@@ -5055,3 +5055,58 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   .intl-card-price { font-size: 20px; }
   .intl-chain th, .intl-chain td { padding: 7px 9px; font-size: 12px; }
 }
+
+/* ── Crude Oil: MCX vs US option chains with implied volatility ───────── */
+.cru-page { padding: 4px 0 32px; }
+.cru-stats {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px; margin: 16px 0 18px;
+}
+.cru-split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+
+.cru-chain { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); overflow: hidden; }
+.cru-chain-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 16px; background: var(--bg-surface-alt); border-bottom: 1px solid var(--border);
+}
+.cru-chain-title { font-size: 13px; font-weight: 800; letter-spacing: .03em; }
+.cru-chain-sub { display: block; margin-top: 2px; font-size: 10.5px; color: var(--text-secondary); }
+.cru-fut { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.cru-fut em { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--text-secondary); }
+
+.cru-table-wrap { overflow-x: auto; }
+.cru-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cru-table th, .cru-table td { padding: 6px 10px; text-align: right; font-size: 12.5px; }
+.cru-table thead th {
+  font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border); padding-top: 9px; padding-bottom: 7px;
+}
+.cru-table tbody td { border-top: 1px solid var(--border); }
+.cru-table .cru-side { text-align: center; width: 54px; }
+.cru-table .cru-strike { text-align: center; font-weight: 800; width: 96px; background: var(--bg-surface-alt); }
+.cru-table .cru-iv-col { font-weight: 700; }
+.cru-table tbody tr:hover td { filter: brightness(1.05); }
+
+/* call rows read green, put rows red - same language as the other chains here */
+.cru-table tr.cru-ce td:not(.cru-strike) { background: rgba(26,127,55,.05); }
+.cru-table tr.cru-pe td:not(.cru-strike) { background: rgba(198,40,40,.05); }
+.cru-tag {
+  display: inline-block; min-width: 30px; padding: 2px 7px; border-radius: 5px;
+  font-size: 10px; font-weight: 800; letter-spacing: .04em;
+}
+.cru-tag.ce { background: rgba(26,127,55,.16); color: #1a7f37; }
+.cru-tag.pe { background: rgba(198,40,40,.16); color: #c62828; }
+.cru-table tr.cru-atm td { background: var(--accent-bg) !important; font-weight: 800; }
+.cru-table tr.cru-atm .cru-strike { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); }
+.cru-table tr.cru-atm .atm-badge { display: block; margin: 3px auto 0; }
+
+.cru-foot { margin-top: 14px; font-size: 11px; color: var(--text-secondary); }
+
+@media (max-width: 1250px) {
+  .cru-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cru-split { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .cru-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cru-table th, .cru-table td { padding: 6px 7px; font-size: 11.5px; }
+}
