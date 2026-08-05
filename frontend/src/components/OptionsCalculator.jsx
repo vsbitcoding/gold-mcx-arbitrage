@@ -5,17 +5,11 @@ import { fmtNum } from "../utils/format.js";
 //   Nifty option price  (manual PUT price) × 325
 //   Sensex option price (manual PUT price) × 100
 //   Premium = Nifty value − Sensex value
-// Pure client-side; inputs + multipliers persist in localStorage.
-const LS_KEY = "arbi_optcalc_v1";
-
-function load() {
-  try {
-    const d = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-    return { np: d.np ?? "", sp: d.sp ?? "", nm: d.nm ?? 325, sm: d.sm ?? 100 };
-  } catch {
-    return { np: "", sp: "", nm: 325, sm: 100 };
-  }
-}
+// Quantities are contract lot sizes, so they are shown as fixed labels rather
+// than inputs. Prices are deliberately NOT remembered - the client wants to
+// type a fresh pair every time he opens it, never yesterday's numbers.
+const NIFTY_QTY = 325;
+const SENSEX_QTY = 100;
 
 const num = (v) => {
   const n = parseFloat(v);
@@ -23,7 +17,15 @@ const num = (v) => {
 };
 
 export default function OptionsCalculator({ open, onClose }) {
-  const [cfg, setCfg] = useState(load);
+  const [np, setNp] = useState("");
+  const [sp, setSp] = useState("");
+
+  // Blank both prices on every open AND every close, so the popup can never
+  // show a stale number.
+  useEffect(() => {
+    setNp("");
+    setSp("");
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -34,18 +36,9 @@ export default function OptionsCalculator({ open, onClose }) {
 
   if (!open) return null;
 
-  const setF = (k, v) => {
-    setCfg((c) => {
-      const next = { ...c, [k]: v };
-      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
-
-  const np = num(cfg.np), sp = num(cfg.sp);
-  const nm = num(cfg.nm) ?? 325, sm = num(cfg.sm) ?? 100;
-  const nVal = np != null ? np * nm : null;
-  const sVal = sp != null ? sp * sm : null;
+  const n = num(np), s = num(sp);
+  const nVal = n != null ? n * NIFTY_QTY : null;
+  const sVal = s != null ? s * SENSEX_QTY : null;
   const premium = nVal != null && sVal != null ? nVal - sVal : null;
 
   return (
@@ -65,18 +58,16 @@ export default function OptionsCalculator({ open, onClose }) {
 
           <span className="ocalc-name">Nifty <em>PUT</em></span>
           <input className="pv-input ocalc-price" type="number" step="0.05" placeholder="0.00"
-            autoFocus value={cfg.np} onChange={(e) => setF("np", e.target.value)} />
+            autoFocus value={np} onChange={(e) => setNp(e.target.value)} />
           <span className="ocalc-x">×</span>
-          <input className="pv-input ocalc-mult" type="number" step="1"
-            value={cfg.nm} onChange={(e) => setF("nm", e.target.value)} />
+          <span className="ocalc-qty">{NIFTY_QTY}</span>
           <span className="ocalc-val">{nVal == null ? "—" : fmtNum(nVal, 2)}</span>
 
           <span className="ocalc-name">Sensex <em>PUT</em></span>
           <input className="pv-input ocalc-price" type="number" step="0.05" placeholder="0.00"
-            value={cfg.sp} onChange={(e) => setF("sp", e.target.value)} />
+            value={sp} onChange={(e) => setSp(e.target.value)} />
           <span className="ocalc-x">×</span>
-          <input className="pv-input ocalc-mult" type="number" step="1"
-            value={cfg.sm} onChange={(e) => setF("sm", e.target.value)} />
+          <span className="ocalc-qty">{SENSEX_QTY}</span>
           <span className="ocalc-val">{sVal == null ? "—" : fmtNum(sVal, 2)}</span>
         </div>
 

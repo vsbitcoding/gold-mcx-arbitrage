@@ -4854,6 +4854,11 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .ocalc-name { font-weight: 700; font-size: 14px; }
 .ocalc-name em { font-style: normal; font-size: 10.5px; color: var(--text-secondary); margin-left: 4px; }
 .ocalc-price, .ocalc-mult { text-align: right; width: 100%; }
+/* lot size is fixed - shown as a plain figure so nobody types over it */
+.ocalc-qty {
+  text-align: right; font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: 13.5px; color: var(--text-secondary); padding-right: 2px;
+}
 .ocalc-x { text-align: center; color: var(--text-secondary); font-weight: 700; }
 .ocalc-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14.5px; }
 
