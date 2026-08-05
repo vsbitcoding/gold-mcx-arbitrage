@@ -1,4 +1,4 @@
-"""Nifty/Sensex options-board history — twice-daily snapshots + weekday query.
+"""Nifty/Sensex options-board history — thrice-daily snapshots + weekday query.
 
 Replaces the client's manual 10am/3pm screenshots. Load profile is deliberately
 tiny (client constraint: "no server / DB load"):
@@ -24,8 +24,11 @@ from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import OptionsSnapshot
 
-_SLOTS = {"10:00": (10, 0), "15:00": (15, 0)}
+_SLOTS = {"10:00": (10, 0), "15:00": (15, 0), "15:25": (15, 25)}
 _WINDOW_MIN = 45          # minutes after the slot in which a capture is still honest
+# 15:25 sits five minutes before the index close, so its window has to be tight -
+# a late run at 16:00 would otherwise store post-close numbers under that label.
+_SLOT_WINDOW = {"15:25": 5}
 _WEEKDAY_NUM = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 _WEEKDAY_NAME = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -49,9 +52,10 @@ def snapshot(slot: str) -> str:
         now = datetime.now()  # server runs in Asia/Kolkata → IST
         hh, mm = _SLOTS[slot]
         slot_start = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        window = _SLOT_WINDOW.get(slot, _WINDOW_MIN)
         # A late run (e.g. server restart at 16:00 re-firing the 10:00 gate)
         # must NOT store 16:00 quotes labelled "10:00" — skip instead.
-        if now < slot_start or now > slot_start + timedelta(minutes=_WINDOW_MIN):
+        if now < slot_start or now > slot_start + timedelta(minutes=window):
             return "outside capture window; skipped"
         if not dhan_feed.is_market_open():
             return "market closed; skipped"
@@ -145,7 +149,7 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
     weeks[].rows[] has exactly the live /options-spread row shape.
     """
     side = side if side in ("below", "above", "squareoff") else "below"
-    slot = slot if slot in ("10:00", "15:00", "both") else "both"
+    slot = slot if slot in _SLOTS or slot == "both" else "both"
     try:
         weeks = max(1, min(int(weeks), 52))
     except (TypeError, ValueError):
@@ -167,7 +171,7 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
             q = q.filter(OptionsSnapshot.weekday == wd)
         if slot != "both":
             q = q.filter(OptionsSnapshot.slot == slot)
-        limit = 4 if date else weeks * (2 if slot == "both" else 1)
+        limit = len(_SLOTS) * 2 if date else weeks * (len(_SLOTS) if slot == "both" else 1)
         rows = (q.order_by(OptionsSnapshot.snap_date.desc(), OptionsSnapshot.slot.asc())
                  .limit(limit).all())
     finally:
@@ -215,7 +219,7 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
         "count": len(snapshots),
         "dates": dates_seen,
         "snapshots": snapshots,
-        "note": "auto-captured 10:00 & 15:00 IST each trading day; holidays/weekends have no snapshot",
+        "note": "auto-captured 10:00, 15:00 & 15:25 IST each trading day; holidays/weekends have no snapshot",
     }
     if len(_cache) > 32:
         _cache.clear()

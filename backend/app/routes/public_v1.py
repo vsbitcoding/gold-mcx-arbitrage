@@ -271,13 +271,13 @@ def public_board(
 @router.get("/options-history")
 def public_options_history(
     weekday: str | None = Query(None, description="mon..sun or 0..6 (0=Mon) → last N same-weekday boards; omit = latest snapshot days"),
-    slot: str = Query("both", description="10:00 | 15:00 | both"),
+    slot: str = Query("both", description="10:00 | 15:00 | 15:25 | both"),
     side: str = Query("below", description="below | above | squareoff — same row shapes as /options-spread"),
     weeks: int = Query(7, ge=1, le=52, description="how many most-recent matching days (default 7)"),
     date: str | None = Query(None, description="YYYY-MM-DD → that day's snapshot(s) instead of a weekday series"),
     _key: str = Depends(require_api_key),
 ):
-    """History of the Nifty/Sensex PE board, auto-captured at 10:00 & 15:00 IST
+    """History of the Nifty/Sensex PE board, auto-captured at 10:00, 15:00 & 15:25 IST
     each trading day (replaces manual screenshots).
 
     Example: /api/v1/options-history?weekday=mon&slot=10:00&weeks=7

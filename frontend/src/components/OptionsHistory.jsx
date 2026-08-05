@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import OptionsBoard from "./OptionsBoard.jsx";
 
-// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00 IST
+// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00/15:25 IST
 // snapshot EXACTLY like the Live board (cards + full 3-week matrix), stacked
 // newest-first. Filters: weekday + time + how many past days. Boards are
 // fetched ON DEMAND only (control changes) — no polling, no load.
@@ -26,8 +26,14 @@ function fmtDate(iso) {
   });
 }
 
+const SLOTS = [
+  { key: "10:00", label: "10:00 AM" },
+  { key: "15:00", label: "3:00 PM" },
+  { key: "15:25", label: "3:25 PM" },
+];
+
 function slotLabel(slot) {
-  return slot === "15:00" ? "3:00 PM" : "10:00 AM";
+  return SLOTS.find((s) => s.key === slot)?.label || slot;
 }
 
 export default function OptionsHistory({ side }) {
@@ -36,8 +42,10 @@ export default function OptionsHistory({ side }) {
     catch { return todayWeekday(); }
   });
   const [slot, setSlot] = useState(() => {
-    try { const s = localStorage.getItem("arbi_opthist_slot"); return s === "15:00" ? "15:00" : "10:00"; }
-    catch { return "10:00"; }
+    try {
+      const s = localStorage.getItem("arbi_opthist_slot");
+      return SLOTS.some((x) => x.key === s) ? s : "10:00";
+    } catch { return "10:00"; }
   });
   const [weeks, setWeeks] = useState(7);
   const [data, setData] = useState(null);
@@ -72,8 +80,10 @@ export default function OptionsHistory({ side }) {
           ))}
         </div>
         <div className="oh-group" role="tablist" aria-label="Time">
-          <button type="button" className={`oh-chip ${slot === "10:00" ? "on" : ""}`} onClick={() => setSlot("10:00")}>10:00 AM</button>
-          <button type="button" className={`oh-chip ${slot === "15:00" ? "on" : ""}`} onClick={() => setSlot("15:00")}>3:00 PM</button>
+          {SLOTS.map((s) => (
+            <button key={s.key} type="button" className={`oh-chip ${slot === s.key ? "on" : ""}`}
+              onClick={() => setSlot(s.key)}>{s.label}</button>
+          ))}
         </div>
         <select className="oh-weeks" value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} title="How many past days">
           <option value={4}>Last 4</option>
@@ -87,8 +97,8 @@ export default function OptionsHistory({ side }) {
 
       {!loading && snaps.length === 0 && !err && (
         <div className="oh-note">
-          No snapshots yet for this filter. Boards are saved automatically at <b>10:00</b> and <b>3:00</b> IST
-          every trading day — history builds up from today onward.
+          No snapshots yet for this filter. Boards are saved automatically at <b>10:00</b>, <b>3:00</b> and
+          <b> 3:25</b> IST every trading day — history builds up from today onward.
         </div>
       )}
 
