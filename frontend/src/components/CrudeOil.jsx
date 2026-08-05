@@ -124,7 +124,7 @@ export default function CrudeOil() {
   if (err) return <div className="settings-banner danger">⚠ {err}</div>;
   if (!d) return (
     <div className="cru-page">
-      {switcher}
+      <div className="cru-switch-solo">{switcher}</div>
       <div className="empty-state">Loading {cfg.label.toLowerCase()} option chains…</div>
     </div>
   );
@@ -136,9 +136,6 @@ export default function CrudeOil() {
     const [y, m, day] = e.split("-");
     return day ? `${day}-${m}-${y}` : e;
   };
-  const sameExpiry = mcx.expiry && us.expiry &&
-    fmtExp(mcx.expiry) === fmtExp(us.expiry);
-
   // Headline comparison: ATM implied volatility on each exchange.
   const atmIv = (chain) => {
     const r = (chain.rows || []).find((x) => x.atm);
@@ -150,19 +147,18 @@ export default function CrudeOil() {
 
   return (
     <div className="cru-page">
-      <div className="intl-head">
+      <div className="intl-head cru-head">
         <div>
           <h2>{cfg.label} — Option Comparison</h2>
           <div className="intl-sub">
             MCX vs US (NYMEX) · implied volatility and greeks on every strike
           </div>
         </div>
+        {switcher}
         <span className={`intl-status ${us.connected ? (us.delayed ? "warn" : "on") : "off"}`}>
           {us.connected ? (us.delayed ? "◷ Delayed" : "● Live real-time") : "○ Disconnected"}
         </span>
       </div>
-
-      {switcher}
 
       <div className="cru-stats">
         <div className="intl-stat">
@@ -192,13 +188,6 @@ export default function CrudeOil() {
           <div className="intl-stat-value">{num(d.usdinr?.price, 3)}</div>
         </div>
       </div>
-
-      {!sameExpiry && mcx.expiry && us.expiry && (
-        <div className="oh-note oh-slim">
-          Expiries differ ({fmtExp(mcx.expiry)} vs {fmtExp(us.expiry)}) — implied volatility is
-          driven by days remaining, so read the gap with that in mind.
-        </div>
-      )}
 
       <div className="cru-split">
         <Chain

@@ -5163,7 +5163,16 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .cru-table tr.cru-atm .cru-strike { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); }
 .cru-table tr.cru-atm .atm-badge { display: block; margin: 3px auto 0; }
 
-.cru-switch { margin-bottom: 4px; }
+/* Title left, product switch dead centre, status right - the switch stays put
+   whatever the title length. */
+.cru-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.cru-head > .intl-status { justify-self: end; }
+.cru-switch { margin: 0; justify-self: center; }
+.cru-switch-solo { display: flex; justify-content: center; margin: 8px 0 4px; }
+@media (max-width: 900px) {
+  .cru-head { grid-template-columns: 1fr auto; }
+  .cru-switch { grid-column: 1 / -1; justify-self: center; margin-top: 6px; }
+}
 .cru-foot { margin-top: 14px; font-size: 11px; color: var(--text-secondary); }
 
 @media (max-width: 1250px) {
