@@ -31,6 +31,9 @@ const SLOTS = [
   { key: "15:00", label: "3:00 PM" },
   { key: "15:25", label: "3:25 PM" },
 ];
+// 3:00 and 3:25 are only 25 minutes apart, so being able to see a day's boards
+// together is the whole point of having both - hence the All option.
+const SLOT_FILTERS = [...SLOTS, { key: "both", label: "All" }];
 
 function slotLabel(slot) {
   return SLOTS.find((s) => s.key === slot)?.label || slot;
@@ -44,7 +47,7 @@ export default function OptionsHistory({ side }) {
   const [slot, setSlot] = useState(() => {
     try {
       const s = localStorage.getItem("arbi_opthist_slot");
-      return SLOTS.some((x) => x.key === s) ? s : "10:00";
+      return SLOT_FILTERS.some((x) => x.key === s) ? s : "10:00";
     } catch { return "10:00"; }
   });
   const [weeks, setWeeks] = useState(7);
@@ -67,6 +70,7 @@ export default function OptionsHistory({ side }) {
   }, [weekday, slot, side, weeks]);
 
   const snaps = data?.snapshots || [];
+  const dayCount = new Set(snaps.map((s) => s.snap_date)).size;
 
   return (
     <div className="oh-wrap">
@@ -80,7 +84,7 @@ export default function OptionsHistory({ side }) {
           ))}
         </div>
         <div className="oh-group" role="tablist" aria-label="Time">
-          {SLOTS.map((s) => (
+          {SLOT_FILTERS.map((s) => (
             <button key={s.key} type="button" className={`oh-chip ${slot === s.key ? "on" : ""}`}
               onClick={() => setSlot(s.key)}>{s.label}</button>
           ))}
@@ -104,15 +108,18 @@ export default function OptionsHistory({ side }) {
 
       {snaps.length > 0 && (
         <>
-          {snaps.length < weeks && (
-            <div className="oh-note oh-slim">{snaps.length} of last {weeks} {WEEKDAYS.find((w) => w.key === weekday)?.label}s found (holidays have no snapshot).</div>
+          {dayCount < weeks && (
+            <div className="oh-note oh-slim">
+              {dayCount} of last {weeks} {WEEKDAYS.find((w) => w.key === weekday)?.label}s found (holidays have no snapshot).
+            </div>
           )}
-          {snaps.map((s) => (
-            <section key={s.snap_date + s.slot} className="oh-board">
+          {snaps.map((s, i) => (
+            <section key={s.snap_date + s.slot}
+              className={`oh-board ${slot === "both" && s.snap_date !== snaps[i - 1]?.snap_date ? "oh-day-start" : ""}`}>
               <div className="oh-board-head">
                 <span className="oh-board-date">{fmtDate(s.snap_date)}</span>
                 <span className="oh-board-dot">•</span>
-                <span className="oh-board-slot">{slotLabel(s.slot)}</span>
+                <span className="oh-board-slot" data-slot={s.slot}>{slotLabel(s.slot)}</span>
               </div>
               <OptionsBoard
                 side={side}

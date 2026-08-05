@@ -4814,7 +4814,23 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 .oh-board-date { font-weight: 700; letter-spacing: 0.02em; }
 .oh-board-dot { opacity: 0.5; }
-.oh-board-slot { color: var(--accent); font-weight: 600; }
+/* Time badge - colour-coded, because 3:00 PM and 3:25 PM sit 25 minutes apart
+   and a plain label makes them easy to confuse when boards are stacked. */
+.oh-board-slot {
+  font-weight: 700; font-size: 12px; letter-spacing: .02em;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-bg); color: var(--accent-ink);
+  border: 1px solid var(--accent);
+}
+.oh-board-slot[data-slot="15:00"] {
+  background: rgba(201,162,39,.16); color: #a8801a; border-color: rgba(201,162,39,.55);
+}
+.oh-board-slot[data-slot="15:25"] {
+  background: rgba(26,127,55,.14); color: #1a7f37; border-color: rgba(26,127,55,.5);
+}
+/* first board of a new day when All times is selected */
+.oh-board.oh-day-start { margin-top: 34px; padding-top: 18px; border-top: 2px solid var(--border); }
+.oh-board.oh-day-start:first-of-type { margin-top: 18px; padding-top: 0; border-top: none; }
 
 /* Nifty/Sensex Premium Calculator — popup (client sketch 22-Jul) */
 .ocalc-open-btn {
