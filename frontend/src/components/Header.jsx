@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
@@ -54,15 +54,63 @@ export default function Header({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const userMenuRef = useRef(null);
   const tabsRef = useRef(null);
+  const moreRef = useRef(null);
+  const widthsRef = useRef(null);
+  const [visibleCount, setVisibleCount] = useState(NAV_ITEMS.length);
 
-  // The tab strip scrolls on narrower screens, so the current tab can sit off
-  // the edge after a reload. Pull it into view.
+  // Fourteen tabs do not fit on one row even at 1920px. Rather than scrolling
+  // (which clipped labels mid-word) or wrapping (which made the header two rows
+  // tall), measure what actually fits and put the rest behind "More".
+  useLayoutEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+
+    function measure() {
+      if (!widthsRef.current) {
+        const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
+        if (btns.length !== NAV_ITEMS.length) return;      // still hidden, retry next resize
+        widthsRef.current = btns.map((b) => b.getBoundingClientRect().width);
+      }
+      const widths = widthsRef.current;
+      const gap = parseFloat(getComputedStyle(nav).columnGap || "4") || 4;
+      const avail = nav.getBoundingClientRect().width;
+      const moreW = 78;                                     // the "More" button plus its gap
+
+      let used = 0, n = 0;
+      for (let i = 0; i < widths.length; i++) {
+        const next = used + widths[i] + (i ? gap : 0);
+        if (next > avail) break;
+        used = next; n++;
+      }
+      if (n < NAV_ITEMS.length) {
+        // room has to be made for the More button itself
+        while (n > 0 && used + gap + moreW > avail) {
+          used -= widths[n - 1] + gap;
+          n--;
+        }
+      }
+      setVisibleCount(n);
+    }
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
+
+  // Close the overflow menu on outside-click / Escape.
   useEffect(() => {
-    const el = tabsRef.current?.querySelector(".nav-tab.active");
-    el?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [page]);
+    if (!moreOpen) return;
+    function onDoc(e) { if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false); }
+    function onKey(e) { if (e.key === "Escape") setMoreOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [moreOpen]);
 
   // Close drawer on Escape; lock page scroll while open.
   useEffect(() => {
@@ -132,6 +180,19 @@ export default function Header({
 
   const go = (key) => { onNavigate(key); setMenuOpen(false); };
 
+  // Whatever fits stays on the bar; the rest goes behind More. The current page
+  // is always pulled onto the bar so you can see where you are.
+  let shownItems = NAV_ITEMS.slice(0, visibleCount);
+  let overflowItems = NAV_ITEMS.slice(visibleCount);
+  if (overflowItems.length && !shownItems.some((i) => i.key === page)) {
+    const cur = overflowItems.find((i) => i.key === page);
+    if (cur && shownItems.length) {
+      const dropped = shownItems[shownItems.length - 1];
+      shownItems = [...shownItems.slice(0, -1), cur];
+      overflowItems = [dropped, ...overflowItems.filter((i) => i.key !== cur.key)];
+    }
+  }
+
   return (
     <div className="header">
       <div className="header-left">
@@ -142,9 +203,10 @@ export default function Header({
           <span className="brand-sub">Bullion</span>
         </div>
         <nav className="nav-tabs" ref={tabsRef}>
-          {NAV_ITEMS.map((it) => (
+          {shownItems.map((it) => (
             <button
               key={it.key}
+              data-key={it.key}
               className={`nav-tab ${page === it.key ? "active" : ""}${it.key === "signals" ? " nav-tab-signals" : ""}`}
               onClick={() => onNavigate(it.key)}
             >
@@ -152,6 +214,28 @@ export default function Header({
               {counts[it.key] != null && <span className="nav-count">{counts[it.key]}</span>}
             </button>
           ))}
+          {overflowItems.length > 0 && (
+            <div className="nav-more" ref={moreRef}>
+              <button type="button"
+                className={`nav-tab nav-more-btn ${overflowItems.some((i) => i.key === page) ? "active" : ""}`}
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-haspopup="menu" aria-expanded={moreOpen}>
+                More <span className="nav-more-caret">▾</span>
+              </button>
+              {moreOpen && (
+                <div className="nav-more-menu" role="menu">
+                  {overflowItems.map((it) => (
+                    <button key={it.key} type="button" role="menuitem"
+                      className={`nav-more-item ${page === it.key ? "active" : ""}`}
+                      onClick={() => { onNavigate(it.key); setMoreOpen(false); }}>
+                      <span>{it.label}</span>
+                      {counts[it.key] != null && <span className="nav-more-count">{counts[it.key]}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
       </div>
       <div className="header-right">
