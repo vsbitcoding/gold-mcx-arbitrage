@@ -55,6 +55,14 @@ export default function Header({
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
   const userMenuRef = useRef(null);
+  const tabsRef = useRef(null);
+
+  // The tab strip scrolls on narrower screens, so the current tab can sit off
+  // the edge after a reload. Pull it into view.
+  useEffect(() => {
+    const el = tabsRef.current?.querySelector(".nav-tab.active");
+    el?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [page]);
 
   // Close drawer on Escape; lock page scroll while open.
   useEffect(() => {
@@ -133,7 +141,7 @@ export default function Header({
           <span className="brand-name">Gurukrupa</span>
           <span className="brand-sub">Bullion</span>
         </div>
-        <nav className="nav-tabs">
+        <nav className="nav-tabs" ref={tabsRef}>
           {NAV_ITEMS.map((it) => (
             <button
               key={it.key}

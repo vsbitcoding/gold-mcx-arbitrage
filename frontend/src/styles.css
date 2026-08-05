@@ -105,7 +105,7 @@ body {
   z-index: 100;
   margin-bottom: 20px;
 }
-.header-left { display: flex; align-items: center; gap: 14px; }
+.header-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1 1 auto; }
 .brand {
   font-size: 18px;
   font-weight: 600;
@@ -136,18 +136,32 @@ body {
   50% { opacity: 0.4; }
 }
 
+/* One line, always. Wrapping used to drop the last tab onto a second row and
+   push the whole header taller; the strip scrolls instead, with a soft fade on
+   whichever edge still has tabs behind it. */
 .nav-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 3px 4px;
   margin-left: 6px;
   padding-left: 10px;
   border-left: 1px solid var(--border);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
+.nav-tabs::-webkit-scrollbar { display: none; }
 .nav-tab {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  flex: 0 0 auto;
   padding: 6px 12px;
   border-radius: 7px;
   border: 1px solid transparent;
@@ -176,7 +190,7 @@ body {
 }
 .nav-tab-signals.active { background: #f59e0b; border-color: #f59e0b; }
 .nav-tab-signals.active .nav-count { background: #fff; color: #d97706; }
-.header-right { display: flex; align-items: center; gap: 8px; }
+.header-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
 /* ===== Mobile hamburger + slide-in nav drawer ===== */
 .nav-hamburger { display: none; background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--text-primary); padding: 4px 9px; border-radius: 8px; }
@@ -3566,6 +3580,18 @@ td.ldr-actions .save-btn {
   input.cell { max-width: 70px; padding: 5px 6px; font-size: 11px; }
   .leg-inline { padding: 4px 6px; font-size: 10px; }
   .leg-inline-head .leg-action { font-size: 9px; padding: 1px 5px; }
+}
+
+/* Fourteen tabs is a lot of width. Tighten before resorting to scrolling. */
+@media (max-width: 1600px) {
+  .nav-tab { padding: 6px 9px; font-size: 12.5px; gap: 4px; }
+  .header-left { gap: 10px; }
+}
+@media (max-width: 1360px) {
+  .nav-tab { padding: 5px 7px; font-size: 12px; }
+  /* the small grey counts are the first thing worth losing */
+  .nav-tab:not(.nav-tab-signals) .nav-count { display: none; }
+  .brand-sub { display: none; }
 }
 
 @media (max-width: 1024px) {
