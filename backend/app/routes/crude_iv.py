@@ -13,15 +13,20 @@ from app.services import crude_iv_service, ibkr_feed, premium_feed
 router = APIRouter(prefix="/api", tags=["crude-iv"])
 
 
-def _payload(window: int) -> dict:
+_US_KEY = {"crude": "crude_iv", "natgas": "natgas_iv"}
+
+
+def _payload(window: int, commodity: str = "crude") -> dict:
+    commodity = commodity if commodity in _US_KEY else "crude"
     ib = ibkr_feed.get_data()
-    us = ib.get("crude_iv") or {}
+    us = ib.get(_US_KEY[commodity]) or {}
     if window != 10 and us.get("rows"):
         atm = us.get("atm")
         us = {**us, "rows": [r for r in us["rows"] if abs(r["strike"] - atm) <= window * 0.5]} if atm else us
     pf = premium_feed.get_inputs()
     return {
-        "mcx": crude_iv_service.get_chain(window=window),
+        "commodity": commodity,
+        "mcx": crude_iv_service.get_chain(commodity=commodity, window=window),
         "us": {**us, "connected": ib.get("connected"), "delayed": ib.get("delayed")},
         # client wants the rate on this screen too - MCX quotes in rupees and
         # the US chain in dollars, so it is the number he converts with
@@ -32,5 +37,8 @@ def _payload(window: int) -> dict:
 
 
 @router.get("/crude-iv")
-def crude_iv(window: int = Query(10, ge=1, le=25, description="strikes each side of ATM")):
-    return _payload(window)
+def crude_iv(
+    commodity: str = Query("crude", description="crude | natgas"),
+    window: int = Query(10, ge=1, le=25, description="strikes each side of ATM"),
+):
+    return _payload(window, commodity)

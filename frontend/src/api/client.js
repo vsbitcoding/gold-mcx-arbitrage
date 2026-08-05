@@ -141,7 +141,7 @@ export const api = {
   // Live premium-calc inputs (XAU/USD Deriv + USD/INR TwelveData + MCX gold)
   premiumInputs: () => request("/api/premium-inputs"),
   international: () => request("/api/international"),
-  crudeIv: () => request("/api/crude-iv"),
+  crudeIv: (commodity = "crude") => request("/api/crude-iv?commodity=" + encodeURIComponent(commodity)),
   // Fire-once mean-reversion signals + accuracy track record
   signals: () => request("/api/signals"),
   signalsHistory: (limit = 100) => request(`/api/signals/history?limit=${limit}`),

@@ -655,18 +655,19 @@ async def public_international_stream(
 
 @router.get("/crude-iv")
 def public_crude_iv(
+    commodity: str = Query("crude", description="crude | natgas"),
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
     _key: str = Depends(require_api_key),
 ):
-    """MCX and US crude option chains side by side, with implied volatility and
-    greeks on both. Layout is 10 calls above the money, the ATM row, 10 puts
+    """MCX and US option chains side by side (crude oil or natural gas), with
+    implied volatility and greeks on both. Layout is 10 calls above the money, the ATM row, 10 puts
     below. IV is a PERCENT on both sides (64.89 = 64.89%).
 
     MCX refreshes every ~5 s (Dhan permits one option-chain call per 3 s); the
     US side is live. Poll every 3-5 s - faster gains nothing.
     """
     from app.routes.crude_iv import _payload
-    return _payload(window)
+    return _payload(window, commodity)
 
 
 @router.get("/premium-inputs")

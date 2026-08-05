@@ -35,6 +35,11 @@ _WINDOW = 5
 # own layout, same as his Commodity Options tab). Only one side is streamed per
 # strike, so that is 22 lines rather than 42.
 _IV_WINDOW = 10
+# Commodities that carry an IV chain, and the future each one is priced off.
+# The monthly option class is chosen as the one listing the most strikes: for
+# crude that is LO (451 vs ~185 on the weeklies), for gas LNE (236 vs 61). The
+# weeklies expire in days, so their IV is time-decay noise next to MCX.
+_IV_SYMS = (("CL", "NYMEX", "cl"), ("NG", "NYMEX", "ng"))
 
 _state: dict = {
     "xau": None, "xau_ts": 0.0,          # spot metals (CMDTY on SMART)
@@ -43,14 +48,13 @@ _state: dict = {
     "gc": None, "gc_ts": 0.0, "gc_symbol": None, "gc_expiry": None,
     "si": None, "si_ts": 0.0, "si_symbol": None, "si_expiry": None,
     "cl": None, "cl_ts": 0.0, "cl_symbol": None, "cl_expiry": None,
+    "ng": None, "ng_ts": 0.0, "ng_symbol": None, "ng_expiry": None,
     "cl_options": [],            # [{strike, call:{bid,ask}, put:{bid,ask}}]
     "cl_options_expiry": None,
     "cl_options_ts": 0.0,
-    # monthly chain with implied volatility, for the MCX-vs-US comparison
-    "cl_iv_rows": [],
-    "cl_iv_expiry": None,
-    "cl_iv_class": None,
-    "cl_iv_ts": 0.0,
+    # monthly chains with implied volatility, for the MCX-vs-US comparison
+    "cl_iv_rows": [], "cl_iv_expiry": None, "cl_iv_class": None, "cl_iv_ts": 0.0,
+    "ng_iv_rows": [], "ng_iv_expiry": None, "ng_iv_class": None, "ng_iv_ts": 0.0,
     "connected": False,
     "delayed": False,            # True if the gateway fell back to delayed data
     "stale": False,              # no price movement for a while (see the watchdog)
@@ -200,7 +204,8 @@ async def _loop() -> None:
 
             futs = {}
             for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"),
-                                   ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz")):
+                                   ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz"),
+                                   ("NG", "NYMEX", "ng")):
                 c = await _front_contract(ib, sym, exch)
                 futs[key] = (c, ib.reqMktData(c, "", False, False))
                 _state[key + "_symbol"] = c.localSymbol
@@ -221,21 +226,31 @@ async def _loop() -> None:
             expiry = sorted(chain.expirations)[0] if chain else None
             _state["cl_options_expiry"] = expiry
 
-            # The MONTHLY class (LO for crude) is the one that lines up with
-            # MCX's monthly expiry. The weekly classes above expire in days, so
-            # their IV reads ~92% purely from time decay and comparing it with
-            # MCX would be meaningless.
-            iv_chain = next((c for c in chains if c.tradingClass == "LO"), None)
-            iv_strikes = sorted(iv_chain.strikes) if iv_chain else []
-            iv_expiry = sorted(iv_chain.expirations)[0] if iv_chain else None
-            _state["cl_iv_expiry"] = iv_expiry
-            _state["cl_iv_class"] = iv_chain.tradingClass if iv_chain else None
+            # One monthly IV chain per commodity. The monthly is the class
+            # listing the most strikes; the weeklies expire in days, so their IV
+            # is time-decay noise and useless next to MCX's monthly.
+            iv: dict = {}
+            for sym, exch, key in _IV_SYMS:
+                try:
+                    ch = await ib.reqSecDefOptParamsAsync(sym, exch, "FUT", futs[key][0].conId)
+                    best = max((c for c in ch if c.exchange == exch), key=lambda c: len(c.strikes), default=None)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("IBKR: no option classes for %s (%s)", sym, e)
+                    best = None
+                iv[key] = {
+                    "sym": sym, "exch": exch, "chain": best,
+                    "strikes": sorted(best.strikes) if best else [],
+                    "expiry": sorted(best.expirations)[0] if best else None,
+                    "tickers": {}, "window": [], "atm": None,
+                }
+                _state[key + "_iv_expiry"] = iv[key]["expiry"]
+                _state[key + "_iv_class"] = best.tradingClass if best else None
+                if best:
+                    log.info("IBKR: %s IV class %s (%d strikes, exp %s)",
+                             sym, best.tradingClass, len(best.strikes), iv[key]["expiry"])
 
             opt_tickers: dict = {}   # strike -> {"C": ticker, "P": ticker}
             window: list[float] = []
-            iv_tickers: dict = {}    # strike -> {"C"|"P": ticker}
-            iv_window: list[float] = []
-            iv_atm: float | None = None
 
             async def resubscribe(centre: float) -> None:
                 """Stream only the ATM window; drop whatever left it."""
@@ -271,30 +286,30 @@ async def _loop() -> None:
                 log.info("IBKR: CL option window %s..%s (%d strikes)",
                          window[0], window[-1], len(window))
 
-            async def resubscribe_iv(centre: float) -> None:
+            async def resubscribe_iv(key: str, centre: float) -> None:
                 """21 monthly strikes around the money, one side each: calls
                 above, puts below, both on the ATM row. Generic tick 106 asks
                 IBKR for the implied volatility alongside the price."""
-                nonlocal iv_window, iv_atm
-                if not iv_strikes or not iv_expiry:
+                d = iv[key]
+                if not d["strikes"] or not d["expiry"]:
                     return
-                atm = min(iv_strikes, key=lambda s: abs(s - centre))
-                near = sorted(sorted(iv_strikes, key=lambda s: abs(s - atm))[: _IV_WINDOW * 2 + 1])
-                if near == iv_window and atm == iv_atm:
+                atm = min(d["strikes"], key=lambda s: abs(s - centre))
+                near = sorted(sorted(d["strikes"], key=lambda s: abs(s - atm))[: _IV_WINDOW * 2 + 1])
+                if near == d["window"] and atm == d["atm"]:
                     return
-                for strike in list(iv_tickers):
-                    for right, tk in iv_tickers[strike].items():
+                for strike in list(d["tickers"]):
+                    for _right, tk in d["tickers"][strike].items():
                         try:
                             ib.cancelMktData(tk.contract)
                         except Exception:  # noqa: BLE001
                             pass
-                iv_tickers.clear()
+                d["tickers"].clear()
                 for strike in near:
                     rights = ("C", "P") if strike == atm else (("C",) if strike > atm else ("P",))
                     legs = {}
                     for right in rights:
-                        o = FuturesOption("CL", iv_expiry, strike, right, "NYMEX",
-                                          tradingClass=iv_chain.tradingClass)
+                        o = FuturesOption(d["sym"], d["expiry"], strike, right, d["exch"],
+                                          tradingClass=d["chain"].tradingClass)
                         try:
                             q = await ib.qualifyContractsAsync(o)
                             if q:
@@ -302,13 +317,14 @@ async def _loop() -> None:
                         except Exception:  # noqa: BLE001 — one dead strike must not stop the rest
                             pass
                     if legs:
-                        iv_tickers[strike] = legs
-                iv_window, iv_atm = near, atm
-                log.info("IBKR: CL monthly IV window %s..%s (%d strikes, exp %s)",
-                         near[0], near[-1], len(near), iv_expiry)
+                        d["tickers"][strike] = legs
+                d["window"], d["atm"] = near, atm
+                log.info("IBKR: %s monthly IV window %s..%s (%d strikes, exp %s)",
+                         d["sym"], near[0], near[-1], len(near), d["expiry"])
 
             log.info("IBKR feed connected (GC/SI/CL + weekly chain + monthly IV chain)")
             last_window_check = 0.0
+            last_iv_check = 0.0
             stale_since = time.time()
             rolled_at = time.time()
 
@@ -360,11 +376,21 @@ async def _loop() -> None:
                     last_window_check = now
                     if not window or cl_mid < window[0] or cl_mid > window[-1]:
                         await resubscribe(cl_mid)
-                    # the IV window re-centres on the ATM strike itself, so it
-                    # follows the market rather than only moving when price
-                    # escapes the edge
-                    if not iv_window or iv_atm is None or abs(cl_mid - iv_atm) > 0.75:
-                        await resubscribe_iv(cl_mid)
+
+                # The IV windows re-centre on the ATM strike itself, so they
+                # follow the market rather than only moving when price escapes
+                # the edge. Tolerance scales with the strike step.
+                if now - last_iv_check > 60:
+                    last_iv_check = now
+                    for key in iv:
+                        p_ = _state.get(key) or {}
+                        mid_ = ((p_["bid"] + p_["ask"]) / 2) if (p_.get("bid") and p_.get("ask")) else None
+                        if mid_ is None:
+                            continue
+                        d = iv[key]
+                        step = (d["strikes"][1] - d["strikes"][0]) if len(d["strikes"]) > 1 else 0.5
+                        if not d["window"] or d["atm"] is None or abs(mid_ - d["atm"]) > step * 1.5:
+                            await resubscribe_iv(key, mid_)
 
                 rows = []
                 for strike in sorted(opt_tickers):
@@ -374,20 +400,21 @@ async def _loop() -> None:
                     _state["cl_options"] = rows
                     _state["cl_options_ts"] = now
 
-                iv_rows = []
-                for strike in sorted(iv_tickers):
-                    legs = iv_tickers[strike]
-                    is_atm = strike == iv_atm
-                    iv_rows.append({
-                        "strike": strike,
-                        "side": "ATM" if is_atm else ("CE" if strike > (iv_atm or 0) else "PE"),
-                        "atm": is_atm,
-                        "ce": _leg(legs["C"]) if "C" in legs else None,
-                        "pe": _leg(legs["P"]) if "P" in legs else None,
-                    })
-                if iv_rows:
-                    _state["cl_iv_rows"] = iv_rows
-                    _state["cl_iv_ts"] = now
+                for key, d in iv.items():
+                    iv_rows = []
+                    for strike in sorted(d["tickers"]):
+                        legs = d["tickers"][strike]
+                        is_atm = strike == d["atm"]
+                        iv_rows.append({
+                            "strike": strike,
+                            "side": "ATM" if is_atm else ("CE" if strike > (d["atm"] or 0) else "PE"),
+                            "atm": is_atm,
+                            "ce": _leg(legs["C"]) if "C" in legs else None,
+                            "pe": _leg(legs["P"]) if "P" in legs else None,
+                        })
+                    if iv_rows:
+                        _state[key + "_iv_rows"] = iv_rows
+                        _state[key + "_iv_ts"] = now
         except Exception as e:  # noqa: BLE001
             _state["connected"] = False
             log.warning("IBKR feed error: %s (reconnect in 20s)", e)
@@ -405,6 +432,22 @@ def _thread() -> None:
         asyncio.run(_loop())
     except Exception as e:  # noqa: BLE001
         log.error("IBKR feed thread stopped: %s", e)
+
+
+def _iv_block(key: str, age) -> dict:
+    p = _state.get(key) or {}
+    mid = ((p["bid"] + p["ask"]) / 2) if (p.get("bid") and p.get("ask")) else None
+    return {
+        "exchange": "NYMEX",
+        "symbol": _state.get(key + "_symbol"),
+        "trading_class": _state.get(key + "_iv_class"),
+        "future_price": mid,
+        "expiry": _state.get(key + "_iv_expiry"),
+        "atm": next((r["strike"] for r in _state.get(key + "_iv_rows", []) if r["atm"]), None),
+        "iv_unit": "percent",
+        "age": age(key + "_iv"),
+        "rows": _state.get(key + "_iv_rows", []),
+    }
 
 
 def get_data() -> dict:
@@ -430,18 +473,8 @@ def get_data() -> dict:
                          "symbol": _state["bz_symbol"], "expiry": _state["bz_expiry"]},
         "gold_spot": {**(_state["xau"] or {}), "age": age("xau")},
         "silver_spot": {**(_state["xag"] or {}), "age": age("xag")},
-        "crude_iv": {
-            "exchange": "NYMEX",
-            "symbol": _state["cl_symbol"],
-            "trading_class": _state["cl_iv_class"],
-            "future_price": ((_state["cl"] or {}).get("bid", 0) + (_state["cl"] or {}).get("ask", 0)) / 2
-                            if (_state["cl"] or {}).get("bid") and (_state["cl"] or {}).get("ask") else None,
-            "expiry": _state["cl_iv_expiry"],
-            "atm": next((r["strike"] for r in _state["cl_iv_rows"] if r["atm"]), None),
-            "iv_unit": "percent",
-            "age": age("cl_iv"),
-            "rows": _state["cl_iv_rows"],
-        },
+        "crude_iv": _iv_block("cl", age),
+        "natgas_iv": _iv_block("ng", age),
         "crude_options": {
             "expiry": _state["cl_options_expiry"],
             "age": age("cl_options"),

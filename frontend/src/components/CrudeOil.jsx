@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
-// Crude Oil — MCX and US option chains side by side with implied volatility.
+// Crude Oil / Natural Gas — MCX and US option chains side by side with implied
+// volatility. One screen with a commodity switch rather than a tab each: the
+// nav is already fourteen wide.
 // Layout is the client's own (same as the Commodity Options tab): 10 calls
 // above the money, the ATM row carrying both sides, 10 puts below.
 // Both chains are read from one tiny in-memory endpoint; polling pauses when
@@ -74,27 +76,58 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
   );
 }
 
+const PRODUCTS = [
+  { key: "crude", label: "Crude Oil", usTitle: "US CRUDE OIL (NYMEX)", usDec: 2, mcxDec: 1 },
+  { key: "natgas", label: "Natural Gas", usTitle: "US NATURAL GAS (NYMEX)", usDec: 3, mcxDec: 2 },
+];
+
 export default function CrudeOil() {
+  const [product, setProduct] = useState(() => {
+    try {
+      const p = localStorage.getItem("arbi_crude_product");
+      return PRODUCTS.some((x) => x.key === p) ? p : "crude";
+    } catch { return "crude"; }
+  });
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
   const timer = useRef(null);
 
+  useEffect(() => { try { localStorage.setItem("arbi_crude_product", product); } catch {} }, [product]);
+
   useEffect(() => {
     let alive = true;
+    setD(null);
     async function load() {
       if (document.hidden) return;
       try {
-        const r = await api.crudeIv();
+        const r = await api.crudeIv(product);
         if (alive) { setD(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, []);
+  }, [product]);
+
+  const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
+
+  const switcher = (
+    <div className="oh-group cru-switch" role="tablist" aria-label="Commodity">
+      {PRODUCTS.map((p) => (
+        <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
+          className={`oh-chip ${product === p.key ? "on" : ""}`}
+          onClick={() => setProduct(p.key)}>{p.label}</button>
+      ))}
+    </div>
+  );
 
   if (err) return <div className="settings-banner danger">⚠ {err}</div>;
-  if (!d) return <div className="empty-state">Loading crude option chains…</div>;
+  if (!d) return (
+    <div className="cru-page">
+      {switcher}
+      <div className="empty-state">Loading {cfg.label.toLowerCase()} option chains…</div>
+    </div>
+  );
 
   const mcx = d.mcx || {}, us = d.us || {};
   const fmtExp = (e) => {
@@ -119,7 +152,7 @@ export default function CrudeOil() {
     <div className="cru-page">
       <div className="intl-head">
         <div>
-          <h2>Crude Oil — Option Comparison</h2>
+          <h2>{cfg.label} — Option Comparison</h2>
           <div className="intl-sub">
             MCX vs US (NYMEX) · implied volatility and greeks on every strike
           </div>
@@ -128,6 +161,8 @@ export default function CrudeOil() {
           {us.connected ? (us.delayed ? "◷ Delayed" : "● Live real-time") : "○ Disconnected"}
         </span>
       </div>
+
+      {switcher}
 
       <div className="cru-stats">
         <div className="intl-stat">
@@ -145,12 +180,12 @@ export default function CrudeOil() {
           </div>
         </div>
         <div className="intl-stat">
-          <div className="intl-stat-label">MCX future<em>₹ per barrel</em></div>
+          <div className="intl-stat-label">MCX future<em>₹</em></div>
           <div className="intl-stat-value">{num(mcx.future_price, 0)}</div>
         </div>
         <div className="intl-stat">
-          <div className="intl-stat-label">US future<em>$ per barrel</em></div>
-          <div className="intl-stat-value">{num(us.future_price, 2)}</div>
+          <div className="intl-stat-label">US future<em>$</em></div>
+          <div className="intl-stat-value">{num(us.future_price, cfg.usDec)}</div>
         </div>
         <div className="intl-stat">
           <div className="intl-stat-label">USD / INR<em>{d.usdinr?.source || "live"}</em></div>
@@ -167,15 +202,15 @@ export default function CrudeOil() {
 
       <div className="cru-split">
         <Chain
-          title="MCX CRUDE OIL"
-          sub={`${mcx.symbol || "CRUDEOIL"} · exp ${fmtExp(mcx.expiry) || "—"} · ₹`}
+          title={mcx.label || "MCX"}
+          sub={`${mcx.symbol || ""} · exp ${fmtExp(mcx.expiry) || "—"} · ₹`}
           badge={mcx.error ? `Chain unavailable: ${mcx.error}` : "Loading chain…"}
-          data={mcx} priceDecimals={1} strikeDecimals={0} showOi
+          data={mcx} priceDecimals={mcx.decimals ?? cfg.mcxDec} strikeDecimals={0} showOi
         />
         <Chain
-          title="US CRUDE OIL (NYMEX)"
-          sub={`${us.symbol || "CL"} · exp ${fmtExp(us.expiry) || "—"} · $`}
-          data={us} priceDecimals={2} strikeDecimals={2}
+          title={cfg.usTitle}
+          sub={`${us.symbol || ""}${us.trading_class ? ` (${us.trading_class})` : ""} · exp ${fmtExp(us.expiry) || "—"} · $`}
+          data={us} priceDecimals={cfg.usDec} strikeDecimals={cfg.usDec}
         />
       </div>
 

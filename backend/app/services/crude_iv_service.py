@@ -30,25 +30,28 @@ from app.config import settings
 from app.services import dhan_auth
 from app.services.instrument_resolver import _download_csv, _parse_expiry
 
-log = logging.getLogger("crude_iv")
+log = logging.getLogger("option_iv")
 
 _BASE = "https://api.dhan.co/v2"
-_POLL_SECONDS = 5           # Dhan's floor is one call per 3 s
-_UNDERLYING = "CRUDEOIL"
 _SEGMENT = "MCX_COMM"
+# Dhan's floor is one option-chain call per 3 s. With two commodities that is
+# one call each per 8 s - still far faster than a desk reads a screen.
+_GAP_SECONDS = 4.0
+_ROUND_SECONDS = 8
 
-_state: dict = {
-    "underlying_id": None,
-    "underlying_name": None,
-    "future_price": None,
-    "expiry": None,
-    "expiries": [],
-    "atm": None,
-    "rows": [],             # [{strike, ce:{...}, pe:{...}}] — full chain, trimmed by the route
-    "ts": 0.0,
-    "ok": False,
-    "error": None,
+COMMODITIES: dict[str, dict] = {
+    "crude":  {"underlying": "CRUDEOIL",   "label": "MCX CRUDE OIL",   "decimals": 1},
+    "natgas": {"underlying": "NATURALGAS", "label": "MCX NATURAL GAS", "decimals": 2},
 }
+
+
+def _blank() -> dict:
+    return {"underlying_id": None, "underlying_name": None, "future_price": None,
+            "expiry": None, "expiries": [], "atm": None, "rows": [],
+            "ts": 0.0, "ok": False, "error": None}
+
+
+_state: dict[str, dict] = {k: _blank() for k in COMMODITIES}
 _stop = threading.Event()
 
 
@@ -57,7 +60,7 @@ def _headers(tok: str) -> dict:
             "Content-Type": "application/json", "Accept": "application/json"}
 
 
-def _resolve_underlying() -> tuple[str | None, str | None]:
+def _resolve_underlying(underlying: str) -> tuple[str | None, str | None]:
     """Front-month CRUDEOIL future — the option chain's underlying scrip.
 
     Reads the same compact scrip master the rest of the app uses (SEM_* columns);
@@ -74,7 +77,7 @@ def _resolve_underlying() -> tuple[str | None, str | None]:
     for r in rows:
         if r.get("SEM_EXM_EXCH_ID") != "MCX" or r.get("SEM_INSTRUMENT_NAME") != "FUTCOM":
             continue
-        if (r.get("SEM_TRADING_SYMBOL", "") or "").split("-", 1)[0] != _UNDERLYING:
+        if (r.get("SEM_TRADING_SYMBOL", "") or "").split("-", 1)[0] != underlying:
             continue
         exp = _parse_expiry(r.get("SEM_EXPIRY_DATE", ""))
         if not exp or exp < today:
@@ -103,23 +106,24 @@ def _leg(d: dict | None) -> dict | None:
     }
 
 
-def _poll_once(sess: requests.Session, tok: str) -> None:
-    sid = _state["underlying_id"]
+def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
+    st = _state[key]
+    sid = st["underlying_id"]
     body = {"UnderlyingScrip": int(sid), "UnderlyingSeg": _SEGMENT}
 
-    if not _state["expiry"]:
+    if not st["expiry"]:
         r = sess.post(f"{_BASE}/optionchain/expirylist", headers=_headers(tok),
                       data=json.dumps(body), timeout=20)
         r.raise_for_status()
         exps = (r.json() or {}).get("data") or []
         if not exps:
             raise RuntimeError("no expiries returned")
-        _state["expiries"] = exps
-        _state["expiry"] = exps[0]
-        time.sleep(3.2)                     # respect the one-call-per-3s rule
+        st["expiries"] = exps
+        st["expiry"] = exps[0]
+        time.sleep(_GAP_SECONDS)            # respect the one-call-per-3s rule
 
     r = sess.post(f"{_BASE}/optionchain", headers=_headers(tok),
-                  data=json.dumps({**body, "Expiry": _state["expiry"]}), timeout=25)
+                  data=json.dumps({**body, "Expiry": st["expiry"]}), timeout=25)
     r.raise_for_status()
     data = (r.json() or {}).get("data") or {}
     oc = data.get("oc") or {}
@@ -139,45 +143,50 @@ def _poll_once(sess: requests.Session, tok: str) -> None:
     rows.sort(key=lambda x: x["strike"])
 
     atm = min((r["strike"] for r in rows), key=lambda s: abs(s - spot)) if (rows and spot) else None
-    _state.update({"future_price": spot, "rows": rows, "atm": atm,
-                   "ts": time.time(), "ok": True, "error": None})
+    st.update({"future_price": spot, "rows": rows, "atm": atm,
+               "ts": time.time(), "ok": True, "error": None})
 
 
 def _loop() -> None:
     sess = requests.Session()
-    last_resolve = 0.0
+    last_resolve: dict[str, float] = {}
     while not _stop.is_set():
-        try:
-            if not _state["underlying_id"] or (time.time() - last_resolve) > 12 * 3600:
-                sid, name = _resolve_underlying()
-                if sid:
-                    if sid != _state["underlying_id"]:
-                        _state["expiry"] = None          # contract rolled → re-read expiries
-                    _state["underlying_id"], _state["underlying_name"] = sid, name
-                    last_resolve = time.time()
-                    log.info("crude IV: underlying %s (%s)", name, sid)
-                else:
-                    raise RuntimeError("CRUDEOIL future not found in scrip master")
+        for key, cfg in COMMODITIES.items():
+            if _stop.is_set():
+                break
+            st = _state[key]
+            try:
+                if not st["underlying_id"] or (time.time() - last_resolve.get(key, 0)) > 12 * 3600:
+                    sid, name = _resolve_underlying(cfg["underlying"])
+                    if sid:
+                        if sid != st["underlying_id"]:
+                            st["expiry"] = None          # contract rolled → re-read expiries
+                        st["underlying_id"], st["underlying_name"] = sid, name
+                        last_resolve[key] = time.time()
+                        log.info("option IV: %s underlying %s (%s)", key, name, sid)
+                    else:
+                        raise RuntimeError(f"{cfg['underlying']} future not found in scrip master")
 
-            tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
-                                      settings.DHAN_TOTP_SECRET).access_token
-            _poll_once(sess, tok)
-        except Exception as e:  # noqa: BLE001 — a bad poll must never kill the thread
-            _state["ok"] = False
-            _state["error"] = str(e)[:160]
-            log.warning("crude IV poll failed: %s", _state["error"])
-            # An expiry that has rolled off returns errors forever until re-read.
-            if "Expiry" in str(e) or "400" in str(e):
-                _state["expiry"] = None
-            _stop.wait(15)
-            continue
-        _stop.wait(_POLL_SECONDS)
+                tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
+                                          settings.DHAN_TOTP_SECRET).access_token
+                _poll_once(sess, tok, key)
+            except Exception as e:  # noqa: BLE001 — a bad poll must never kill the thread
+                st["ok"] = False
+                st["error"] = str(e)[:160]
+                log.warning("option IV poll failed (%s): %s", key, st["error"])
+                # An expiry that has rolled off errors forever until re-read.
+                if "Expiry" in str(e) or "400" in str(e):
+                    st["expiry"] = None
+            _stop.wait(_GAP_SECONDS)
+        _stop.wait(max(0, _ROUND_SECONDS - _GAP_SECONDS * len(COMMODITIES)))
 
 
-def get_chain(window: int = 10) -> dict:
+def get_chain(commodity: str = "crude", window: int = 10) -> dict:
     """ATM ±`window` strikes. Client's convention (same as the Commodity Options
     tab): CE above the money, PE below it, and BOTH sides on the ATM row."""
-    rows, atm = _state["rows"], _state["atm"]
+    cfg = COMMODITIES.get(commodity) or COMMODITIES["crude"]
+    st = _state[commodity if commodity in _state else "crude"]
+    rows, atm = st["rows"], st["atm"]
     out = []
     if rows and atm is not None:
         idx = next((i for i, r in enumerate(rows) if r["strike"] == atm), None)
@@ -193,25 +202,29 @@ def get_chain(window: int = 10) -> dict:
                     "ce": r["ce"] if side in ("CE", "ATM") else None,
                     "pe": r["pe"] if side in ("PE", "ATM") else None,
                 })
-    age = round(time.time() - _state["ts"], 1) if _state["ts"] else None
+    age = round(time.time() - st["ts"], 1) if st["ts"] else None
     return {
         "exchange": "MCX",
-        "symbol": _state["underlying_name"],
-        "future_price": _state["future_price"],
-        "expiry": _state["expiry"],
-        "expiries": _state["expiries"],
+        "commodity": commodity,
+        "label": cfg["label"],
+        "decimals": cfg["decimals"],
+        "symbol": st["underlying_name"],
+        "future_price": st["future_price"],
+        "expiry": st["expiry"],
+        "expiries": st["expiries"],
         "atm": atm,
         "iv_unit": "percent",
         "age": age,
-        "ok": _state["ok"],
-        "error": _state["error"],
+        "ok": st["ok"],
+        "error": st["error"],
         "rows": out,
     }
 
 
 def start_in_background() -> None:
     if not settings.CRUDE_IV_ENABLED:
-        log.info("crude IV service disabled")
+        log.info("option IV service disabled")
         return
     threading.Thread(target=_loop, daemon=True, name="crude-iv").start()
-    log.info("crude IV service starting (Dhan MCX option chain, %ss poll, in-memory)", _POLL_SECONDS)
+    log.info("option IV service starting (Dhan MCX chains: %s, ~%ss round, in-memory)",
+             ", ".join(COMMODITIES), _ROUND_SECONDS)

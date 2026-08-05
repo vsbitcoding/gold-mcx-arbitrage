@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { key: "goldopt", label: "Commodity Options" },
   { key: "stock", label: "Bullion Stock" },
   { key: "signals", label: "⚡ Signals" },
-  { key: "crude", label: "Crude Oil" },
+  { key: "crude", label: "Crude / Gas" },
   { key: "intl", label: "International" },
 ];
 

@@ -5126,6 +5126,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .cru-table tr.cru-atm .cru-strike { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); }
 .cru-table tr.cru-atm .atm-badge { display: block; margin: 3px auto 0; }
 
+.cru-switch { margin-bottom: 4px; }
 .cru-foot { margin-top: 14px; font-size: 11px; color: var(--text-secondary); }
 
 @media (max-width: 1250px) {
