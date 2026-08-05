@@ -148,11 +148,14 @@ body {
   border-left: 1px solid var(--border);
   flex: 1 1 auto;
   min-width: 0;
-  overflow: visible;
+  /* Hard guarantee: even if a measurement lags a frame, tabs can never paint
+     over the status pill. The More menu lives outside this box so it is not
+     clipped by this. */
+  overflow: hidden;
 }
 
 /* Overflow menu: whatever does not fit on the bar lives here. */
-.nav-more { position: relative; flex: 0 0 auto; }
+.nav-more { position: relative; flex: 0 0 auto; margin-left: 4px; }
 .nav-more-caret { font-size: 9px; opacity: .7; margin-left: 1px; }
 .nav-more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;

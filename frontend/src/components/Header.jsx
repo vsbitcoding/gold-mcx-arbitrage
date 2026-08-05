@@ -76,29 +76,27 @@ export default function Header({
       }
       const widths = widthsRef.current;
       const gap = parseFloat(getComputedStyle(nav).columnGap || "4") || 4;
-      const avail = nav.getBoundingClientRect().width;
-      const moreW = 78;                                     // the "More" button plus its gap
-
+      // 2px of slack: sub-pixel rounding must not push a tab half-off.
+      const avail = nav.getBoundingClientRect().width - 2;
+      // The More button sits outside <nav>, so once it exists the nav box has
+      // already shrunk by its width - no need to subtract it again. On the pass
+      // where it first appears the count settles one lower, then stays put.
       let used = 0, n = 0;
       for (let i = 0; i < widths.length; i++) {
         const next = used + widths[i] + (i ? gap : 0);
         if (next > avail) break;
         used = next; n++;
       }
-      if (n < NAV_ITEMS.length) {
-        // room has to be made for the More button itself
-        while (n > 0 && used + gap + moreW > avail) {
-          used -= widths[n - 1] + gap;
-          n--;
-        }
-      }
-      setVisibleCount(n);
+      setVisibleCount(Math.max(1, n));
     }
 
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(nav);
+    if (nav.parentElement) ro.observe(nav.parentElement);
     window.addEventListener("resize", measure);
+    // Web fonts land after first paint and change every label's width.
+    document.fonts?.ready?.then(() => { widthsRef.current = null; measure(); });
     return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
   }, []);
 
@@ -214,29 +212,29 @@ export default function Header({
               {counts[it.key] != null && <span className="nav-count">{counts[it.key]}</span>}
             </button>
           ))}
-          {overflowItems.length > 0 && (
-            <div className="nav-more" ref={moreRef}>
-              <button type="button"
-                className={`nav-tab nav-more-btn ${overflowItems.some((i) => i.key === page) ? "active" : ""}`}
-                onClick={() => setMoreOpen((v) => !v)}
-                aria-haspopup="menu" aria-expanded={moreOpen}>
-                More <span className="nav-more-caret">▾</span>
-              </button>
-              {moreOpen && (
-                <div className="nav-more-menu" role="menu">
-                  {overflowItems.map((it) => (
-                    <button key={it.key} type="button" role="menuitem"
-                      className={`nav-more-item ${page === it.key ? "active" : ""}`}
-                      onClick={() => { onNavigate(it.key); setMoreOpen(false); }}>
-                      <span>{it.label}</span>
-                      {counts[it.key] != null && <span className="nav-more-count">{counts[it.key]}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </nav>
+        {overflowItems.length > 0 && (
+          <div className="nav-more" ref={moreRef}>
+            <button type="button"
+              className={`nav-tab nav-more-btn ${overflowItems.some((i) => i.key === page) ? "active" : ""}`}
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-haspopup="menu" aria-expanded={moreOpen}>
+              More <span className="nav-more-caret">▾</span>
+            </button>
+            {moreOpen && (
+              <div className="nav-more-menu" role="menu">
+                {overflowItems.map((it) => (
+                  <button key={it.key} type="button" role="menuitem"
+                    className={`nav-more-item ${page === it.key ? "active" : ""}`}
+                    onClick={() => { onNavigate(it.key); setMoreOpen(false); }}>
+                    <span>{it.label}</span>
+                    {counts[it.key] != null && <span className="nav-more-count">{counts[it.key]}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="header-right">
         <span className={`health-pill ${cls}`} title={tooltip}>
