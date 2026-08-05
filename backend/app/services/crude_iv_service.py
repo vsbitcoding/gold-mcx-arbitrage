@@ -28,7 +28,7 @@ import requests
 
 from app.config import settings
 from app.services import dhan_auth
-from app.services.instrument_resolver import _download_csv
+from app.services.instrument_resolver import _download_csv, _parse_expiry
 
 log = logging.getLogger("crude_iv")
 
@@ -58,22 +58,30 @@ def _headers(tok: str) -> dict:
 
 
 def _resolve_underlying() -> tuple[str | None, str | None]:
-    """Front-month CRUDEOIL future — the option chain's underlying scrip."""
+    """Front-month CRUDEOIL future — the option chain's underlying scrip.
+
+    Reads the same compact scrip master the rest of the app uses (SEM_* columns);
+    the detailed CSV has friendlier names but is a second large download for no
+    gain.
+    """
     try:
         rows = list(csv.DictReader(io.StringIO(_download_csv())))
     except Exception as e:  # noqa: BLE001
         log.warning("crude IV: scrip master unavailable (%s)", e)
         return None, None
-    today = datetime.now().strftime("%Y-%m-%d")
-    futs = [r for r in rows
-            if r.get("EXCH_ID") == "MCX"
-            and r.get("UNDERLYING_SYMBOL") == _UNDERLYING
-            and r.get("INSTRUMENT") == "FUTCOM"
-            and (r.get("SM_EXPIRY_DATE") or "") >= today]
-    futs.sort(key=lambda r: r.get("SM_EXPIRY_DATE") or "")
-    if not futs:
-        return None, None
-    return futs[0]["SECURITY_ID"], futs[0].get("DISPLAY_NAME")
+    today = datetime.now()
+    best = None
+    for r in rows:
+        if r.get("SEM_EXM_EXCH_ID") != "MCX" or r.get("SEM_INSTRUMENT_NAME") != "FUTCOM":
+            continue
+        if (r.get("SEM_TRADING_SYMBOL", "") or "").split("-", 1)[0] != _UNDERLYING:
+            continue
+        exp = _parse_expiry(r.get("SEM_EXPIRY_DATE", ""))
+        if not exp or exp < today:
+            continue
+        if best is None or exp < best[0]:
+            best = (exp, str(r.get("SEM_SMST_SECURITY_ID")), r.get("SEM_TRADING_SYMBOL", ""))
+    return (best[1], best[2]) if best else (None, None)
 
 
 def _leg(d: dict | None) -> dict | None:
