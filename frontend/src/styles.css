@@ -146,7 +146,9 @@ body {
   margin-left: 6px;
   padding-left: 10px;
   border-left: 1px solid var(--border);
-  flex: 1 1 auto;
+  /* Hug the tabs so More sits beside them, not adrift at the far right. The
+     free space lands after More instead. */
+  flex: 0 1 auto;
   min-width: 0;
   /* Hard guarantee: even if a measurement lags a frame, tabs can never paint
      over the status pill. The More menu lives outside this box so it is not
@@ -155,7 +157,25 @@ body {
 }
 
 /* Overflow menu: whatever does not fit on the bar lives here. */
-.nav-more { position: relative; flex: 0 0 auto; margin-left: 4px; }
+.nav-more { position: relative; flex: 0 0 auto; margin-left: 6px; padding-left: 8px; }
+.nav-more::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 1px; height: 18px; background: var(--border);
+}
+.nav-more-btn {
+  border-color: var(--border) !important;
+  background: var(--bg-primary);
+  gap: 6px;
+}
+.nav-more-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-more-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent-ink) !important; }
+.nav-more-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 100px;
+  background: var(--border); color: var(--text-secondary);
+  font-size: 9.5px; font-weight: 800;
+}
+.nav-more-btn.active .nav-more-n { background: rgba(0,0,0,.22); color: inherit; }
 .nav-more-caret { font-size: 9px; opacity: .7; margin-left: 1px; }
 .nav-more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;

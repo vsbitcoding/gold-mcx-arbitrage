@@ -76,11 +76,20 @@ export default function Header({
       }
       const widths = widthsRef.current;
       const gap = parseFloat(getComputedStyle(nav).columnGap || "4") || 4;
-      // 2px of slack: sub-pixel rounding must not push a tab half-off.
-      const avail = nav.getBoundingClientRect().width - 2;
-      // The More button sits outside <nav>, so once it exists the nav box has
-      // already shrunk by its width - no need to subtract it again. On the pass
-      // where it first appears the count settles one lower, then stays put.
+      // Measure the ROW's free space rather than the nav box: the strip hugs its
+      // tabs now (so More sits right beside them instead of drifting to the far
+      // right), which means the nav's own width is content, not budget.
+      const row = nav.parentElement;
+      const rowGap = parseFloat(getComputedStyle(row).columnGap || "0") || 0;
+      const kids = [...row.children];
+      let taken = rowGap * Math.max(0, kids.length - 1);
+      for (const k of kids) {
+        if (k !== nav) taken += k.getBoundingClientRect().width;
+      }
+      // reserve room for More whenever it is not already in the row
+      const hasMore = kids.some((k) => k.classList.contains("nav-more"));
+      const avail = row.clientWidth - taken - (hasMore ? 0 : 86) - 2;
+
       let used = 0, n = 0;
       for (let i = 0; i < widths.length; i++) {
         const next = used + widths[i] + (i ? gap : 0);
@@ -219,7 +228,8 @@ export default function Header({
               className={`nav-tab nav-more-btn ${overflowItems.some((i) => i.key === page) ? "active" : ""}`}
               onClick={() => setMoreOpen((v) => !v)}
               aria-haspopup="menu" aria-expanded={moreOpen}>
-              More <span className="nav-more-caret">▾</span>
+              More <span className="nav-more-n">{overflowItems.length}</span>
+              <span className="nav-more-caret">▾</span>
             </button>
             {moreOpen && (
               <div className="nav-more-menu" role="menu">
