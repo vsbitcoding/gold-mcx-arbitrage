@@ -219,12 +219,27 @@ async def _loop() -> None:
                 spots[key] = (c, ib.reqMktData(c, "", False, False))
 
             # Option chain metadata for CL (one call, cached for the session).
+            # MONTHLY class only — the one listing the most strikes, same rule
+            # as the IV chains below. The old pick took whichever class IBKR
+            # listed first, which was a weekly: CL now has a weekly expiring
+            # every single weekday, so the client's terminal showed a new date
+            # every other day — and a dead one (06-AUG on 07-Aug) whenever the
+            # session outlived it (client, 07-Aug).
             cl_contract = futs["cl"][0]
             chains = await ib.reqSecDefOptParamsAsync("CL", "NYMEX", "FUT", cl_contract.conId)
-            chain = next((c for c in chains if c.exchange == "NYMEX"), chains[0] if chains else None)
+            chain = max((c for c in chains if c.exchange == "NYMEX"),
+                        key=lambda c: len(c.strikes),
+                        default=chains[0] if chains else None)
             all_strikes = sorted(chain.strikes) if chain else []
-            expiry = sorted(chain.expirations)[0] if chain else None
+            # First expiry that hasn't passed — never resurrect a dead contract
+            # after an overnight reconnect.
+            _exps = sorted(chain.expirations) if chain else []
+            _today = time.strftime("%Y%m%d", time.gmtime())
+            expiry = next((e for e in _exps if e >= _today), _exps[-1] if _exps else None)
             _state["cl_options_expiry"] = expiry
+            if chain:
+                log.info("IBKR: CL client chain class %s (%d strikes, exp %s)",
+                         chain.tradingClass, len(all_strikes), expiry)
 
             # One monthly IV chain per commodity. The monthly is the class
             # listing the most strikes; the weeklies expire in days, so their IV
@@ -274,7 +289,12 @@ async def _loop() -> None:
                         continue
                     pair = {}
                     for right in ("C", "P"):
-                        o = FuturesOption("CL", expiry, strike, right, "NYMEX")
+                        # tradingClass pins the MONTHLY: weeklies can share the
+                        # exact expiry date (17-Aug is a Monday — the Monday
+                        # weekly lands on it too), so symbol+expiry alone is
+                        # ambiguous and can qualify to the wrong class.
+                        o = FuturesOption("CL", expiry, strike, right, "NYMEX",
+                                          tradingClass=chain.tradingClass)
                         try:
                             await ib.qualifyContractsAsync(o)
                             pair[right] = ib.reqMktData(o, "", False, False)
@@ -322,7 +342,7 @@ async def _loop() -> None:
                 log.info("IBKR: %s monthly IV window %s..%s (%d strikes, exp %s)",
                          d["sym"], near[0], near[-1], len(near), d["expiry"])
 
-            log.info("IBKR feed connected (GC/SI/CL + weekly chain + monthly IV chain)")
+            log.info("IBKR feed connected (GC/SI/CL + monthly option chain + monthly IV chain)")
             last_window_check = 0.0
             last_iv_check = 0.0
             stale_since = time.time()
@@ -371,6 +391,15 @@ async def _loop() -> None:
                 if now - rolled_at > 86400:
                     log.info("IBKR: daily front-month re-check")
                     raise RuntimeError("daily contract roll check")
+
+                # The option chain is cached for the session, so on the day
+                # after its expiry force the same reconnect path — the pick
+                # above then rolls to the next month automatically instead of
+                # streaming a dead contract until the daily check happens to
+                # fire (that gap is how 06-AUG was still on screen on 07-Aug).
+                if expiry and time.strftime("%Y%m%d", time.gmtime()) > expiry:
+                    log.info("IBKR: CL option expiry %s passed - rolling to next month", expiry)
+                    raise RuntimeError("CL option chain expired - rolling")
 
                 if cl_mid and now - last_window_check > 60:
                     last_window_check = now

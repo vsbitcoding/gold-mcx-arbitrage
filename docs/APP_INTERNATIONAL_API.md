@@ -55,7 +55,10 @@ Header:  X-API-Key: <your key>          (same key you already use)
 
   "crude_options": {
     "exchange": "NYMEX",
-    "expiry": "20260807",     // YYYYMMDD -> print as 07-08-2026
+    // MONTHLY contract — the same family the MCX comparison screen shows, so
+    // both screens carry the same date. Rolls to the next month automatically
+    // the day after expiry.
+    "expiry": "20260817",     // YYYYMMDD -> print as 17-08-2026
     "underlying": 81.91,      // live crude future price
     "atm_strike": 82.00,
     "age": 0.4,
