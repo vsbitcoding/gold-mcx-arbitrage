@@ -521,6 +521,46 @@ def _international_payload() -> tuple[dict, str]:
     if atm_row and atm_row["call"]["mid"] and atm_row["put"]["mid"]:
         straddle = round(atm_row["call"]["mid"] + atm_row["put"]["mid"], 2)
 
+    def iv_block(src: dict | None, prefix: str, dec: int) -> dict:
+        """The monthly chain with implied volatility: 10 calls above the money,
+        the ATM row carrying both sides, 10 puts below (the client's layout)."""
+        src = src or {}
+        e = src.get("expiry")
+        disp = None
+        if e and len(e) == 8:
+            disp = datetime(int(e[:4]), int(e[4:6]), int(e[6:8]),
+                            tzinfo=timezone.utc).strftime("%d-%b-%Y").upper()
+        out = []
+        for r in src.get("rows") or []:
+            k = r["strike"]
+
+            def leg(side, tag, _r=r, _k=k):
+                if not _r.get(side):
+                    return None
+                return {
+                    "symbol": f"{prefix}_OPT_{disp or e}_{_k}_{tag}",
+                    **{kk: _r[side].get(kk) for kk in
+                       ("bid", "ask", "mid", "iv", "delta", "theta", "gamma", "vega")},
+                }
+
+            out.append({
+                "strike": k, "side": r["side"], "atm": r["atm"],
+                "expiry": e, "expiry_display": disp,
+                "ce": leg("ce", "CE"), "pe": leg("pe", "PE"),
+            })
+        return {
+            "exchange": "NYMEX",
+            "symbol": src.get("symbol"),
+            "trading_class": src.get("trading_class"),
+            "future_price": src.get("future_price"),
+            "expiry": e, "expiry_display": disp,
+            "atm": src.get("atm"),
+            "iv_unit": "percent",
+            "decimals": dec,
+            "age": src.get("age"),
+            "rows": out,
+        }
+
     payload = {
         "type": "snapshot",
         "server_time": datetime.now(timezone.utc).isoformat(),
