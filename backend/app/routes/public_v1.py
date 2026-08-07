@@ -441,6 +441,10 @@ def public_price_table(_key: str = Depends(require_api_key)):
 def _quote(o: dict | None, name: str, symbol: str, unit: str, decimals: int) -> dict:
     """One international instrument, with the mid already computed for the app."""
     o = o or {}
+    # the IV blocks report a single future_price rather than a bid/ask pair
+    if "future_price" in o and "bid" not in o:
+        o = {"bid": o.get("future_price"), "ask": o.get("future_price"),
+             "symbol": o.get("symbol"), "expiry": o.get("expiry"), "age": o.get("age")}
     bid, ask = o.get("bid"), o.get("ask")
     mid = (bid + ask) / 2 if (bid and ask) else (bid or ask or o.get("last"))
     return {
@@ -465,6 +469,7 @@ def _international_payload() -> tuple[dict, str]:
         _quote(d.get("gold_future"), "GOLD FUTURE", "COMEX GC", "$/oz", 2),
         _quote(d.get("silver_future"), "SILVER FUTURE", "COMEX SI", "$/oz", 3),
         _quote(d.get("crude_future"), "CRUDE FUTURE", "NYMEX WTI CL", "$/bbl", 2),
+        _quote(d.get("natgas_iv"), "NATURAL GAS FUTURE", "NYMEX NG", "$/MMBtu", 3),
     ]
     by = {i["symbol"]: i["mid"] for i in items}
     xau, xag = by["XAU/USD"], by["XAG/USD"]
@@ -534,6 +539,9 @@ def _international_payload() -> tuple[dict, str]:
             "age": opts.get("age"),
             "rows": rows,
         },
+        # Monthly chains WITH implied volatility - crude and gas, same shape.
+        "crude_iv": iv_block(d.get("crude_iv"), "CRUDE", 2),
+        "natgas_iv": iv_block(d.get("natgas_iv"), "NATGAS", 3),
         "summary": {
             "gold_basis": round(gc - xau, 2) if (gc and xau) else None,
             "silver_basis": round(si - xag, 3) if (si and xag) else None,
@@ -542,9 +550,12 @@ def _international_payload() -> tuple[dict, str]:
             "atm_straddle": straddle,
         },
     }
+    ivsrc = (d.get("crude_iv") or {}).get("rows", []) + (d.get("natgas_iv") or {}).get("rows", [])
     digest_input = json.dumps(
         [[i["bid"], i["ask"]] for i in items]
-        + [[r["strike"], r["call"]["bid"], r["call"]["ask"], r["put"]["bid"], r["put"]["ask"]] for r in rows],
+        + [[r["strike"], r["call"]["bid"], r["call"]["ask"], r["put"]["bid"], r["put"]["ask"]] for r in rows]
+        + [[r["strike"], (r.get("ce") or {}).get("bid"), (r.get("ce") or {}).get("ask"),
+            (r.get("pe") or {}).get("bid"), (r.get("pe") or {}).get("ask")] for r in ivsrc],
         separators=(",", ":"),
     )
     return payload, hashlib.md5(digest_input.encode("utf-8")).hexdigest()
