@@ -113,6 +113,11 @@ _FRONT_TTL = 12 * 3600
 # A contract has to trade at least this much in a day before it is allowed to
 # displace ContFuture's choice.
 _MIN_FRONT_VOL = 1000
+# Every IB request gets a ceiling. IBKR's data farms go down independently of
+# the socket (10-Aug: ushmds and cashfarm dropped while the connection stayed
+# up), and an await with no timeout simply never returns - the feed hung for
+# twenty minutes with no error and no reconnect.
+_REQ_TIMEOUT = 15
 
 
 async def _front_contract(ib, sym: str, exch: str):
@@ -130,7 +135,7 @@ async def _front_contract(ib, sym: str, exch: str):
     from ib_async import ContFuture, Future   # same lazy import as _loop
 
     cont = ContFuture(sym, exch)
-    await ib.qualifyContractsAsync(cont)
+    await asyncio.wait_for(ib.qualifyContractsAsync(cont), timeout=_REQ_TIMEOUT)
 
     cached = _front_cache.get(sym)
     if cached and (time.time() - cached[2]) < _FRONT_TTL:
@@ -138,7 +143,9 @@ async def _front_contract(ib, sym: str, exch: str):
             return cached[0]                      # still valid, skip the probe
 
     try:
-        det = await ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD"))
+        det = await asyncio.wait_for(
+            ib.reqContractDetailsAsync(Future(sym, exchange=exch, currency="USD")),
+            timeout=_REQ_TIMEOUT)
         # Use the contracts IBKR hands back - they are already qualified. Building
         # Future(sym, expiry) and re-qualifying is ambiguous on the active months
         # (silver returned nothing but November that way on 03-Aug), so match the
@@ -151,9 +158,16 @@ async def _front_contract(ib, sym: str, exch: str):
             key=lambda c: c.lastTradeDateOrContractMonth)[:5]
         vols: dict = {}
         for c in cands:
-            bars = await ib.reqHistoricalDataAsync(
-                c, endDateTime="", durationStr="5 D", barSizeSetting="1 day",
-                whatToShow="TRADES", useRTH=False, formatDate=1)
+            try:
+                bars = await asyncio.wait_for(
+                    ib.reqHistoricalDataAsync(
+                        c, endDateTime="", durationStr="5 D", barSizeSetting="1 day",
+                        whatToShow="TRADES", useRTH=False, formatDate=1),
+                    timeout=_REQ_TIMEOUT)
+            except asyncio.TimeoutError:
+                # historical farm down - fall through to the cache / ContFuture
+                log.warning("IBKR: history timed out for %s, skipping", c.localSymbol)
+                bars = []
             vols[c] = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
             await asyncio.sleep(0.3)          # stay inside IBKR's historical-data pacing
         log.info("IBKR: %s volumes %s", sym,
@@ -206,7 +220,12 @@ async def _loop() -> None:
             for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"),
                                    ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz"),
                                    ("NG", "NYMEX", "ng")):
-                c = await _front_contract(ib, sym, exch)
+                try:
+                    c = await asyncio.wait_for(_front_contract(ib, sym, exch), timeout=120)
+                except asyncio.TimeoutError:
+                    log.warning("IBKR: %s front-month probe timed out, using ContFuture", sym)
+                    c = ContFuture(sym, exch)
+                    await asyncio.wait_for(ib.qualifyContractsAsync(c), timeout=_REQ_TIMEOUT)
                 futs[key] = (c, ib.reqMktData(c, "", False, False))
                 _state[key + "_symbol"] = c.localSymbol
                 _state[key + "_expiry"] = c.lastTradeDateOrContractMonth
@@ -215,7 +234,7 @@ async def _loop() -> None:
             spots = {}
             for sym, key in (("XAUUSD", "xau"), ("XAGUSD", "xag")):
                 c = Contract(secType="CMDTY", symbol=sym, exchange="SMART", currency="USD")
-                await ib.qualifyContractsAsync(c)
+                await asyncio.wait_for(ib.qualifyContractsAsync(c), timeout=_REQ_TIMEOUT)
                 spots[key] = (c, ib.reqMktData(c, "", False, False))
 
             # Option chain metadata for CL (one call, cached for the session).
@@ -226,7 +245,9 @@ async def _loop() -> None:
             # every other day — and a dead one (06-AUG on 07-Aug) whenever the
             # session outlived it (client, 07-Aug).
             cl_contract = futs["cl"][0]
-            chains = await ib.reqSecDefOptParamsAsync("CL", "NYMEX", "FUT", cl_contract.conId)
+            chains = await asyncio.wait_for(
+                ib.reqSecDefOptParamsAsync("CL", "NYMEX", "FUT", cl_contract.conId),
+                timeout=_REQ_TIMEOUT)
             chain = max((c for c in chains if c.exchange == "NYMEX"),
                         key=lambda c: len(c.strikes),
                         default=chains[0] if chains else None)
@@ -247,7 +268,9 @@ async def _loop() -> None:
             iv: dict = {}
             for sym, exch, key in _IV_SYMS:
                 try:
-                    ch = await ib.reqSecDefOptParamsAsync(sym, exch, "FUT", futs[key][0].conId)
+                    ch = await asyncio.wait_for(
+                        ib.reqSecDefOptParamsAsync(sym, exch, "FUT", futs[key][0].conId),
+                        timeout=_REQ_TIMEOUT)
                     best = max((c for c in ch if c.exchange == exch), key=lambda c: len(c.strikes), default=None)
                 except Exception as e:  # noqa: BLE001
                     log.warning("IBKR: no option classes for %s (%s)", sym, e)
