@@ -20,9 +20,11 @@ Design constraints (client's rules):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 import time
+from pathlib import Path
 
 from app.config import settings
 
@@ -110,6 +112,41 @@ def _leg(t) -> dict:
 # so a 3 a.m. reconnect cannot silently downgrade a good pick.
 _front_cache: dict[str, tuple] = {}
 _FRONT_TTL = 12 * 3600
+# The chosen contract is written to disk as well. A restart during a data-farm
+# outage cannot probe anything, and falling back to ContFuture then puts gold on
+# the October contract - the exact $31 error the client reported on 03-Aug.
+_FRONT_FILE = Path(__file__).resolve().parents[2] / ".ibkr_front_cache.json"
+
+
+def _save_front_disk() -> None:
+    try:
+        _FRONT_FILE.write_text(json.dumps({
+            sym: {"conId": c.conId, "localSymbol": c.localSymbol,
+                  "expiry": c.lastTradeDateOrContractMonth, "vol": vol, "ts": ts}
+            for sym, (c, vol, ts) in _front_cache.items()}))
+    except Exception as e:  # noqa: BLE001
+        log.debug("front-month cache not saved: %s", e)
+
+
+async def _load_front_disk(ib) -> None:
+    """Re-qualify yesterday's picks by conId so a cold start keeps the right
+    month even when no probe is possible."""
+    from ib_async import Contract
+    try:
+        saved = json.loads(_FRONT_FILE.read_text())
+    except Exception:  # noqa: BLE001 — absent on first run
+        return
+    for sym, d in saved.items():
+        if sym in _front_cache or not d.get("conId"):
+            continue
+        try:
+            c = Contract(conId=d["conId"], exchange=d.get("exchange") or "")
+            q = await asyncio.wait_for(ib.qualifyContractsAsync(c), timeout=_REQ_TIMEOUT)
+            if q and q[0].lastTradeDateOrContractMonth >= time.strftime("%Y%m%d"):
+                _front_cache[sym] = (q[0], d.get("vol", 0), d.get("ts", 0))
+                log.info("IBKR: %s front month %s restored from disk", sym, q[0].localSymbol)
+        except Exception as e:  # noqa: BLE001
+            log.debug("could not restore %s front month: %s", sym, e)
 # A contract has to trade at least this much in a day before it is allowed to
 # displace ContFuture's choice.
 _MIN_FRONT_VOL = 1000
@@ -120,7 +157,7 @@ _MIN_FRONT_VOL = 1000
 _REQ_TIMEOUT = 15
 
 
-async def _front_contract(ib, sym: str, exch: str):
+async def _front_contract(ib, sym: str, exch: str, ctx: dict | None = None):
     """The contract the market is actually trading, judged on traded volume.
 
     ContFuture rolls to the NEAREST live expiry, which is not the same thing. On
@@ -158,6 +195,8 @@ async def _front_contract(ib, sym: str, exch: str):
             key=lambda c: c.lastTradeDateOrContractMonth)[:5]
         vols: dict = {}
         for c in cands:
+            if ctx is not None and not ctx.get("history_ok", True):
+                break                      # farm is down; do not burn 15 s per strike
             try:
                 bars = await asyncio.wait_for(
                     ib.reqHistoricalDataAsync(
@@ -165,9 +204,13 @@ async def _front_contract(ib, sym: str, exch: str):
                         whatToShow="TRADES", useRTH=False, formatDate=1),
                     timeout=_REQ_TIMEOUT)
             except asyncio.TimeoutError:
-                # historical farm down - fall through to the cache / ContFuture
-                log.warning("IBKR: history timed out for %s, skipping", c.localSymbol)
+                # One timeout means the farm is gone, not that this contract is
+                # quiet. Give up on the whole probe rather than repeat it 25 times.
+                log.warning("IBKR: history timed out for %s - skipping volume probe", c.localSymbol)
+                if ctx is not None:
+                    ctx["history_ok"] = False
                 bars = []
+                break
             vols[c] = max((float(b.volume) for b in bars if b.volume and b.volume > 0), default=0.0)
             await asyncio.sleep(0.3)          # stay inside IBKR's historical-data pacing
         log.info("IBKR: %s volumes %s", sym,
@@ -193,6 +236,7 @@ async def _front_contract(ib, sym: str, exch: str):
                 log.info("IBKR: %s front month = %s (%s lots/day) instead of ContFuture's %s",
                          sym, best.localSymbol, int(best_vol), cont.localSymbol)
             _front_cache[sym] = (best, best_vol, time.time())
+            _save_front_disk()
             return best
         log.warning("IBKR: no volume found for any %s contract", sym)
     except Exception as e:  # noqa: BLE001 — never let this stop the feed
@@ -216,12 +260,15 @@ async def _loop() -> None:
                                   clientId=settings.IBKR_FEED_CLIENT_ID, timeout=20)
             ib.reqMarketDataType(1)  # real-time; gateway falls back to delayed on its own
 
+            probe_ctx = {"history_ok": True}
+            await _load_front_disk(ib)
+
             futs = {}
             for sym, exch, key in (("GC", "COMEX", "gc"), ("SI", "COMEX", "si"),
                                    ("CL", "NYMEX", "cl"), ("BZ", "NYMEX", "bz"),
                                    ("NG", "NYMEX", "ng")):
                 try:
-                    c = await asyncio.wait_for(_front_contract(ib, sym, exch), timeout=120)
+                    c = await asyncio.wait_for(_front_contract(ib, sym, exch, probe_ctx), timeout=120)
                 except asyncio.TimeoutError:
                     log.warning("IBKR: %s front-month probe timed out, using ContFuture", sym)
                     c = ContFuture(sym, exch)
