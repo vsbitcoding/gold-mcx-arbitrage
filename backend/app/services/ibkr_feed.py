@@ -238,6 +238,38 @@ async def _front_contract(ib, sym: str, exch: str, ctx: dict | None = None):
             _front_cache[sym] = (best, best_vol, time.time())
             _save_front_disk()
             return best
+        # History farm down? Fall back to LIVE volume, which is what the first
+        # version used. It only works while the market is open, but that is
+        # exactly when a wrong month would be visible to the client.
+        if cands and not any(vols.values()):
+            live = {}
+            for c in cands:
+                try:
+                    live[c] = ib.reqMktData(c, "165", False, False)
+                except Exception:  # noqa: BLE001
+                    pass
+            if live:
+                await asyncio.sleep(6)
+                for c, t in live.items():
+                    v = float(t.volume) if (t.volume == t.volume and t.volume) else 0.0
+                    vols[c] = max(vols.get(c, 0.0), v)
+                    try:
+                        ib.cancelMktData(c)
+                    except Exception:  # noqa: BLE001
+                        pass
+                log.info("IBKR: %s live volumes %s", sym,
+                         {c.localSymbol: int(v) for c, v in sorted(vols.items(), key=lambda kv: -kv[1])})
+                best, best_vol = (None, 0.0)
+                for c, v in vols.items():
+                    if v > best_vol:
+                        best, best_vol = c, v
+                if best is not None and best.localSymbol != cont.localSymbol \
+                        and best_vol >= _MIN_FRONT_VOL and best_vol >= cont_vol * 2:
+                    log.info("IBKR: %s front month = %s (%s lots, live) instead of %s",
+                             sym, best.localSymbol, int(best_vol), cont.localSymbol)
+                    _front_cache[sym] = (best, best_vol, time.time())
+                    _save_front_disk()
+                    return best
         log.warning("IBKR: no volume found for any %s contract", sym)
     except Exception as e:  # noqa: BLE001 — never let this stop the feed
         log.warning("IBKR: volume probe for %s failed (%s)", sym, e)
