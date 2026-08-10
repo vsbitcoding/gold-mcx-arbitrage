@@ -268,6 +268,114 @@ def public_board(
     }
 
 
+def _board_payload(template: str) -> tuple[dict, str]:
+    """The board snapshot plus a digest of just the rates, so the socket stays
+    quiet while nothing moves."""
+    from app.routes import scrip_master  # shared cached builder (~1s TTL)
+
+    b = scrip_master.build_board(template)
+    scrips = [
+        {"name": s["name"], "code": s["code"], "buy": s["buy_rate"], "sell": s["sell_rate"],
+         "low": s.get("low"), "high": s.get("high"), "trade": s["allow_trade"]}
+        for s in b["scrips"] if s["visible"]
+    ]
+    digest = hashlib.md5(json.dumps(
+        [[x["code"], x["buy"], x["sell"], x["low"], x["high"]] for x in scrips],
+        separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {
+        "type": "snapshot",
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "market_open": is_market_open(),
+        "template": b["template"],
+        "scrips": scrips,
+    }, digest
+
+
+@router.websocket("/board/stream")
+async def public_board_stream(
+    websocket: WebSocket,
+    api_key: str | None = Query(None, alias="api_key"),
+    key: str | None = Query(None),
+    template: str = Query("gurukrupa", description="gurukrupa | gurukrupasilver | gurukrupab2c"),
+    interval: float = Query(1.0, ge=0.5, le=5.0),
+    keepalive: int = Query(15, ge=5, le=60),
+):
+    """Live rate board as a push feed - the same rows and day low/high as
+    GET /api/v1/board, sent the moment a rate changes instead of on a timer.
+
+    Connect: wss://host/api/v1/board/stream?api_key=<KEY>&template=gurukrupa
+    A {"type":"heartbeat"} frame goes out every `keepalive` seconds while the
+    market is quiet. Send "ping" -> "pong".
+    """
+    if not verify_api_key_value(api_key or key):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    if template not in ("gurukrupa", "gurukrupab2c", "gurukrupasilver"):
+        template = "gurukrupa"
+    await websocket.accept()
+
+    stop = asyncio.Event()
+
+    async def receiver():
+        try:
+            while not stop.is_set():
+                msg = await websocket.receive_text()
+                if msg.strip().lower() == "ping":
+                    await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("board WS receiver ended: %s", e)
+        finally:
+            stop.set()
+
+    async def pusher():
+        last_digest, last_send_at = None, 0.0
+        try:
+            payload, digest = _board_payload(template)
+            await websocket.send_json(payload)
+            last_digest = digest
+            last_send_at = asyncio.get_event_loop().time()
+            while not stop.is_set():
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=interval)
+                except asyncio.TimeoutError:
+                    pass
+                if stop.is_set():
+                    break
+                payload, digest = _board_payload(template)
+                now = asyncio.get_event_loop().time()
+                if digest != last_digest:
+                    await websocket.send_json(payload)
+                    last_digest, last_send_at = digest, now
+                elif (now - last_send_at) >= keepalive:
+                    await websocket.send_json({
+                        "type": "heartbeat",
+                        "server_time": payload["server_time"],
+                        "market_open": payload["market_open"],
+                    })
+                    last_send_at = now
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.exception("board WS pusher error: %s", e)
+        finally:
+            stop.set()
+
+    recv_task = asyncio.create_task(receiver())
+    push_task = asyncio.create_task(pusher())
+    try:
+        await asyncio.wait({recv_task, push_task}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        stop.set()
+        for t in (recv_task, push_task):
+            t.cancel()
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @router.get("/options-history")
 def public_options_history(
     weekday: str | None = Query(None, description="mon..sun or 0..6 (0=Mon) → last N same-weekday boards; omit = latest snapshot days"),
