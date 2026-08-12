@@ -316,31 +316,6 @@ async def _loop() -> None:
                 await asyncio.wait_for(ib.qualifyContractsAsync(c), timeout=_REQ_TIMEOUT)
                 spots[key] = (c, ib.reqMktData(c, "", False, False))
 
-            # Option chain metadata for CL (one call, cached for the session).
-            # MONTHLY class only — the one listing the most strikes, same rule
-            # as the IV chains below. The old pick took whichever class IBKR
-            # listed first, which was a weekly: CL now has a weekly expiring
-            # every single weekday, so the client's terminal showed a new date
-            # every other day — and a dead one (06-AUG on 07-Aug) whenever the
-            # session outlived it (client, 07-Aug).
-            cl_contract = futs["cl"][0]
-            chains = await asyncio.wait_for(
-                ib.reqSecDefOptParamsAsync("CL", "NYMEX", "FUT", cl_contract.conId),
-                timeout=_REQ_TIMEOUT)
-            chain = max((c for c in chains if c.exchange == "NYMEX"),
-                        key=lambda c: len(c.strikes),
-                        default=chains[0] if chains else None)
-            all_strikes = sorted(chain.strikes) if chain else []
-            # First expiry that hasn't passed — never resurrect a dead contract
-            # after an overnight reconnect.
-            _exps = sorted(chain.expirations) if chain else []
-            _today = time.strftime("%Y%m%d", time.gmtime())
-            expiry = next((e for e in _exps if e >= _today), _exps[-1] if _exps else None)
-            _state["cl_options_expiry"] = expiry
-            if chain:
-                log.info("IBKR: CL client chain class %s (%d strikes, exp %s)",
-                         chain.tradingClass, len(all_strikes), expiry)
-
             # One monthly IV chain per commodity. The monthly is the class
             # listing the most strikes; the weeklies expire in days, so their IV
             # is time-decay noise and useless next to MCX's monthly.
@@ -366,48 +341,6 @@ async def _loop() -> None:
                     log.info("IBKR: %s IV class %s (%d strikes, exp %s)",
                              sym, best.tradingClass, len(best.strikes), iv[key]["expiry"])
 
-            opt_tickers: dict = {}   # strike -> {"C": ticker, "P": ticker}
-            window: list[float] = []
-
-            async def resubscribe(centre: float) -> None:
-                """Stream only the ATM window; drop whatever left it."""
-                nonlocal window
-                if not all_strikes or not expiry:
-                    return
-                near = sorted(all_strikes, key=lambda s: abs(s - centre))[: _WINDOW * 2 + 1]
-                new_window = sorted(near)
-                if new_window == window:
-                    return
-                for strike in list(opt_tickers):
-                    if strike not in new_window:
-                        for right in ("C", "P"):
-                            try:
-                                ib.cancelMktData(opt_tickers[strike][right].contract)
-                            except Exception:  # noqa: BLE001
-                                pass
-                        opt_tickers.pop(strike, None)
-                for strike in new_window:
-                    if strike in opt_tickers:
-                        continue
-                    pair = {}
-                    for right in ("C", "P"):
-                        # tradingClass pins the MONTHLY: weeklies can share the
-                        # exact expiry date (17-Aug is a Monday — the Monday
-                        # weekly lands on it too), so symbol+expiry alone is
-                        # ambiguous and can qualify to the wrong class.
-                        o = FuturesOption("CL", expiry, strike, right, "NYMEX",
-                                          tradingClass=chain.tradingClass)
-                        try:
-                            await ib.qualifyContractsAsync(o)
-                            pair[right] = ib.reqMktData(o, "", False, False)
-                        except Exception:  # noqa: BLE001 — a dead strike must not kill the feed
-                            pass
-                    if len(pair) == 2:
-                        opt_tickers[strike] = pair
-                window = new_window
-                log.info("IBKR: CL option window %s..%s (%d strikes)",
-                         window[0], window[-1], len(window))
-
             async def resubscribe_iv(key: str, centre: float) -> None:
                 """21 monthly strikes around the money, one side each: calls
                 above, puts below, both on the ATM row. Generic tick 106 asks
@@ -427,7 +360,11 @@ async def _loop() -> None:
                             pass
                 d["tickers"].clear()
                 for strike in near:
-                    rights = ("C", "P") if strike == atm else (("C",) if strike > atm else ("P",))
+                    # Both sides on every strike. One side each was enough for the
+                    # dashboard's calls-above/puts-below layout, but the client's
+                    # own terminal renders a full chain and showed natural gas
+                    # half empty (client, 12-Aug).
+                    rights = ("C", "P")
                     legs = {}
                     for right in rights:
                         o = FuturesOption(d["sym"], d["expiry"], strike, right, d["exch"],
@@ -503,10 +440,6 @@ async def _loop() -> None:
                     log.info("IBKR: CL option expiry %s passed - rolling to next month", expiry)
                     raise RuntimeError("CL option chain expired - rolling")
 
-                if cl_mid and now - last_window_check > 60:
-                    last_window_check = now
-                    if not window or cl_mid < window[0] or cl_mid > window[-1]:
-                        await resubscribe(cl_mid)
 
                 # The IV windows re-centre on the ATM strike itself, so they
                 # follow the market rather than only moving when price escapes
@@ -523,13 +456,6 @@ async def _loop() -> None:
                         if not d["window"] or d["atm"] is None or abs(mid_ - d["atm"]) > step * 1.5:
                             await resubscribe_iv(key, mid_)
 
-                rows = []
-                for strike in sorted(opt_tickers):
-                    c_t, p_t = opt_tickers[strike]["C"], opt_tickers[strike]["P"]
-                    rows.append({"strike": strike, "call": _px(c_t), "put": _px(p_t)})
-                if rows:
-                    _state["cl_options"] = rows
-                    _state["cl_options_ts"] = now
 
                 for key, d in iv.items():
                     iv_rows = []
@@ -563,6 +489,23 @@ def _thread() -> None:
         asyncio.run(_loop())
     except Exception as e:  # noqa: BLE001
         log.error("IBKR feed thread stopped: %s", e)
+
+
+def _chain_block(key: str, age) -> dict:
+    """The old crude_options shape - {strike, call, put} for every strike - so
+    consumers that render a full chain keep working unchanged."""
+    rows = []
+    for r in _state.get(key + "_iv_rows", []):
+        ce, pe = r.get("ce") or {}, r.get("pe") or {}
+        pick = lambda d: {k: d.get(k) for k in ("bid", "ask", "last", "mid", "iv", "delta")}
+        rows.append({"strike": r["strike"], "atm": r["atm"],
+                     "call": pick(ce), "put": pick(pe)})
+    return {
+        "expiry": _state.get(key + "_iv_expiry"),
+        "trading_class": _state.get(key + "_iv_class"),
+        "age": age(key + "_iv"),
+        "rows": rows,
+    }
 
 
 def _iv_block(key: str, age) -> dict:
@@ -606,11 +549,10 @@ def get_data() -> dict:
         "silver_spot": {**(_state["xag"] or {}), "age": age("xag")},
         "crude_iv": _iv_block("cl", age),
         "natgas_iv": _iv_block("ng", age),
-        "crude_options": {
-            "expiry": _state["cl_options_expiry"],
-            "age": age("cl_options"),
-            "rows": _state["cl_options"],
-        },
+        # Full chain view (both sides on every strike) over the same tickers the
+        # IV blocks use - one subscription per commodity, not two.
+        "crude_options": _chain_block("cl", age),
+        "natgas_options": _chain_block("ng", age),
         "server_time": now,
     }
 

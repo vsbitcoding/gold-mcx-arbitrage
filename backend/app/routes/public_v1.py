@@ -584,6 +584,53 @@ def _international_payload() -> tuple[dict, str]:
     gc, si = by["COMEX GC"], by["COMEX SI"]
     cl = by["NYMEX WTI CL"]
 
+    def chain_block(src: dict | None, prefix: str, under: float | None) -> dict:
+        """Full option chain: every strike with both legs, expiry repeated on each
+        row and a ready trading symbol per leg. Used for crude and gas alike."""
+        src = src or {}
+        raw_ = src.get("rows") or []
+        atm_ = min((r["strike"] for r in raw_), key=lambda k: abs(k - under)) \
+            if (raw_ and under) else None
+        e = src.get("expiry")
+        e_date = e_disp = None
+        dte_ = None
+        if e and len(e) == 8:
+            ed_ = datetime(int(e[:4]), int(e[4:6]), int(e[6:8]), tzinfo=timezone.utc)
+            e_date = ed_.strftime("%Y-%m-%d")
+            e_disp = ed_.strftime("%d-%b-%Y").upper()
+            dte_ = (ed_.date() - datetime.now(timezone.utc).date()).days
+
+        def m_(x):
+            b, a = x.get("bid"), x.get("ask")
+            return round((b + a) / 2, 4) if (b and a) else (b or a)
+
+        out = []
+        for r in raw_:
+            c_, p_ = r.get("call") or {}, r.get("put") or {}
+            k = r["strike"]
+            out.append({
+                "strike": k,
+                "expiry": e, "expiry_date": e_date, "expiry_display": e_disp,
+                "atm": (k == atm_),
+                "itm": None if not under else ("call" if k < under else "put" if k > under else None),
+                "call": {"symbol": f"{prefix}_OPT_{e_disp or e}_{k}_CE",
+                         "bid": c_.get("bid"), "ask": c_.get("ask"), "mid": m_(c_),
+                         "iv": c_.get("iv"), "delta": c_.get("delta")},
+                "put": {"symbol": f"{prefix}_OPT_{e_disp or e}_{k}_PE",
+                        "bid": p_.get("bid"), "ask": p_.get("ask"), "mid": m_(p_),
+                        "iv": p_.get("iv"), "delta": p_.get("delta")},
+            })
+        return {
+            "exchange": "NYMEX",
+            "trading_class": src.get("trading_class"),
+            "expiry": e, "expiry_date": e_date, "expiry_display": e_disp,
+            "days_to_expiry": dte_,
+            "underlying": under,
+            "atm_strike": atm_,
+            "age": src.get("age"),
+            "rows": out,
+        }
+
     opts = d.get("crude_options") or {}
     raw = opts.get("rows") or []
     atm = min((r["strike"] for r in raw), key=lambda k: abs(k - cl)) if (raw and cl) else None
@@ -690,6 +737,11 @@ def _international_payload() -> tuple[dict, str]:
         # Monthly chains WITH implied volatility - crude and gas, same shape.
         "crude_iv": iv_block(d.get("crude_iv"), "CRUDE", 2),
         "natgas_iv": iv_block(d.get("natgas_iv"), "NATGAS", 3),
+        # Full chain, both sides on every strike - the shape a terminal renders
+        # directly. natgas_options is new; gas was showing half-empty rows
+        # because only the IV block existed for it (client, 12-Aug).
+        "natgas_options": chain_block(d.get("natgas_options"), "NATGAS",
+                                      (d.get("natgas_iv") or {}).get("future_price")),
         "summary": {
             "gold_basis": round(gc - xau, 2) if (gc and xau) else None,
             "silver_basis": round(si - xag, 3) if (si and xag) else None,
