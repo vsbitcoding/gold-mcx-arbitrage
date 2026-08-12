@@ -431,14 +431,17 @@ async def _loop() -> None:
                     log.info("IBKR: daily front-month re-check")
                     raise RuntimeError("daily contract roll check")
 
-                # The option chain is cached for the session, so on the day
-                # after its expiry force the same reconnect path — the pick
-                # above then rolls to the next month automatically instead of
-                # streaming a dead contract until the daily check happens to
-                # fire (that gap is how 06-AUG was still on screen on 07-Aug).
-                if expiry and time.strftime("%Y%m%d", time.gmtime()) > expiry:
-                    log.info("IBKR: CL option expiry %s passed - rolling to next month", expiry)
-                    raise RuntimeError("CL option chain expired - rolling")
+                # Chains are cached for the session, so on the day after an
+                # expiry force the same reconnect path - the pick above then
+                # rolls to the next month instead of streaming a dead contract
+                # until the daily check happens to fire (that gap is how 06-AUG
+                # was still on screen on 07-Aug).
+                _today_utc = time.strftime("%Y%m%d", time.gmtime())
+                for _k, _d in iv.items():
+                    if _d["expiry"] and _today_utc > _d["expiry"]:
+                        log.info("IBKR: %s option expiry %s passed - rolling to next month",
+                                 _d["sym"], _d["expiry"])
+                        raise RuntimeError(f"{_d['sym']} option chain expired - rolling")
 
 
                 # The IV windows re-centre on the ATM strike itself, so they
