@@ -75,9 +75,6 @@ export default function NseMcxCrude() {
       <div className="intl-head cru-head">
         <div>
           <h2>Crude Oil — NSE vs MCX</h2>
-          <div className="intl-sub">
-            Same strike, both exchanges · difference in ₹ and %
-          </div>
         </div>
         <div />
         <span className={`intl-status ${live ? "on" : "off"}`}>
@@ -113,17 +110,16 @@ export default function NseMcxCrude() {
         </div>
       </div>
 
-      {!o.same_expiry && (
-        <div className="oh-note oh-slim nm-warn">
-          Option expiries differ — NSE <b>{fmtDate(o.nse_expiry)}</b> vs MCX <b>{fmtDate(o.mcx_expiry)}</b>.
-          The MCX side carries more time value, so part of every premium difference below is that,
-          not a market gap.
-        </div>
-      )}
-
-      <div className="intl-section-title">
+      <div className="intl-section-title nm-chain-title">
         OPTION CHAIN
-        <em>NSE {fmtDate(o.nse_expiry)} vs MCX {fmtDate(o.mcx_expiry)} · {rows.length} strikes around the money</em>
+        <em>
+          NSE {fmtDate(o.nse_expiry)} vs MCX {fmtDate(o.mcx_expiry)} · {rows.length} strikes
+          {!o.same_expiry && (
+            <b title="The MCX side carries more time value, so part of each premium difference is time, not a market gap.">
+              expiries differ — part of each difference is time value
+            </b>
+          )}
+        </em>
       </div>
 
       <div className="cru-table-wrap">

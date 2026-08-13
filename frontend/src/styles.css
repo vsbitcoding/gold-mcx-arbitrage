@@ -5200,7 +5200,11 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-fut-value.neg { color: var(--neg, #c62828); }
 .nm-fut-sub { margin-top: 3px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .nm-fut-diff { border-left: 3px solid var(--accent); }
-.nm-warn { margin-bottom: 4px; }
+.nm-chain-title { margin: 10px 0 8px; }
+.nm-chain-title em b {
+  margin-left: 10px; padding: 2px 8px; border-radius: 5px; font-weight: 700;
+  background: rgba(201,162,39,.16); color: #a8801a; cursor: help;
+}
 
 /* price cell: mid on top, bid/ask underneath */
 .nm-table td.nm-px { text-align: right; }
