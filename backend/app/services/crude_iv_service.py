@@ -174,8 +174,20 @@ def _loop() -> None:
                 st["ok"] = False
                 st["error"] = str(e)[:160]
                 log.warning("option IV poll failed (%s): %s", key, st["error"])
+                msg = str(e)
+                # A dead token 401s forever unless someone asks for a new one.
+                # The WebSocket feed keeps running on its established connection,
+                # so nothing looks broken while every REST call quietly fails -
+                # that is exactly how the MCX chain sat empty on 13-Aug.
+                if "401" in msg or "Unauthorized" in msg:
+                    log.warning("option IV: Dhan token rejected - forcing re-auth")
+                    try:
+                        dhan_auth.invalidate(disk=True)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _stop.wait(5)
                 # An expiry that has rolled off errors forever until re-read.
-                if "Expiry" in str(e) or "400" in str(e):
+                elif "Expiry" in msg or "400" in msg:
                     st["expiry"] = None
             _stop.wait(_GAP_SECONDS)
         _stop.wait(max(0, _ROUND_SECONDS - _GAP_SECONDS * len(COMMODITIES)))
