@@ -14,11 +14,23 @@ Two honest caveats the screen has to carry:
   * A dead NSE contract still prints an old LTP, so only bid/ask are compared
     and a leg with neither is reported as no market.
 """
+from datetime import datetime
+
 from fastapi import APIRouter, Query
 
 from app.services import angel_feed, crude_iv_service
 
 router = APIRouter(prefix="/api", tags=["nse-mcx"])
+
+
+def _fut_expiry(symbol: str | None) -> str | None:
+    """MCX future symbols read CRUDEOIL-19Aug2026-FUT."""
+    if not symbol or "-" not in symbol:
+        return None
+    try:
+        return datetime.strptime(symbol.split("-")[1], "%d%b%Y").date().isoformat()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _mid(leg: dict | None) -> float | None:
@@ -41,9 +53,12 @@ def _diff(nse: float | None, mcx: float | None) -> dict:
 
 def _payload(window: int) -> dict:
     a = angel_feed.get_data()
-    m = crude_iv_service.get_chain(commodity="crude", window=25)
 
-    # MCX rows keyed by strike so the NSE window can be matched one-for-one
+    # Ask the MCX poller for the expiry nearest NSE's, then read the FULL chain
+    # (both legs on every strike, not the calls-above/puts-below display layout).
+    crude_iv_service.set_want_expiry("crude", a.get("opt_expiry"))
+    m = crude_iv_service.get_full_chain("crude")
+
     mrows = {r["strike"]: r for r in (m.get("rows") or [])}
     mfut = m.get("future_price")
     nfut = _mid(a.get("future")) or (a.get("future") or {}).get("ltp")
@@ -73,9 +88,12 @@ def _payload(window: int) -> dict:
         "commodity": "crude",
         "future": {
             "nse": {**(a.get("future") or {}), "mid": nfut},
-            "mcx": {"symbol": m.get("symbol"), "expiry": m.get("expiry"), "mid": mfut},
+            # the FUTURE's own expiry, taken from its symbol - m["expiry"] is the
+            # option chain's date and showing it here was simply wrong
+            "mcx": {"symbol": m.get("symbol"), "expiry": _fut_expiry(m.get("symbol")),
+                    "mid": mfut},
             "diff": _diff(nfut, mfut),
-            "same_expiry": True,      # both 19-Aug; shown so the UI can say so
+            "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
         "options": {
             "nse_expiry": a.get("opt_expiry"),

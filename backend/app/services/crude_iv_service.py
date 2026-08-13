@@ -48,6 +48,11 @@ COMMODITIES: dict[str, dict] = {
 def _blank() -> dict:
     return {"underlying_id": None, "underlying_name": None, "future_price": None,
             "expiry": None, "expiries": [], "atm": None, "rows": [],
+            # A second, caller-chosen expiry. The NSE-vs-MCX screen needs MCX's
+            # SEPTEMBER chain to sit beside NSE's 10-Sep; pairing NSE against
+            # MCX's own front month (17-Aug) puts 24 days between them and the
+            # premium "difference" comes out at +230%.
+            "want_expiry": None, "alt_expiry": None, "alt_rows": [], "alt_ts": 0.0,
             "ts": 0.0, "ok": False, "error": None}
 
 
@@ -106,6 +111,23 @@ def _leg(d: dict | None) -> dict | None:
     }
 
 
+def _chain_rows(payload: dict) -> tuple[list, float | None]:
+    data = (payload or {}).get("data") or {}
+    oc = data.get("oc") or {}
+    rows = []
+    for k, legs in oc.items():
+        try:
+            strike = float(k)
+        except (TypeError, ValueError):
+            continue
+        ce, pe = _leg(legs.get("ce")), _leg(legs.get("pe"))
+        if not ce and not pe:
+            continue
+        rows.append({"strike": strike, "ce": ce, "pe": pe})
+    rows.sort(key=lambda x: x["strike"])
+    return rows, data.get("last_price")
+
+
 def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     st = _state[key]
     sid = st["underlying_id"]
@@ -145,6 +167,17 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     atm = min((r["strike"] for r in rows), key=lambda s: abs(s - spot)) if (rows and spot) else None
     st.update({"future_price": spot, "rows": rows, "atm": atm,
                "ts": time.time(), "ok": True, "error": None})
+
+    # Optional second chain for whichever expiry a caller asked for.
+    want = st.get("want_expiry")
+    if want and want != st["expiry"] and want in (st.get("expiries") or []):
+        time.sleep(_GAP_SECONDS)
+        r2 = sess.post(f"{_BASE}/optionchain", headers=_headers(tok),
+                       data=json.dumps({**body, "Expiry": want}), timeout=25)
+        r2.raise_for_status()
+        alt_rows, _ = _chain_rows(r2.json())
+        if alt_rows:
+            st["alt_expiry"], st["alt_rows"], st["alt_ts"] = want, alt_rows, time.time()
 
 
 def _loop() -> None:
@@ -191,6 +224,37 @@ def _loop() -> None:
                     st["expiry"] = None
             _stop.wait(_GAP_SECONDS)
         _stop.wait(max(0, _ROUND_SECONDS - _GAP_SECONDS * len(COMMODITIES)))
+
+
+def set_want_expiry(commodity: str, iso_date: str | None) -> None:
+    """Ask the poller for a second chain at `iso_date` (nearest listed match)."""
+    st = _state.get(commodity)
+    if not st or not iso_date:
+        return
+    listed = st.get("expiries") or []
+    if not listed:
+        st["want_expiry"] = iso_date
+        return
+    # pick the listed expiry closest to what was asked for
+    st["want_expiry"] = min(listed, key=lambda e: abs(
+        (datetime.strptime(e, "%Y-%m-%d") - datetime.strptime(iso_date, "%Y-%m-%d")).days))
+
+
+def get_full_chain(commodity: str = "crude", prefer_alt: bool = True) -> dict:
+    """Every strike with BOTH legs - no calls-above/puts-below trimming.
+    Returns the alternate expiry when one has been requested and fetched."""
+    st = _state.get(commodity) or _state["crude"]
+    use_alt = prefer_alt and st.get("alt_rows")
+    return {
+        "expiry": st["alt_expiry"] if use_alt else st["expiry"],
+        "expiries": st.get("expiries") or [],
+        "future_price": st["future_price"],
+        "symbol": st["underlying_name"],
+        "rows": st["alt_rows"] if use_alt else st["rows"],
+        "age": round(time.time() - (st["alt_ts"] if use_alt else st["ts"]), 1)
+               if (st["alt_ts"] if use_alt else st["ts"]) else None,
+        "ok": st["ok"], "error": st["error"],
+    }
 
 
 def get_chain(commodity: str = "crude", window: int = 10) -> dict:
