@@ -93,12 +93,18 @@ function Futures({ f, cfg }) {
   return (
     <div className="nm-head-right">
       <div className="nm-chip">
-        <span className="nm-chip-name">NSE FUTURE<em>{fmtDate(f?.nse?.expiry)}</em></span>
+        <div className="nm-chip-top">
+          <span className="nm-chip-name">NSE FUTURE</span>
+          <span className="nm-chip-exp">{fmtDate(f?.nse?.expiry)}</span>
+        </div>
         <b>{num(f?.nse?.mid, cfg.futDec)}</b>
         <i>{num(f?.nse?.bid, cfg.futDec)} / {num(f?.nse?.ask, cfg.futDec)}</i>
       </div>
       <div className="nm-chip">
-        <span className="nm-chip-name">MCX FUTURE<em>{fmtDate(f?.mcx?.expiry)}</em></span>
+        <div className="nm-chip-top">
+          <span className="nm-chip-name">MCX FUTURE</span>
+          <span className="nm-chip-exp">{fmtDate(f?.mcx?.expiry)}</span>
+        </div>
         <b>{num(f?.mcx?.mid, cfg.futDec)}</b>
         <i>{f?.mcx?.symbol || ""}</i>
       </div>
@@ -216,8 +222,11 @@ export default function NseMcxCrude() {
 
   const head = (
     <div className="nm-head">
-      <div className="nm-head-left">
-        <h2>{cfg.title}</h2>
+      <h2>{cfg.title}</h2>
+
+      {view === "live" ? <Futures f={d?.future} cfg={cfg} /> : <div />}
+
+      <div className="nm-head-end">
         <div className="oh-group" role="tablist" aria-label="Commodity">
           {PRODUCTS.map((p) => (
             <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
@@ -225,11 +234,6 @@ export default function NseMcxCrude() {
               onClick={() => setProduct(p.key)}>{p.label}</button>
           ))}
         </div>
-      </div>
-
-      {view === "live" ? <Futures f={d?.future} cfg={cfg} /> : <div />}
-
-      <div className="nm-head-end">
         <div className="oh-group" role="tablist" aria-label="View">
           {[["live", "Live"], ["history", "History"]].map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k}
