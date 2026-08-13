@@ -167,12 +167,6 @@ export default function NseMcxCrude() {
           </tbody>
         </table>
       </div>
-
-      <div className="cru-foot">
-        Mid price with bid / ask beneath. A dash means there is no two-way quote, so no honest
-        comparison exists — a one-sided price is not a market. A “?” marks a difference where one
-        side is quoted unusually wide. NSE via Angel One, MCX via Dhan.
-      </div>
     </div>
   );
 }
