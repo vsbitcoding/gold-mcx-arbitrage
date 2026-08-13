@@ -5183,3 +5183,38 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   .cru-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .cru-table th, .cru-table td { padding: 6px 7px; font-size: 11.5px; }
 }
+
+/* ── NSE vs MCX crude comparison ──────────────────────────────────────── */
+.nm-fut { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 14px; }
+.nm-fut-box {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 14px 12px;
+}
+.nm-fut-label { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; color: var(--text-primary); }
+.nm-fut-label em {
+  display: block; font-style: normal; font-size: 9.5px; font-weight: 500;
+  color: var(--text-secondary); margin-top: 1px;
+}
+.nm-fut-value { margin-top: 6px; font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.nm-fut-value.pos { color: var(--pos, #1a7f37); }
+.nm-fut-value.neg { color: var(--neg, #c62828); }
+.nm-fut-sub { margin-top: 3px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.nm-fut-diff { border-left: 3px solid var(--accent); }
+.nm-warn { margin-bottom: 4px; }
+
+/* price cell: mid on top, bid/ask underneath */
+.nm-table td.nm-px { text-align: right; }
+.nm-px .nm-mid { font-weight: 700; font-variant-numeric: tabular-nums; }
+.nm-px em {
+  display: block; font-style: normal; font-size: 10px; color: var(--text-secondary);
+  font-variant-numeric: tabular-nums; margin-top: 1px;
+}
+.nm-table td.nm-dead { text-align: right; color: var(--text-muted); }
+.nm-table td.nm-diff { text-align: right; font-variant-numeric: tabular-nums; }
+.nm-diff .nm-diff-rs { font-weight: 800; }
+.nm-diff em { display: block; font-style: normal; font-size: 10px; margin-top: 1px; opacity: .85; }
+.nm-table td.nm-diff.pos, .nm-table td.nm-diff.pos em { color: var(--pos, #1a7f37); }
+.nm-table td.nm-diff.neg, .nm-table td.nm-diff.neg em { color: var(--neg, #c62828); }
+
+@media (max-width: 1100px) { .nm-fut { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .nm-fut { grid-template-columns: 1fr 1fr; gap: 8px; } }

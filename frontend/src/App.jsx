@@ -9,6 +9,7 @@ import OptionsSpread from "./components/OptionsSpread.jsx";
 import GoldOptions from "./components/GoldOptions.jsx";
 import BullionStock from "./components/BullionStock.jsx";
 import CrudeOil from "./components/CrudeOil.jsx";
+import NseMcxCrude from "./components/NseMcxCrude.jsx";
 import International from "./components/International.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
@@ -17,7 +18,7 @@ import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "intl"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "nsemcx", "intl"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -235,6 +236,7 @@ function Dashboard() {
         {page === "making" && <MakingPrice priceData={priceData} />}
         {page === "premium" && <PremiumInputs />}
         {page === "crude" && <CrudeOil />}
+      {page === "nsemcx" && <NseMcxCrude />}
       {page === "intl" && <International />}
         {page === "options" && <OptionsSpread />}
         {page === "goldopt" && <GoldOptions />}
