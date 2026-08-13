@@ -101,41 +101,22 @@ export default function NseMcxCrude() {
 
   return (
     <div className="cru-page">
-      <div className="intl-head cru-head">
-        <div>
-          <h2>Crude Oil — NSE vs MCX</h2>
-        </div>
-        <div />
-        <span className={`intl-status ${live ? "on" : "off"}`}>
-          {live ? "● Live" : "○ Feed issue"}
-        </span>
-      </div>
-
-      {/* ── Futures: the clean comparison, same expiry both sides ───────── */}
-      <div className="nm-fut">
-        <div className="nm-fut-box">
-          <div className="nm-fut-label">NSE FUTURE<em>{fmtDate(f.nse?.expiry)}</em></div>
-          <div className="nm-fut-value">{num(f.nse?.mid)}</div>
-          <div className="nm-fut-sub">{num(f.nse?.bid)} / {num(f.nse?.ask)}</div>
-        </div>
-        <div className="nm-fut-box">
-          <div className="nm-fut-label">MCX FUTURE<em>{fmtDate(f.mcx?.expiry)}</em></div>
-          <div className="nm-fut-value">{num(f.mcx?.mid)}</div>
-          <div className="nm-fut-sub">{f.mcx?.symbol || ""}</div>
-        </div>
-        <div className="nm-fut-box nm-fut-diff">
-          <div className="nm-fut-label">
-            DIFFERENCE<em>{f.same_expiry ? "same expiry" : "different expiry"}</em>
+      <div className="nm-head">
+        <h2>Crude Oil — NSE vs MCX</h2>
+        <div className="nm-head-right">
+          <div className="nm-chip">
+            <span className="nm-chip-name">NSE FUTURE<em>{fmtDate(f.nse?.expiry)}</em></span>
+            <b>{num(f.nse?.mid)}</b>
+            <i>{num(f.nse?.bid)} / {num(f.nse?.ask)}</i>
           </div>
-          <div className={`nm-fut-value ${f.diff?.rupees == null ? "" : f.diff.rupees >= 0 ? "pos" : "neg"}`}>
-            {signed(f.diff?.rupees)}
+          <div className="nm-chip">
+            <span className="nm-chip-name">MCX FUTURE<em>{fmtDate(f.mcx?.expiry)}</em></span>
+            <b>{num(f.mcx?.mid)}</b>
+            <i>{f.mcx?.symbol || ""}</i>
           </div>
-          <div className="nm-fut-sub">{pct(f.diff?.percent)}</div>
-        </div>
-        <div className="nm-fut-box">
-          <div className="nm-fut-label">USD / INR<em>NSE currency, live</em></div>
-          <div className="nm-fut-value">{num(d.usdinr?.mid, 3)}</div>
-          <div className="nm-fut-sub">{num(d.usdinr?.bid, 3)} / {num(d.usdinr?.ask, 3)}</div>
+          <span className={`intl-status ${live ? "on" : "off"}`}>
+            {live ? "● Live" : "○ Feed issue"}
+          </span>
         </div>
       </div>
 

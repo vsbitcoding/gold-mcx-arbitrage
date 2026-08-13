@@ -5185,7 +5185,23 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 
 /* ── NSE vs MCX crude comparison ──────────────────────────────────────── */
-.nm-fut { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 14px; }
+/* Futures live in the header now. Four full-height cards ate a whole band of
+   vertical space and pushed the chain below the fold. */
+.nm-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.nm-head h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.nm-head-right { display: flex; align-items: center; gap: 10px; }
+.nm-chip {
+  display: flex; align-items: baseline; gap: 8px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 12px;
+}
+.nm-chip-name { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; color: var(--text-secondary); }
+.nm-chip-name em { display: block; font-style: normal; font-weight: 500; opacity: .8; }
+.nm-chip b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.nm-chip i { font-style: normal; font-size: 9.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.nm-fut { display: none; }
+.nm-fut-old { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 14px; }
 .nm-fut-box {
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 11px 14px 12px;
@@ -5203,7 +5219,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 /* The chain stretched across the full 1920px, leaving the strike marooned in the
    middle and the PUT block against the far edge. Fixed widths keep the two sides
    tight around the strike and readable in one glance. */
-.nm-table { table-layout: fixed; max-width: 1180px; margin: 0 auto; }
+.nm-table { table-layout: fixed; max-width: 1460px; margin: 0 auto; }
 .nm-table th, .nm-table td { padding: 6px 12px; }
 .nm-table col.nm-c-px { width: 15%; }
 .nm-table col.nm-c-diff { width: 12.5%; }
