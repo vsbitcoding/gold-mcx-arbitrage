@@ -31,9 +31,9 @@ const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs
 const WIDE_SPREAD = 0.25;
 
 const PRODUCTS = [
-  // Crude lists every 50 points, which fills the screen with 21 rows and forces
-  // a scroll. The client reads it in round hundreds, so the halves are dropped
-  // (client, 13-Aug) - the ATM row always survives even when it lands on one.
+  // Crude is subscribed in round hundreds at the source now, so this filter only
+  // still matters for boards captured on 13-Aug before that change - it keeps
+  // History looking like Live instead of suddenly doubling in length.
   { key: "crude", label: "Crude Oil", title: "Crude Oil — NSE vs MCX", futDec: 1, strikeDec: 0, step: 100 },
   { key: "natgas", label: "Natural Gas", title: "Natural Gas — NSE vs MCX", futDec: 2, strikeDec: 0 },
 ];
@@ -45,7 +45,11 @@ const SLOTS = [
 ];
 
 function quality(leg) {
-  if (!leg || leg.bid == null || leg.ask == null) return { ok: false, wide: false };
+  // A quoted 0 is not a price, it is an absent side - MCX printed the crude
+  // 8300 put as 0.00 / 1289.60 and the old null-check turned that into a
+  // confident-looking mid of 644.80. Matches the server, which has always
+  // treated 0 as missing.
+  if (!leg || !leg.bid || !leg.ask) return { ok: false, wide: false };
   const mid = (leg.bid + leg.ask) / 2;
   if (!mid) return { ok: false, wide: false };
   return { ok: true, wide: (leg.ask - leg.bid) / mid > WIDE_SPREAD, mid };

@@ -58,7 +58,12 @@ _MAX_TOKENS = 50             # Angel's per-request cap
 # 152000). Only these two carry real two-way markets, so only these two are
 # worth comparing.
 COMMODITIES: dict[str, dict] = {
-    "crude":  {"name": "CRUDEOIL",   "label": "NSE CRUDE OIL"},
+    # Crude lists every 50 points, but the client reads it in round hundreds, so
+    # only hundreds are subscribed. That is not just a display choice: a quote
+    # call takes 50 tokens and 21 strikes both sides is 42, so subscribing every
+    # 50 would cover only +-500 points. Filtering at the source buys the same 21
+    # rows across +-1000 instead (client asked for 21 hundreds, 13-Aug).
+    "crude":  {"name": "CRUDEOIL",   "label": "NSE CRUDE OIL", "strike_step": 100},
     "natgas": {"name": "NATURALGAS", "label": "NSE NATURAL GAS"},
 }
 
@@ -279,6 +284,10 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
             return float(x.get("strike", 0)) / 100.0
 
         strikes = sorted({strike_of(x) for x in chain})
+        step = COMMODITIES[turn].get("strike_step")
+        if step:
+            keep = [s for s in strikes if s % step == 0]
+            strikes = keep or strikes          # never blank the chain on a surprise ladder
         atm = min(strikes, key=lambda s: abs(s - fmid))
         window = sorted(sorted(strikes, key=lambda s: abs(s - atm))[: _WINDOW * 2 + 1])
         by: dict[float, dict] = {}
