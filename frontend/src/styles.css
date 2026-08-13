@@ -1378,6 +1378,13 @@ body.dark .margin-chip.danger { color: #fc8181; background: rgba(248,113,113,0.1
   color: var(--red);
   border: 1px solid rgba(220,38,38,0.3);
 }
+.settings-banner.warn {
+  background: rgba(201,162,39,0.12);
+  color: #a8801a;
+  border: 1px solid rgba(201,162,39,0.35);
+  font-weight: 600;
+}
+.intl-competing { margin: 0 0 14px; }
 
 /* Settings: tablet & phone responsiveness */
 @media (max-width: 768px) {

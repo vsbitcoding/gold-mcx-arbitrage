@@ -104,10 +104,26 @@ export default function International() {
           <h2>International Market</h2>
           <div className="intl-sub">6 live items · Interactive Brokers · COMEX + NYMEX</div>
         </div>
-        <span className={`intl-status ${ib.connected ? (ib.delayed ? "warn" : "on") : "off"}`}>
-          {ib.connected ? (ib.delayed ? "◷ Delayed data" : "● Live real-time") : "○ Disconnected"}
+        {/* A competing IBKR login blanks every price while the socket stays up,
+            so "Live real-time" over six empty cards is the one thing this pill
+            must never say (13-Aug: two hours of it). */}
+        <span className={`intl-status ${ib.competing_session ? "warn" : ib.connected ? (ib.delayed ? "warn" : "on") : "off"}`}
+          title={ib.competing_session
+            ? "IBKR gives market data to one session at a time. Log out of the IBKR website and mobile app; prices come back within about three minutes."
+            : ""}>
+          {ib.competing_session ? "◷ Blocked — logged in elsewhere"
+            : ib.connected ? (ib.delayed ? "◷ Delayed data" : "● Live real-time") : "○ Disconnected"}
         </span>
       </div>
+
+      {ib.competing_session && (
+        <div className="settings-banner warn intl-competing">
+          Prices are paused because this IBKR account is logged in somewhere else —
+          IBKR serves market data to one session at a time. Log out of the IBKR
+          website and mobile app; the feed re-subscribes on its own within about
+          three minutes.
+        </div>
+      )}
 
       <div className="intl-cards">
         <Card n="1" title="GOLD SPOT" accent="gold" sub="XAU/USD · $/oz"

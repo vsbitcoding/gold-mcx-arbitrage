@@ -75,7 +75,32 @@ _state: dict = {
 _SILENCE_LIMIT = 600
 _SILENCE_MAX = 3600
 _silence_limit = _SILENCE_LIMIT
+
+# IBKR error 10197, "No market data during competing live session": the client
+# logged into IBKR on his phone or the web and our paper session lost its data
+# (13-Aug, 15:11 to 17:09 - 498 errors, gold and silver blank on the app board).
+#
+# Two things make this its own case rather than the silence watchdog's:
+#   * The errors STOP after a couple of retries, but the block does not lift.
+#     A rejected subscription is never resumed, so even after he logs out the
+#     only way back is to re-request everything - on 13-Aug the feed sat dead
+#     until the gateway was restarted by hand.
+#   * Nothing tells us when he logs out, so we retry on a timer. The silence
+#     watchdog would eventually notice, but its backoff doubles to an hour and
+#     each blocked reconnect doubles it again, which is how a two-minute
+#     logout turns into an hour of blank prices.
+# So: freeze the staleness clock while the block is fresh (it is external, not
+# a dead socket) and force one reconnect every three minutes until a connect
+# comes back clean.
+_COMPETING_RETRY = 180
+_competing_at = 0.0                  # epoch of the last 10197 seen
 _stop = threading.Event()
+
+
+def _on_ib_error(reqId, errorCode, errorString, contract=None) -> None:
+    global _competing_at
+    if errorCode == 10197:
+        _competing_at = time.time()
 
 
 def _px(t) -> dict:
@@ -287,6 +312,7 @@ async def _loop() -> None:
 
     while not _stop.is_set():
         ib = IB()
+        ib.errorEvent += _on_ib_error
         try:
             await ib.connectAsync(settings.IBKR_HOST, settings.IBKR_PORT,
                                   clientId=settings.IBKR_FEED_CLIENT_ID, timeout=20)
@@ -407,6 +433,18 @@ async def _loop() -> None:
                 # price quietly freezes - exactly how the Deriv feed went unnoticed
                 # for 4.8 days. Any price change resets the clock.
                 global _silence_limit
+                # A competing IBKR login blocks the data from outside, so the
+                # staleness clock must not run and the backoff must not grow -
+                # see the note on _COMPETING_RETRY.
+                if _competing_at and now - _competing_at < _COMPETING_RETRY:
+                    stale_since = now
+                    _state["competing_session"] = True
+                elif _state.get("competing_session"):
+                    _state["competing_session"] = False
+                    _silence_limit = _SILENCE_LIMIT
+                    raise RuntimeError(
+                        "competing IBKR session quiet - re-requesting market data")
+
                 if moved:
                     stale_since = now
                     _state["last_tick"] = now
@@ -539,6 +577,10 @@ def get_data() -> dict:
         "connected": _state["connected"],
         "delayed": _state["delayed"],
         "stale": bool(_state.get("stale")),
+        # True while a competing IBKR login is blocking our data. Worth showing:
+        # otherwise blank prices look like our outage when the cure is for the
+        # client to log out of IBKR.
+        "competing_session": bool(_state.get("competing_session")),
         "last_tick_age": round(now - last, 1) if last else None,
         "gold_future": {**(_state["gc"] or {}), "age": age("gc"),
                         "symbol": _state["gc_symbol"], "expiry": _state["gc_expiry"]},
