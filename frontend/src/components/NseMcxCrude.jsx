@@ -31,7 +31,10 @@ const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs
 const WIDE_SPREAD = 0.25;
 
 const PRODUCTS = [
-  { key: "crude", label: "Crude Oil", title: "Crude Oil — NSE vs MCX", futDec: 1, strikeDec: 0 },
+  // Crude lists every 50 points, which fills the screen with 21 rows and forces
+  // a scroll. The client reads it in round hundreds, so the halves are dropped
+  // (client, 13-Aug) - the ATM row always survives even when it lands on one.
+  { key: "crude", label: "Crude Oil", title: "Crude Oil — NSE vs MCX", futDec: 1, strikeDec: 0, step: 100 },
   { key: "natgas", label: "Natural Gas", title: "Natural Gas — NSE vs MCX", futDec: 2, strikeDec: 0 },
 ];
 const SLOTS = [
@@ -113,7 +116,10 @@ function Futures({ f, cfg }) {
 }
 
 function ChainTable({ o, cfg }) {
-  const rows = o?.rows || [];
+  const all = o?.rows || [];
+  const rows = cfg.step
+    ? all.filter((r) => r.atm || r.strike % cfg.step === 0)
+    : all;
   if (!rows.length) return <div className="oh-note oh-slim">No chain rows.</div>;
   return (
     <div className="cru-table-wrap">
