@@ -17,21 +17,50 @@ const signed = (v, d = 2) =>
   v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d);
 const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), 2) + "%");
 
-function DiffCell({ diff }) {
-  const r = diff?.rupees;
+// A price is only usable if BOTH sides are quoted. A one-sided quote makes the
+// "mid" whatever that single side happens to be, and on a thin NSE strike that
+// produced a +321% difference on screen - obvious nonsense that destroys trust
+// in the whole column. Wide two-sided markets are shown but marked, because the
+// mid between 562 and 1078 is not a price anyone can trade.
+const WIDE_SPREAD = 0.25;
+
+function quality(leg) {
+  if (!leg || leg.bid == null || leg.ask == null) return { ok: false, wide: false };
+  const mid = (leg.bid + leg.ask) / 2;
+  if (!mid) return { ok: false, wide: false };
+  return { ok: true, wide: (leg.ask - leg.bid) / mid > WIDE_SPREAD, mid };
+}
+
+function DiffCell({ nse, mcx }) {
+  const qn = quality(nse), qm = quality(mcx);
+  if (!qn.ok || !qm.ok) {
+    return <td className="nm-diff nm-dead" title="one side has no two-way quote, so no honest comparison">—</td>;
+  }
+  const r = Math.round((qn.mid - qm.mid) * 100) / 100;
+  const p = qm.mid ? (r / qm.mid) * 100 : null;
+  const shaky = qn.wide || qm.wide;
   return (
-    <td className={`nm-diff ${r == null ? "" : r >= 0 ? "pos" : "neg"}`}>
-      <span className="nm-diff-rs">{signed(r)}</span>
-      <em>{pct(diff?.percent)}</em>
+    <td className={`nm-diff ${r >= 0 ? "pos" : "neg"} ${shaky ? "nm-shaky" : ""}`}
+        title={shaky ? "One side is quoted very wide, so treat this difference with caution." : ""}>
+      <span className="nm-diff-rs">{signed(r)}{shaky && " ?"}</span>
+      <em>{pct(p)}</em>
     </td>
   );
 }
 
 function Leg({ leg }) {
-  if (!leg?.traded) return <td className="nm-dead" title="no bid and no ask - not trading">—</td>;
+  const q = quality(leg);
+  if (!q.ok) {
+    return (
+      <td className="nm-dead" title="no two-way quote - nothing tradeable here">
+        —{leg?.bid != null || leg?.ask != null
+          ? <em className="nm-oneside">{num(leg.bid)} / {num(leg.ask)}</em> : null}
+      </td>
+    );
+  }
   return (
-    <td className="nm-px">
-      <span className="nm-mid">{num(leg.mid)}</span>
+    <td className={`nm-px ${q.wide ? "nm-shaky" : ""}`}>
+      <span className="nm-mid">{num(q.mid)}</span>
       <em>{num(leg.bid)} / {num(leg.ask)}</em>
     </td>
   );
@@ -112,6 +141,11 @@ export default function NseMcxCrude() {
 
       <div className="cru-table-wrap">
         <table className="cru-table nm-table">
+          <colgroup>
+            <col className="nm-c-px" /><col className="nm-c-px" /><col className="nm-c-diff" />
+            <col className="nm-c-strike" />
+            <col className="nm-c-diff" /><col className="nm-c-px" /><col className="nm-c-px" />
+          </colgroup>
           <thead>
             <tr>
               <th colSpan={3} className="intl-call">CALL</th>
@@ -139,12 +173,12 @@ export default function NseMcxCrude() {
               <tr key={r.strike} className={r.atm ? "cru-atm" : ""}>
                 <Leg leg={r.ce?.nse} />
                 <Leg leg={r.ce?.mcx} />
-                <DiffCell diff={r.ce?.diff} />
+                <DiffCell nse={r.ce?.nse} mcx={r.ce?.mcx} />
                 <td className="cru-strike">
                   {num(r.strike, 0)}
                   {r.atm && <span className="atm-badge">ATM</span>}
                 </td>
-                <DiffCell diff={r.pe?.diff} />
+                <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} />
                 <Leg leg={r.pe?.mcx} />
                 <Leg leg={r.pe?.nse} />
               </tr>
@@ -154,9 +188,9 @@ export default function NseMcxCrude() {
       </div>
 
       <div className="cru-foot">
-        Each cell shows the mid price with bid / ask beneath it. A dash means the contract has
-        no bid and no ask — not trading, so no comparison is possible.
-        NSE data via Angel One, MCX via Dhan.
+        Mid price with bid / ask beneath. A dash means there is no two-way quote, so no honest
+        comparison exists — a one-sided price is not a market. A “?” marks a difference where one
+        side is quoted unusually wide. NSE via Angel One, MCX via Dhan.
       </div>
     </div>
   );
