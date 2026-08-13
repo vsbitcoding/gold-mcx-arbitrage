@@ -59,9 +59,9 @@ Header:  X-API-Key: <your key>          (same key you already use)
         "strike": 7800.0,
         "atm": true,
         "ce": {
-          "nse": { "bid": 212.0, "ask": 219.0, "mid": 215.5, "oi": 74, "traded": true },
-          "mcx": { "bid": 268.0, "ask": 272.0, "mid": 270.0, "oi": 1902, "traded": true },
-          "diff": { "rupees": -54.5, "percent": -20.19 }
+          "nse": { "bid": 212.0, "ask": 219.0, "mid": 215.5, "oi": 74, "traded": true, "wide": false },
+          "mcx": { "bid": 268.0, "ask": 272.0, "mid": 270.0, "oi": 1902, "traded": true, "wide": false },
+          "diff": { "rupees": -54.5, "percent": -20.19, "wide": false }
         },
         "pe": { "nse": {...}, "mcx": {...}, "diff": {...} }
       }
@@ -87,6 +87,12 @@ whatever that single side happens to be: NSE's 0.05 bid with no ask on the gas
 `traded: false` means the leg has neither bid nor ask; `traded: true` with a
 `null` mid means only one side is quoted. Both render as a dash. The ITM half
 of the NSE chain is usually like this — normal, not a bug.
+
+**`wide: true` means treat the number with caution.** The leg is quoted on both
+sides, but more than 25% apart — gas 260 CE at 0.05 / 16.85 has a mid of 8.45
+that nobody can actually deal at. `diff.wide` is true when either side is. The
+dashboard tints these amber and appends a "?"; do the same rather than printing
+them as solid.
 
 **2. Show both expiry dates.** The futures line up (crude 19-Aug, gas 26-Aug),
 so that difference is clean. The **options never do**:

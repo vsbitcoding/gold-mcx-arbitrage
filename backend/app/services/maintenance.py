@@ -122,7 +122,7 @@ def _loop() -> None:
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
     last_mcxccl_attempt: datetime | None = None
-    last_optsnap: dict[str, str | None] = {"10:00": None, "15:00": None, "15:25": None}
+    last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
@@ -158,11 +158,12 @@ def _loop() -> None:
                 _check_calculator_rollover(rollover_logged)
                 last_rollover_check = today_str
 
-            # Nifty/Sensex options-board snapshot (10:00, 15:00 & 15:25 IST) —
-            # replaces the client's manual screenshots. In-memory read + one tiny
+            # Nifty/Sensex options-board snapshot (10:00, 15:00, 15:15 & 15:35 IST)
+            # — replaces the client's manual screenshots. In-memory read + one tiny
             # INSERT; the service itself skips weekends / cold feed / missed windows
-            # (so a late restart can never store mislabelled data).
-            for _slot, (_h, _m) in (("10:00", (10, 0)), ("15:00", (15, 0)), ("15:25", (15, 25))):
+            # (so a late restart can never store mislabelled data). The slot list
+            # lives in the service so the two can never drift apart.
+            for _slot, (_h, _m) in options_history_service._SLOTS.items():
                 if last_optsnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
                     try:
                         msg = options_history_service.snapshot(_slot)

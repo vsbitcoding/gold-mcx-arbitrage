@@ -1,7 +1,7 @@
 """Live Nifty / Sensex PE-options spread table + stored board history.
 
 GET /api/options/spread  → 3-weekly-expiry × 10-strike spread table (live).
-GET /api/options/history → auto-captured 10:00/15:00 IST board snapshots
+GET /api/options/history → auto-captured 10:00/15:00/15:15/15:35 IST board snapshots
                            (weekday filter → compare the last N Mondays etc.).
 """
 from fastapi import APIRouter, Depends
@@ -31,7 +31,7 @@ def get_history(
     date: str | None = None,
     user: str = Depends(get_current_user),
 ):
-    """Stored 10:00/15:00 IST board snapshots.
+    """Stored 10:00/15:00/15:15/15:35 IST board snapshots.
 
     weekday=mon..sun (or 0..6) → the last `weeks` same-weekday boards, newest
     first; omit → the last `weeks` snapshot days. date=YYYY-MM-DD → that day

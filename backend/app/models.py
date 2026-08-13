@@ -262,7 +262,7 @@ class Scrip(Base):
 
 
 class OptionsSnapshot(Base):
-    """Twice-daily (10:00 & 15:00 IST) snapshot of the full Nifty/Sensex PE
+    """Four times a day (10:00, 15:00, 15:15 & 15:35 IST) snapshot of the full Nifty/Sensex PE
     options board — replaces the client's manual 10am/3pm screenshots. One row
     per (snap_date, slot); payload_json stores the raw 'below' + 'above' boards
     (square-off is derived from 'above' at read time). ~2 small rows per

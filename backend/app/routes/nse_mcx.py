@@ -55,13 +55,36 @@ def _mid(leg: dict | None) -> float | None:
     return round((b + a) / 2, 2) if (b and a) else None
 
 
-def _diff(nse: float | None, mcx: float | None) -> dict:
+# A two-way quote can still be untradeable. Natural gas 260 CE quoted
+# 0.05 / 16.85 has a "mid" of 8.45 that nobody can deal at, and the difference
+# built on it is arithmetic, not a market. The dashboard tints these amber and
+# appends "?"; the flag has to travel in the API too, or the app renders them
+# as solid numbers.
+_WIDE_SPREAD = 0.25
+
+
+def _leg(leg: dict | None) -> dict:
+    b, a = (leg or {}).get("bid"), (leg or {}).get("ask")
+    mid = _mid(leg)
+    return {
+        "bid": b, "ask": a, "mid": mid,
+        "oi": (leg or {}).get("oi"),
+        "traded": bool(b or a),
+        "wide": bool(mid and (a - b) / mid > _WIDE_SPREAD),
+    }
+
+
+def _num_diff(n: float | None, m: float | None, wide: bool = False) -> dict:
     """Difference both ways, as the client asked: rupees and percent.
     Percent is against the MCX leg, the liquid one."""
-    if nse is None or mcx is None:
-        return {"rupees": None, "percent": None}
-    d = round(nse - mcx, 2)
-    return {"rupees": d, "percent": round(d / mcx * 100, 2) if mcx else None}
+    if n is None or m is None:
+        return {"rupees": None, "percent": None, "wide": False}
+    d = round(n - m, 2)
+    return {"rupees": d, "percent": round(d / m * 100, 2) if m else None, "wide": wide}
+
+
+def _diff(nse: dict, mcx: dict) -> dict:
+    return _num_diff(nse["mid"], mcx["mid"], nse["wide"] or mcx["wide"])
 
 
 def payload(commodity: str = "crude", window: int = 10) -> dict:
@@ -89,18 +112,8 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
         mr = mrows.get(r["strike"]) or {}
         out = {"strike": r["strike"], "atm": r["atm"]}
         for side in ("ce", "pe"):
-            n_leg, m_leg = r.get(side), mr.get(side)
-            n_mid = _mid(n_leg)
-            m_mid = _mid(m_leg)
-            out[side] = {
-                "nse": {"bid": (n_leg or {}).get("bid"), "ask": (n_leg or {}).get("ask"),
-                        "mid": n_mid, "oi": (n_leg or {}).get("oi"),
-                        "traded": bool((n_leg or {}).get("bid") or (n_leg or {}).get("ask"))},
-                "mcx": {"bid": (m_leg or {}).get("bid"), "ask": (m_leg or {}).get("ask"),
-                        "mid": m_mid, "oi": (m_leg or {}).get("oi"),
-                        "traded": bool((m_leg or {}).get("bid") or (m_leg or {}).get("ask"))},
-                "diff": _diff(n_mid, m_mid),
-            }
+            n, m = _leg(r.get(side)), _leg(mr.get(side))
+            out[side] = {"nse": n, "mcx": m, "diff": _diff(n, m)}
         rows.append(out)
 
     return {
@@ -112,7 +125,7 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
             # option chain's date and showing it here was simply wrong
             "mcx": {"symbol": m.get("symbol"), "expiry": _fut_expiry(m.get("symbol")),
                     "mid": mfut},
-            "diff": _diff(nfut, mfut),
+            "diff": _num_diff(nfut, mfut),
             "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
         "options": {

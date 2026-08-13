@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import OptionsBoard from "./OptionsBoard.jsx";
 
-// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00/15:25 IST
+// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00/15:15/15:35 IST
 // snapshot EXACTLY like the Live board (cards + full 3-week matrix), stacked
 // newest-first. Filters: weekday + time + how many past days. Boards are
 // fetched ON DEMAND only (control changes) — no polling, no load.
@@ -29,11 +29,15 @@ function fmtDate(iso) {
 const SLOTS = [
   { key: "10:00", label: "10:00 AM" },
   { key: "15:00", label: "3:00 PM" },
-  { key: "15:25", label: "3:25 PM" },
+  { key: "15:15", label: "3:15 PM" },
+  { key: "15:35", label: "3:35 PM" },
+  // captured until 13-Aug-2026, when the client swapped it for 3:15 and 3:35.
+  // Kept as a filter so those older boards stay reachable.
+  { key: "15:25", label: "3:25 PM", legacy: true },
 ];
-// 3:00 and 3:25 are only 25 minutes apart, so being able to see a day's boards
-// together is the whole point of having both - hence the All option.
-const SLOT_FILTERS = [...SLOTS, { key: "both", label: "All" }];
+// The three afternoon boards sit within 35 minutes of each other, so seeing a
+// day's set together is the whole point of having them - hence the All option.
+const SLOT_FILTERS = [{ key: "both", label: "All" }, ...SLOTS];
 
 function slotLabel(slot) {
   return SLOTS.find((s) => s.key === slot)?.label || slot;
@@ -101,8 +105,8 @@ export default function OptionsHistory({ side }) {
 
       {!loading && snaps.length === 0 && !err && (
         <div className="oh-note">
-          No snapshots yet for this filter. Boards are saved automatically at <b>10:00</b>, <b>3:00</b> and
-          <b> 3:25</b> IST every trading day — history builds up from today onward.
+          No snapshots yet for this filter. Boards are saved automatically at <b>10:00</b>, <b>3:00</b>,
+          <b> 3:15</b> and <b>3:35</b> IST every trading day — history builds up from today onward.
         </div>
       )}
 
