@@ -57,6 +57,7 @@ def _blank() -> dict:
 
 
 _state: dict[str, dict] = {k: _blank() for k in COMMODITIES}
+_LIVE_UNDERLYING: dict[str, float] = {}      # commodity -> live futures mid
 _stop = threading.Event()
 
 
@@ -111,6 +112,32 @@ def _leg(d: dict | None) -> dict | None:
     }
 
 
+def _underlying_prices(sess: requests.Session, tok: str) -> dict:
+    """Live futures price per commodity, straight from the quote endpoint.
+
+    The option chain also returns a `last_price` for the underlying, but it is
+    STALE - on 13-Aug it read 7946 while the direct quote (and NSE, and IBKR
+    converted to rupees) all said 7800. That 146-point error fed both the
+    displayed future price and the ATM strike selection.
+    """
+    ids = [int(st["underlying_id"]) for st in _state.values() if st.get("underlying_id")]
+    if not ids:
+        return {}
+    r = sess.post(f"{_BASE}/marketfeed/quote", headers=_headers(tok),
+                  data=json.dumps({"MCX_COMM": ids}), timeout=20)
+    r.raise_for_status()
+    got = ((r.json() or {}).get("data") or {}).get("MCX_COMM") or {}
+    out = {}
+    for key, st in _state.items():
+        sid = str(st.get("underlying_id") or "")
+        q = got.get(sid) or {}
+        dep = q.get("depth") or {}
+        bid = (dep.get("buy") or [{}])[0].get("price")
+        ask = (dep.get("sell") or [{}])[0].get("price")
+        out[key] = round((bid + ask) / 2, 2) if (bid and ask) else (q.get("last_price") or None)
+    return out
+
+
 def _chain_rows(payload: dict) -> tuple[list, float | None]:
     data = (payload or {}).get("data") or {}
     oc = data.get("oc") or {}
@@ -149,7 +176,8 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     r.raise_for_status()
     data = (r.json() or {}).get("data") or {}
     oc = data.get("oc") or {}
-    spot = data.get("last_price")
+    # prefer the live quote; the chain's own last_price lags badly
+    spot = _LIVE_UNDERLYING.get(key) or data.get("last_price")
 
     rows = []
     for k, legs in oc.items():
@@ -202,6 +230,14 @@ def _loop() -> None:
 
                 tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
                                           settings.DHAN_TOTP_SECRET).access_token
+                # one quote call covers every underlying, so this costs a single
+                # request per round no matter how many commodities are tracked
+                if key == next(iter(COMMODITIES)):
+                    try:
+                        _LIVE_UNDERLYING.update(_underlying_prices(sess, tok))
+                    except Exception as e:  # noqa: BLE001
+                        log.debug("underlying quote failed: %s", e)
+                    _stop.wait(1.2)
                 _poll_once(sess, tok, key)
             except Exception as e:  # noqa: BLE001 — a bad poll must never kill the thread
                 st["ok"] = False
