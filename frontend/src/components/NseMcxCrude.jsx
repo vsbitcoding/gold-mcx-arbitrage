@@ -93,7 +93,7 @@ function Futures({ f, cfg }) {
   return (
     <div className="nm-head-right">
       <div className="nm-chip">
-        <div className="nm-chip-top">
+        <div className="nm-chip-id">
           <span className="nm-chip-name">NSE FUTURE</span>
           <span className="nm-chip-exp">{fmtDate(f?.nse?.expiry)}</span>
         </div>
@@ -101,12 +101,12 @@ function Futures({ f, cfg }) {
         <i>{num(f?.nse?.bid, cfg.futDec)} / {num(f?.nse?.ask, cfg.futDec)}</i>
       </div>
       <div className="nm-chip">
-        <div className="nm-chip-top">
+        <div className="nm-chip-id">
           <span className="nm-chip-name">MCX FUTURE</span>
           <span className="nm-chip-exp">{fmtDate(f?.mcx?.expiry)}</span>
         </div>
         <b>{num(f?.mcx?.mid, cfg.futDec)}</b>
-        <i>{f?.mcx?.symbol || ""}</i>
+        <i className="nm-chip-sym">{f?.mcx?.symbol || ""}</i>
       </div>
     </div>
   );
