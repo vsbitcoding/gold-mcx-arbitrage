@@ -36,8 +36,8 @@ _BASE = "https://api.dhan.co/v2"
 _SEGMENT = "MCX_COMM"
 # Dhan's floor is one option-chain call per 3 s. With two commodities that is
 # one call each per 8 s - still far faster than a desk reads a screen.
-_GAP_SECONDS = 4.0
-_ROUND_SECONDS = 8
+_GAP_SECONDS = 5.0     # raised from 4.0: the extra comparison chain tipped us into 429s
+_ROUND_SECONDS = 10
 
 COMMODITIES: dict[str, dict] = {
     "crude":  {"underlying": "CRUDEOIL",   "label": "MCX CRUDE OIL",   "decimals": 1},
@@ -237,7 +237,7 @@ def _loop() -> None:
                         _LIVE_UNDERLYING.update(_underlying_prices(sess, tok))
                     except Exception as e:  # noqa: BLE001
                         log.debug("underlying quote failed: %s", e)
-                    _stop.wait(1.2)
+                    _stop.wait(2.0)
                 _poll_once(sess, tok, key)
             except Exception as e:  # noqa: BLE001 — a bad poll must never kill the thread
                 st["ok"] = False
