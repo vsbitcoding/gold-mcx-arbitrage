@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # MCX crude option chain with IV + greeks, via Dhan's REST option-chain
     # endpoint (the WebSocket tick stream carries no IV). Reuses the live feed's
     # cached token; Dhan allows one call per 3 s so the service polls every 5 s.
+    # Angel One SmartAPI - the only source for NSE commodity (Dhan's API has no
+    # such segment, IBKR does not list the contracts). Also supplies real-time
+    # USD/INR. Credentials live in ~/.config/arbi-secrets/angelone.env.
+    ANGEL_ENABLED: bool = True
+    ANGEL_STATIC_IP: str = "34.180.20.239"   # Angel locks the key to this IP
     CRUDE_IV_ENABLED: bool = True
     IBKR_SPOTS_ENABLED: bool = True
     FINNHUB_ENABLED: bool = False

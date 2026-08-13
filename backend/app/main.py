@@ -14,6 +14,7 @@ from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
 from app.services.maintenance import start_in_background as start_maintenance
 from app.services.market_data import quote_store
+from app.services.angel_feed import start_in_background as start_angel_feed
 from app.services.crude_iv_service import start_in_background as start_crude_iv
 from app.services.ibkr_feed import start_in_background as start_ibkr_feed
 from app.services.premium_feed import start_in_background as start_premium_feed
@@ -84,6 +85,7 @@ async def startup() -> None:
     start_premium_feed()
     start_ibkr_feed()
     start_crude_iv()
+    start_angel_feed()
 
 
 @app.get("/api/health")
