@@ -40,12 +40,19 @@ def _fut_expiry(symbol: str | None) -> str | None:
 
 
 def _mid(leg: dict | None) -> float | None:
+    """Mid only when BOTH sides are quoted.
+
+    A one-sided quote makes the "mid" whatever that single side happens to be.
+    On 13-Aug natural gas, NSE showed a 0.05 bid with no ask on the 275 put
+    against MCX's 13.30, and this came out as a -13.25 "difference" that is not
+    a difference at all. The dashboard already refused those legs and drew a
+    dash; the API has to refuse them too, or the app prints exactly the number
+    the screen deliberately hides.
+    """
     if not leg:
         return None
     b, a = leg.get("bid"), leg.get("ask")
-    if b and a:
-        return round((b + a) / 2, 2)
-    return b or a or None
+    return round((b + a) / 2, 2) if (b and a) else None
 
 
 def _diff(nse: float | None, mcx: float | None) -> dict:

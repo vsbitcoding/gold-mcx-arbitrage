@@ -78,9 +78,15 @@ Header:  X-API-Key: <your key>          (same key you already use)
 ### Two rules you must follow when rendering
 
 **1. Never use `ltp` for the comparison.** A dead contract still prints its last
-trade from weeks ago. Use `mid`, and when `mid` is `null` show a dash. `traded:
-false` means the leg has neither bid nor ask — there is no market there at all.
-The ITM half of the NSE chain is usually like this; that is normal, not a bug.
+trade from weeks ago. Use `mid`, and when `mid` is `null` show a dash.
+
+`mid` is filled **only when both bid and ask are quoted**, and `diff` only when
+both exchanges pass that test. A one-sided quote would otherwise make the mid
+whatever that single side happens to be: NSE's 0.05 bid with no ask on the gas
+275 put against MCX's 13.30 is a -13.25 "difference" that does not exist.
+`traded: false` means the leg has neither bid nor ask; `traded: true` with a
+`null` mid means only one side is quoted. Both render as a dash. The ITM half
+of the NSE chain is usually like this — normal, not a bug.
 
 **2. Show both expiry dates.** The futures line up (crude 19-Aug, gas 26-Aug),
 so that difference is clean. The **options never do**:
