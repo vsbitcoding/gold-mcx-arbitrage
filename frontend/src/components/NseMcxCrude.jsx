@@ -110,18 +110,6 @@ export default function NseMcxCrude() {
         </div>
       </div>
 
-      <div className="intl-section-title nm-chain-title">
-        OPTION CHAIN
-        <em>
-          NSE {fmtDate(o.nse_expiry)} vs MCX {fmtDate(o.mcx_expiry)} · {rows.length} strikes
-          {!o.same_expiry && (
-            <b title="The MCX side carries more time value, so part of each premium difference is time, not a market gap.">
-              expiries differ — part of each difference is time value
-            </b>
-          )}
-        </em>
-      </div>
-
       <div className="cru-table-wrap">
         <table className="cru-table nm-table">
           <thead>
@@ -131,13 +119,19 @@ export default function NseMcxCrude() {
               <th colSpan={3} className="intl-put">PUT</th>
             </tr>
             <tr className="intl-chain-sub">
-              <th className="intl-call">NSE</th>
-              <th className="intl-call">MCX</th>
-              <th className="intl-call">Diff</th>
+              {/* the expiry sits on the column it belongs to, so the header row
+                  above the table could go and more strikes fit on screen */}
+              <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
+              <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+              <th className="intl-call" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
+                Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
+              </th>
               <th className="cru-strike" />
-              <th className="intl-put">Diff</th>
-              <th className="intl-put">MCX</th>
-              <th className="intl-put">NSE</th>
+              <th className="intl-put" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
+                Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
+              </th>
+              <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+              <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
             </tr>
           </thead>
           <tbody>

@@ -5200,11 +5200,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-fut-value.neg { color: var(--neg, #c62828); }
 .nm-fut-sub { margin-top: 3px; font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .nm-fut-diff { border-left: 3px solid var(--accent); }
-.nm-chain-title { margin: 10px 0 8px; }
-.nm-chain-title em b {
-  margin-left: 10px; padding: 2px 8px; border-radius: 5px; font-weight: 700;
-  background: rgba(201,162,39,.16); color: #a8801a; cursor: help;
+/* expiry printed under each exchange column instead of a header row above */
+.nm-table thead .intl-chain-sub th em {
+  display: block; font-style: normal; font-size: 9px; font-weight: 500;
+  color: var(--text-secondary); margin-top: 1px; letter-spacing: 0;
 }
+.nm-table thead .intl-chain-sub th em.nm-tv { color: #a8801a; cursor: help; }
 
 /* price cell: mid on top, bid/ask underneath */
 .nm-table td.nm-px { text-align: right; }
