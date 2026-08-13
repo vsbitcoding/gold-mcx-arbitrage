@@ -114,10 +114,10 @@ export default function NseMcxCrude() {
             <b>{num(f.mcx?.mid)}</b>
             <i>{f.mcx?.symbol || ""}</i>
           </div>
-          <span className={`intl-status ${live ? "on" : "off"}`}>
-            {live ? "● Live" : "○ Feed issue"}
-          </span>
         </div>
+        <span className={`intl-status nm-head-status ${live ? "on" : "off"}`}>
+          {live ? "● Live" : "○ Feed issue"}
+        </span>
       </div>
 
       <div className="cru-table-wrap">
