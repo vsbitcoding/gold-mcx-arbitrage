@@ -112,8 +112,11 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
         mr = mrows.get(r["strike"]) or {}
         out = {"strike": r["strike"], "atm": r["atm"]}
         for side in ("ce", "pe"):
-            n, m = _leg(r.get(side)), _leg(mr.get(side))
-            out[side] = {"nse": n, "mcx": m, "diff": _diff(n, m)}
+            # NOT `m` - that name holds the MCX chain for the rest of this
+            # function, and shadowing it blanked the contract symbol, both
+            # expiries and the feed status for an hour on 13-Aug.
+            n_leg, m_leg = _leg(r.get(side)), _leg(mr.get(side))
+            out[side] = {"nse": n_leg, "mcx": m_leg, "diff": _diff(n_leg, m_leg)}
         rows.append(out)
 
     return {
