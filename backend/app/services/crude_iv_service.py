@@ -198,7 +198,12 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
 
     # Optional second chain for whichever expiry a caller asked for.
     want = st.get("want_expiry")
-    if want and want != st["expiry"] and want in (st.get("expiries") or []):
+    if not want or want == st["expiry"]:
+        # Natural gas needs no alternate - NSE's 20-Aug is nearest to MCX's own
+        # front month. Clearing matters when the front rolls INTO the wanted
+        # date: the old alt would otherwise be served as live for ever.
+        st["alt_expiry"], st["alt_rows"], st["alt_ts"] = None, [], 0.0
+    elif want in (st.get("expiries") or []):
         time.sleep(_GAP_SECONDS)
         r2 = sess.post(f"{_BASE}/optionchain", headers=_headers(tok),
                        data=json.dumps({**body, "Expiry": want}), timeout=25)

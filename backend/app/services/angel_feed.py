@@ -1,4 +1,4 @@
-"""Angel One SmartAPI feed — NSE commodity (crude) + real-time USD/INR.
+"""Angel One SmartAPI feed — NSE commodity (crude, natural gas) + real-time USD/INR.
 
 Dhan and IBKR both refuse NSE's commodity segment: Dhan's API has no such
 exchange segment at all (their app shows it, the API cannot), and IBKR does not
@@ -8,9 +8,12 @@ liquid NSE currency future, replacing TwelveData's ~2-minute spot.
 
 Design constraints (same rules as every other feed here):
   * ZERO database writes - one in-memory dict the routes read.
-  * ONE request per poll. Angel accepts up to 50 tokens across segments in a
-    single quote call, so the crude future, 21 strikes both sides and USD/INR
-    all arrive together - no per-instrument fan-out.
+  * TWO requests per poll, NO MATTER how many commodities are tracked. Angel
+    accepts up to 50 tokens in a single quote call, so every future plus USD/INR
+    ride in one request; the 42 option legs of ONE commodity fill the second.
+    Chains therefore take turns - each refreshes every 6 s, which sits beside
+    the MCX side's ~5 s. Firing a call per commodity instead would have tripled
+    the request rate for no visible gain.
   * Session cached to disk so a redeploy reuses the token instead of logging in
     again (Angel throttles hard).
   * NEVER touches the historical endpoint. It allows roughly one call before
@@ -50,14 +53,31 @@ _POLL_SECONDS = 3
 _WINDOW = 10                 # strikes each side of the money -> 21 rows
 _MAX_TOKENS = 50             # Angel's per-request cap
 
+# NSE lists bullion and base metals too, but they are dead: bid 0 / ask 0 all
+# day against a months-old LTP (NSE gold printed 112578 while MCX traded
+# 152000). Only these two carry real two-way markets, so only these two are
+# worth comparing.
+COMMODITIES: dict[str, dict] = {
+    "crude":  {"name": "CRUDEOIL",   "label": "NSE CRUDE OIL"},
+    "natgas": {"name": "NATURALGAS", "label": "NSE NATURAL GAS"},
+}
+
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])}
 
+
+def _blank() -> dict:
+    return {
+        "future": None,      # {symbol, expiry, bid, ask, ltp, volume, oi}
+        "options": [],       # [{strike, atm, ce:{...}, pe:{...}}]
+        "atm": None,
+        "opt_expiry": None,
+        "chain_ts": 0.0,     # the chain's own clock - it updates every other tick
+    }
+
+
 _state: dict = {
-    "future": None,          # {symbol, expiry, bid, ask, ltp, volume, oi}
-    "options": [],           # [{strike, ce:{...}, pe:{...}}]
-    "atm": None,
-    "opt_expiry": None,
+    "c": {k: _blank() for k in COMMODITIES},
     "usdinr": None,          # {symbol, expiry, bid, ask, ltp, volume, oi}
     "ts": 0.0,
     "ok": False,
@@ -160,34 +180,36 @@ def _load_master() -> list:
     return json.loads(raw)
 
 
-def _resolve() -> dict:
-    """Nearest NSE crude future, its option chain, and the front USD/INR future."""
-    data = _load_master()
-    today = date.today()
-
-    nco = [x for x in data if x.get("exch_seg") == "NCO" and x.get("name") == "CRUDEOIL"]
+def _resolve_commodity(data: list, name: str, today: date) -> dict:
+    """Nearest NSE future for `name` plus its nearest option chain."""
+    nco = [x for x in data if x.get("exch_seg") == "NCO" and x.get("name") == name]
     futs = sorted([x for x in nco if x.get("instrumenttype", "").startswith("FUT")
                    and _expiry_date(x.get("expiry")) >= today],
                   key=lambda x: _expiry_date(x.get("expiry")))
-    opts = [x for x in nco if x.get("instrumenttype") == "OPTFUT"
+    opts = [x for x in nco if x.get("instrumenttype") in ("OPTFUT", "OPTBLN")
             and _expiry_date(x.get("expiry")) >= today]
     opt_exp = min((_expiry_date(x.get("expiry")) for x in opts), default=None)
     chain = [x for x in opts if _expiry_date(x.get("expiry")) == opt_exp]
+    return {"future": futs[0] if futs else None, "chain": chain, "opt_expiry": opt_exp}
+
+
+def _resolve() -> dict:
+    """Every tracked NSE commodity plus the front USD/INR future."""
+    data = _load_master()
+    today = date.today()
+
+    out = {"c": {k: _resolve_commodity(data, cfg["name"], today)
+                 for k, cfg in COMMODITIES.items()}}
 
     cds = sorted([x for x in data if x.get("exch_seg") == "CDS" and x.get("name") == "USDINR"
                   and x.get("instrumenttype", "").startswith("FUT")
                   and _expiry_date(x.get("expiry")) >= today],
                  key=lambda x: _expiry_date(x.get("expiry")))
     # skip the weekly stubs - the monthly is where the volume is
-    usdinr = next((x for x in cds if "FUT" in x.get("symbol", "") and
-                   not x.get("symbol", "").replace("USDINR", "")[:5].isdigit()), cds[0] if cds else None)
-
-    return {
-        "future": futs[0] if futs else None,
-        "chain": chain,
-        "opt_expiry": opt_exp,
-        "usdinr": usdinr,
-    }
+    out["usdinr"] = next((x for x in cds if "FUT" in x.get("symbol", "") and
+                          not x.get("symbol", "").replace("USDINR", "")[:5].isdigit()),
+                         cds[0] if cds else None)
+    return out
 
 
 # ── polling ──────────────────────────────────────────────────────────────
@@ -211,53 +233,61 @@ def _leg(row: dict | None) -> dict | None:
     }
 
 
-def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict) -> None:
-    fut, chain, usd = inst["future"], inst["chain"], inst["usdinr"]
-    if not fut:
-        raise RuntimeError("no NSE crude future resolved")
-
-    # 1) future + USD/INR first, so the ATM strike is known
-    base_tokens = {"NCO": [fut["token"]]}
-    if usd:
-        base_tokens["CDS"] = [usd["token"]]
+def _quote(sess: requests.Session, c: dict, jwt: str, tokens: dict) -> dict:
     r = sess.post(f"{_BASE}/rest/secure/angelbroking/market/v1/quote",
                   headers=_headers(c, jwt),
-                  json={"mode": "FULL", "exchangeTokens": base_tokens}, timeout=25)
+                  json={"mode": "FULL", "exchangeTokens": tokens}, timeout=25)
     if r.status_code == 401:
         raise PermissionError("angel session expired")
     d = r.json()
     if not d.get("status"):
         raise RuntimeError(f"quote failed: {d.get('message')}")
-    fetched = {x["symbolToken"]: x for x in (d.get("data") or {}).get("fetched", [])}
+    return {x["symbolToken"]: x for x in (d.get("data") or {}).get("fetched", [])}
 
-    frow = _leg(fetched.get(fut["token"]))
-    fmid = (frow or {}).get("mid") or (frow or {}).get("ltp")
-    _state["future"] = {**(frow or {}), "symbol": fut["symbol"],
-                        "expiry": _expiry_date(fut.get("expiry")).isoformat()}
+
+def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> None:
+    """One round: every future and USD/INR, then ONE commodity's option chain."""
+    # ── call 1: all futures + USD/INR, so every ATM is known ──────────────
+    nco = [inst["c"][k]["future"]["token"] for k in COMMODITIES
+           if inst["c"][k].get("future")]
+    if not nco:
+        raise RuntimeError("no NSE commodity future resolved")
+    tokens = {"NCO": nco}
+    usd = inst.get("usdinr")
+    if usd:
+        tokens["CDS"] = [usd["token"]]
+    fetched = _quote(sess, c, jwt, tokens)
+
+    mids: dict[str, float | None] = {}
+    for key in COMMODITIES:
+        fut = inst["c"][key].get("future")
+        if not fut:
+            continue
+        frow = _leg(fetched.get(fut["token"]))
+        mids[key] = (frow or {}).get("mid") or (frow or {}).get("ltp")
+        _state["c"][key]["future"] = {**(frow or {}), "symbol": fut["symbol"],
+                                      "expiry": _expiry_date(fut.get("expiry")).isoformat()}
     if usd and usd["token"] in fetched:
         u = _leg(fetched[usd["token"]])
         _state["usdinr"] = {**u, "symbol": usd["symbol"],
                             "expiry": _expiry_date(usd.get("expiry")).isoformat()}
 
-    # 2) the 21 strikes around the money, both sides, in one more call
+    # ── call 2: the 21 strikes around the money for whichever chain's turn ─
+    chain, fmid = inst["c"][turn].get("chain"), mids.get(turn)
     if fmid and chain:
         def strike_of(x):
             return float(x.get("strike", 0)) / 100.0
+
         strikes = sorted({strike_of(x) for x in chain})
         atm = min(strikes, key=lambda s: abs(s - fmid))
         window = sorted(sorted(strikes, key=lambda s: abs(s - atm))[: _WINDOW * 2 + 1])
-        by = {}
+        by: dict[float, dict] = {}
         for x in chain:
             k = strike_of(x)
             if k in window:
                 by.setdefault(k, {})[x.get("symbol", "")[-2:]] = x
-        tokens = [x["token"] for legs in by.values() for x in legs.values()][: _MAX_TOKENS]
-        r2 = sess.post(f"{_BASE}/rest/secure/angelbroking/market/v1/quote",
-                       headers=_headers(c, jwt),
-                       json={"mode": "FULL", "exchangeTokens": {"NCO": tokens}}, timeout=25)
-        d2 = r2.json()
-        got = {x["symbolToken"]: x for x in (d2.get("data") or {}).get("fetched", [])} \
-            if d2.get("status") else {}
+        toks = [x["token"] for legs in by.values() for x in legs.values()][: _MAX_TOKENS]
+        got = _quote(sess, c, jwt, {"NCO": toks})
         rows = []
         for k in window:
             legs = by.get(k, {})
@@ -268,8 +298,10 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict) -> None:
                 "ce": _leg(got.get(ce["token"])) if ce else None,
                 "pe": _leg(got.get(pe["token"])) if pe else None,
             })
-        _state["options"], _state["atm"] = rows, atm
-        _state["opt_expiry"] = inst["opt_expiry"].isoformat() if inst["opt_expiry"] else None
+        st = _state["c"][turn]
+        st["options"], st["atm"], st["chain_ts"] = rows, atm, time.time()
+        exp = inst["c"][turn]["opt_expiry"]
+        st["opt_expiry"] = exp.isoformat() if exp else None
 
     _state.update({"ts": time.time(), "ok": True, "error": None})
 
@@ -282,20 +314,26 @@ def _loop() -> None:
         log.warning("Angel feed: credentials missing (%s) - disabled", _SECRETS)
         return
 
-    jwt, inst, resolved_at = None, None, 0.0
+    order = list(COMMODITIES)
+    jwt, inst, resolved_at, turn = None, None, 0.0, 0
     while not _stop.is_set():
         try:
             if inst is None or (time.time() - resolved_at) > _MASTER_TTL:
                 inst = _resolve()
                 resolved_at = time.time()
-                f = inst["future"]
-                log.info("Angel: NSE crude %s (exp %s), chain exp %s, %d strikes; USD/INR %s",
-                         f and f.get("symbol"), f and _expiry_date(f.get("expiry")),
-                         inst["opt_expiry"], len({x.get("strike") for x in inst["chain"]}),
+                for k in COMMODITIES:
+                    r = inst["c"][k]
+                    f = r.get("future")
+                    log.info("Angel: NSE %s %s (exp %s), chain exp %s, %d strikes",
+                             k, f and f.get("symbol"),
+                             f and _expiry_date(f.get("expiry")), r["opt_expiry"],
+                             len({x.get("strike") for x in r["chain"]}))
+                log.info("Angel: USD/INR %s",
                          inst["usdinr"] and inst["usdinr"].get("symbol"))
             if jwt is None:
                 jwt = _session_token(sess, c)
-            _poll(sess, c, jwt, inst)
+            _poll(sess, c, jwt, inst, order[turn % len(order)])
+            turn += 1
         except PermissionError:
             log.info("Angel: session expired, logging in again")
             jwt = None
@@ -310,16 +348,24 @@ def _loop() -> None:
         _stop.wait(_POLL_SECONDS)
 
 
-def get_data() -> dict:
+def get_data(commodity: str = "crude") -> dict:
     now = time.time()
+    key = commodity if commodity in _state["c"] else "crude"
+    st = _state["c"][key]
     return {
         "source": "Angel One (NSE)",
-        "future": _state["future"],
-        "options": _state["options"],
-        "atm": _state["atm"],
-        "opt_expiry": _state["opt_expiry"],
+        "commodity": key,
+        "label": COMMODITIES[key]["label"],
+        "future": st["future"],
+        "options": st["options"],
+        "atm": st["atm"],
+        "opt_expiry": st["opt_expiry"],
         "usdinr": _state["usdinr"],
+        # `age` is the futures clock (every 3 s); the chain takes turns, so it
+        # gets its own - a screen that showed one number for both would call a
+        # stale chain fresh.
         "age": round(now - _state["ts"], 1) if _state["ts"] else None,
+        "chain_age": round(now - st["chain_ts"], 1) if st["chain_ts"] else None,
         "ok": _state["ok"],
         "error": _state["error"],
     }
@@ -330,4 +376,5 @@ def start_in_background() -> None:
         log.info("Angel feed disabled")
         return
     threading.Thread(target=_loop, daemon=True, name="angel-feed").start()
-    log.info("Angel feed starting (NSE crude + USD/INR, %ss poll, in-memory)", _POLL_SECONDS)
+    log.info("Angel feed starting (NSE %s + USD/INR, %ss poll, in-memory)",
+             "/".join(COMMODITIES), _POLL_SECONDS)

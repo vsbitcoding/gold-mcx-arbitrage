@@ -2,16 +2,22 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
-// Crude Oil — NSE vs MCX, future and option chain side by side, with the
-// difference in rupees AND percent on every leg (client, 13-Aug).
+// NSE vs MCX — future and option chain side by side, with the difference in
+// rupees AND percent on every leg (client, 13-Aug). Crude oil first, natural
+// gas added the same day; those are the only two NSE commodities with a real
+// two-way market.
 //
 // Two honesty rules baked into the display:
 //   * Only bid/ask are compared. A dead contract still prints an old LTP, and
 //     on NSE that can be months stale, so an untraded leg shows "no market"
 //     rather than a number that invites a wrong conclusion.
-//   * Both expiry dates are always on screen. The futures share one, so that
-//     difference is clean; the options never do, so part of the premium gap is
-//     time value and the header says so.
+//   * Both expiry dates are always on screen. The futures share one on both
+//     commodities, so that difference is clean; the options never do, so part
+//     of the premium gap is time value and the column header says so.
+//
+// History is the same board, stored whole at 10:00, 12:00 and 15:00 IST — the
+// client picked the full table over an ATM-only summary. Nobody sells NSE
+// commodity history, so it can only build forward from the first capture.
 const num = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
 const signed = (v, d = 2) =>
   v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d);
@@ -23,6 +29,17 @@ const pct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs
 // in the whole column. Wide two-sided markets are shown but marked, because the
 // mid between 562 and 1078 is not a price anyone can trade.
 const WIDE_SPREAD = 0.25;
+
+const PRODUCTS = [
+  { key: "crude", label: "Crude Oil", title: "Crude Oil — NSE vs MCX", futDec: 1, strikeDec: 0 },
+  { key: "natgas", label: "Natural Gas", title: "Natural Gas — NSE vs MCX", futDec: 2, strikeDec: 0 },
+];
+const SLOTS = [
+  { key: "all", label: "All" },
+  { key: "10:00", label: "10:00 AM" },
+  { key: "12:00", label: "12:00 PM" },
+  { key: "15:00", label: "3:00 PM" },
+];
 
 function quality(leg) {
   if (!leg || leg.bid == null || leg.ask == null) return { ok: false, wide: false };
@@ -72,101 +89,216 @@ const fmtDate = (s) => {
   return d ? `${d}-${m}-${y}` : s;
 };
 
+function Futures({ f, cfg }) {
+  return (
+    <div className="nm-head-right">
+      <div className="nm-chip">
+        <span className="nm-chip-name">NSE FUTURE<em>{fmtDate(f?.nse?.expiry)}</em></span>
+        <b>{num(f?.nse?.mid, cfg.futDec)}</b>
+        <i>{num(f?.nse?.bid, cfg.futDec)} / {num(f?.nse?.ask, cfg.futDec)}</i>
+      </div>
+      <div className="nm-chip">
+        <span className="nm-chip-name">MCX FUTURE<em>{fmtDate(f?.mcx?.expiry)}</em></span>
+        <b>{num(f?.mcx?.mid, cfg.futDec)}</b>
+        <i>{f?.mcx?.symbol || ""}</i>
+      </div>
+    </div>
+  );
+}
+
+function ChainTable({ o, cfg }) {
+  const rows = o?.rows || [];
+  if (!rows.length) return <div className="oh-note oh-slim">No chain rows.</div>;
+  return (
+    <div className="cru-table-wrap">
+      <table className="cru-table nm-table">
+        <colgroup>
+          <col className="nm-c-px" /><col className="nm-c-px" /><col className="nm-c-diff" />
+          <col className="nm-c-strike" />
+          <col className="nm-c-diff" /><col className="nm-c-px" /><col className="nm-c-px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th colSpan={3} className="intl-call">CALL</th>
+            <th className="cru-strike">STRIKE</th>
+            <th colSpan={3} className="intl-put">PUT</th>
+          </tr>
+          <tr className="intl-chain-sub">
+            {/* the expiry sits on the column it belongs to, so the header row
+                above the table could go and more strikes fit on screen */}
+            <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
+            <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+            <th className="intl-call" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
+              Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
+            </th>
+            <th className="cru-strike" />
+            <th className="intl-put" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
+              Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
+            </th>
+            <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+            <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.strike} className={r.atm ? "cru-atm" : ""}>
+              <Leg leg={r.ce?.nse} />
+              <Leg leg={r.ce?.mcx} />
+              <DiffCell nse={r.ce?.nse} mcx={r.ce?.mcx} />
+              <td className="cru-strike">
+                {num(r.strike, cfg.strikeDec)}
+                {r.atm && <span className="atm-badge">ATM</span>}
+              </td>
+              <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} />
+              <Leg leg={r.pe?.mcx} />
+              <Leg leg={r.pe?.nse} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const slotLabel = (s) => (SLOTS.find((x) => x.key === s) || {}).label || s;
+
 export default function NseMcxCrude() {
+  const [product, setProduct] = useState(() => {
+    try {
+      const p = localStorage.getItem("arbi_nsemcx_product");
+      return PRODUCTS.some((x) => x.key === p) ? p : "crude";
+    } catch { return "crude"; }
+  });
+  const [view, setView] = useState("live");
+  const [slot, setSlot] = useState("all");
+  const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
+  const [hist, setHist] = useState(null);
   const [err, setErr] = useState(null);
   const timer = useRef(null);
 
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_product", product); } catch {} }, [product]);
+
+  // Live: poll while visible. History: fetch once per control change - the rows
+  // never change after they are written, so polling them would be pure waste.
   useEffect(() => {
     let alive = true;
+    clearInterval(timer.current);
+    setErr(null);
+    if (view !== "live") { setHist(null); return () => { alive = false; }; }
+    setD(null);
     async function load() {
       if (document.hidden) return;
       try {
-        const r = await api.nseMcxCrude();
+        const r = await api.nseMcx(product);
         if (alive) { setD(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, []);
+  }, [product, view]);
 
-  if (err) return <div className="settings-banner danger">⚠ {err}</div>;
-  if (!d) return <div className="empty-state">Loading NSE vs MCX crude…</div>;
+  useEffect(() => {
+    if (view !== "history") return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api.nseMcxHistory({ commodity: product, slot, days });
+        if (alive) { setHist(r); setErr(null); }
+      } catch (e) { if (alive) setErr(e.message); }
+    })();
+    return () => { alive = false; };
+  }, [view, product, slot, days]);
 
-  const f = d.future || {};
-  const o = d.options || {};
-  const rows = o.rows || [];
-  const live = d.nse?.ok && d.mcx?.ok;
+  const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
+  const live = d?.nse?.ok && d?.mcx?.ok;
+
+  const head = (
+    <div className="nm-head">
+      <div className="nm-head-left">
+        <h2>{cfg.title}</h2>
+        <div className="oh-group" role="tablist" aria-label="Commodity">
+          {PRODUCTS.map((p) => (
+            <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
+              className={`oh-chip ${product === p.key ? "on" : ""}`}
+              onClick={() => setProduct(p.key)}>{p.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {view === "live" ? <Futures f={d?.future} cfg={cfg} /> : <div />}
+
+      <div className="nm-head-end">
+        <div className="oh-group" role="tablist" aria-label="View">
+          {[["live", "Live"], ["history", "History"]].map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={view === k}
+              className={`oh-chip ${view === k ? "on" : ""}`}
+              onClick={() => setView(k)}>{l}</button>
+          ))}
+        </div>
+        {view === "live" && (
+          <span className={`intl-status ${live ? "on" : "off"}`}>
+            {live ? "● Live" : "○ Feed issue"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  if (err) return <div className="cru-page">{head}<div className="settings-banner danger">⚠ {err}</div></div>;
+
+  if (view === "history") {
+    const snaps = hist?.snapshots || [];
+    return (
+      <div className="cru-page">
+        {head}
+        <div className="oh-controls nm-hist-controls">
+          <div className="oh-group" role="tablist" aria-label="Time">
+            {SLOTS.map((s) => (
+              <button key={s.key} type="button" role="tab" aria-selected={slot === s.key}
+                className={`oh-chip ${slot === s.key ? "on" : ""}`}
+                onClick={() => setSlot(s.key)}>{s.label}</button>
+            ))}
+          </div>
+          <select className="oh-weeks" value={days} title="How many past days"
+            onChange={(e) => setDays(Number(e.target.value))}>
+            {[3, 7, 14, 30].map((n) => <option key={n} value={n}>Last {n} days</option>)}
+          </select>
+        </div>
+
+        {!hist && <div className="empty-state">Loading history…</div>}
+        {hist && snaps.length === 0 && (
+          <div className="oh-note">
+            No saved boards yet. The full table is stored automatically at <b>10:00 AM</b>,
+            <b> 12:00 PM</b> and <b>3:00 PM</b> IST every trading day. No exchange sells NSE
+            commodity history, so this builds up from the first capture onward.
+          </div>
+        )}
+        {snaps.map((s, i) => (
+          <section key={s.snap_date + s.slot}
+            className={`oh-board ${s.snap_date !== snaps[i - 1]?.snap_date ? "oh-day-start" : ""}`}>
+            <div className="oh-board-head">
+              <span className="oh-board-date">{fmtDate(s.snap_date)}</span>
+              <span className="oh-board-dot">•</span>
+              <span className="oh-board-slot" data-slot={s.slot}>{slotLabel(s.slot)}</span>
+            </div>
+            <div className="nm-hist-futs">
+              <Futures f={s.board?.future} cfg={cfg} />
+            </div>
+            <ChainTable o={s.board?.options} cfg={cfg} />
+          </section>
+        ))}
+      </div>
+    );
+  }
+
+  if (!d) return <div className="cru-page">{head}<div className="empty-state">Loading {cfg.label.toLowerCase()}…</div></div>;
 
   return (
     <div className="cru-page">
-      <div className="nm-head">
-        <h2>Crude Oil — NSE vs MCX</h2>
-        <div className="nm-head-right">
-          <div className="nm-chip">
-            <span className="nm-chip-name">NSE FUTURE<em>{fmtDate(f.nse?.expiry)}</em></span>
-            <b>{num(f.nse?.mid)}</b>
-            <i>{num(f.nse?.bid)} / {num(f.nse?.ask)}</i>
-          </div>
-          <div className="nm-chip">
-            <span className="nm-chip-name">MCX FUTURE<em>{fmtDate(f.mcx?.expiry)}</em></span>
-            <b>{num(f.mcx?.mid)}</b>
-            <i>{f.mcx?.symbol || ""}</i>
-          </div>
-        </div>
-        <span className={`intl-status nm-head-status ${live ? "on" : "off"}`}>
-          {live ? "● Live" : "○ Feed issue"}
-        </span>
-      </div>
-
-      <div className="cru-table-wrap">
-        <table className="cru-table nm-table">
-          <colgroup>
-            <col className="nm-c-px" /><col className="nm-c-px" /><col className="nm-c-diff" />
-            <col className="nm-c-strike" />
-            <col className="nm-c-diff" /><col className="nm-c-px" /><col className="nm-c-px" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th colSpan={3} className="intl-call">CALL</th>
-              <th className="cru-strike">STRIKE</th>
-              <th colSpan={3} className="intl-put">PUT</th>
-            </tr>
-            <tr className="intl-chain-sub">
-              {/* the expiry sits on the column it belongs to, so the header row
-                  above the table could go and more strikes fit on screen */}
-              <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
-              <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
-              <th className="intl-call" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
-                Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
-              </th>
-              <th className="cru-strike" />
-              <th className="intl-put" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
-                Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
-              </th>
-              <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
-              <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.strike} className={r.atm ? "cru-atm" : ""}>
-                <Leg leg={r.ce?.nse} />
-                <Leg leg={r.ce?.mcx} />
-                <DiffCell nse={r.ce?.nse} mcx={r.ce?.mcx} />
-                <td className="cru-strike">
-                  {num(r.strike, 0)}
-                  {r.atm && <span className="atm-badge">ATM</span>}
-                </td>
-                <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} />
-                <Leg leg={r.pe?.mcx} />
-                <Leg leg={r.pe?.nse} />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {head}
+      <ChainTable o={d.options} cfg={cfg} />
     </div>
   );
 }

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from pydantic import BaseModel
 
 from app.security import require_api_key, verify_api_key_value
-from app.services import crude_iv_service, extra_instruments, fcm_service, goldopt_service, ibkr_feed, mcxccl_service, metals_service, options_history_service, options_service, othercomm_service, premium_feed, price_service, signal_service
+from app.services import crude_iv_service, extra_instruments, fcm_service, goldopt_service, ibkr_feed, mcxccl_service, metals_service, nse_mcx_history, options_history_service, options_service, othercomm_service, premium_feed, price_service, signal_service
 from app.services.dhan_feed import is_market_open
 from app.services.market_data import quote_store
 from app.services.spread_engine import compute_all
@@ -881,21 +881,54 @@ def public_crude_iv(
     return _payload(window, commodity)
 
 
-@router.get("/nse-mcx-crude")
-def public_nse_mcx_crude(
+@router.get("/nse-mcx")
+def public_nse_mcx(
+    commodity: str = Query("crude", pattern="^(crude|natgas)$", description="crude | natgas"),
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
     _key: str = Depends(require_api_key),
 ):
-    """NSE vs MCX crude - future and option chain side by side, with the
-    difference in rupees and percent on every leg.
+    """NSE vs MCX - future and option chain side by side, with the difference in
+    rupees and percent on every leg. Crude oil and natural gas; those are the
+    only NSE commodities with a real two-way market.
 
-    Futures share an expiry so that difference is clean. Option expiries do NOT
-    match (MCX 17-Sep vs NSE 10-Sep), so both dates are returned and part of any
-    premium gap is time value. `traded` is false where a leg has no bid and no
-    ask - ignore its LTP, dead NSE contracts still print stale prices.
+    Futures share an expiry on both, so that difference is clean. Option
+    expiries do NOT match (crude MCX 17-Sep vs NSE 10-Sep, gas MCX 24-Aug vs NSE
+    20-Aug), so both dates are returned and part of any premium gap is time
+    value. `traded` is false where a leg has no bid and no ask - ignore its LTP,
+    dead contracts still print stale prices.
     """
-    from app.routes.nse_mcx import _payload
-    return _payload(window)
+    from app.routes.nse_mcx import payload
+    return payload(commodity, window)
+
+
+@router.get("/nse-mcx-crude")
+def public_nse_mcx_crude(
+    commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+    window: int = Query(10, ge=1, le=25),
+    _key: str = Depends(require_api_key),
+):
+    """Kept working because the app already calls this path. Same response as
+    /nse-mcx - prefer that one for new work."""
+    from app.routes.nse_mcx import payload
+    return payload(commodity, window)
+
+
+@router.get("/nse-mcx/history")
+def public_nse_mcx_history(
+    commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+    slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),
+    days: int = Query(7, ge=1, le=60, description="how many snapshot days back"),
+    date: str | None = Query(None, description="YYYY-MM-DD => that day only"),
+    _key: str = Depends(require_api_key),
+):
+    """Stored 10:00 / 12:00 / 15:00 IST boards, newest first.
+
+    Each snapshot's `board` has exactly the /nse-mcx shape, so the same renderer
+    works for both. Data is static once written - fetch on demand, do not poll.
+    No exchange sells NSE-commodity history, so nothing before our first capture
+    exists and never will.
+    """
+    return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date)
 
 
 @router.get("/premium-inputs")

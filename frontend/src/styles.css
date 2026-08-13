@@ -5193,6 +5193,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-head h2 { margin: 0; font-size: 19px; font-weight: 800; }
 .nm-head-right { display: flex; align-items: center; gap: 12px; justify-self: center; }
 .nm-head-status { justify-self: end; }
+/* title with its commodity switch under it on the left, Live/History and the
+   status on the right - the futures keep the centre column to themselves */
+.nm-head-left { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.nm-head-end { display: flex; align-items: center; justify-content: flex-end; gap: 12px; justify-self: end; }
+
+/* history: one stored board per section, newest first */
+.nm-hist-controls { margin-bottom: 14px; }
+.nm-hist-futs { display: flex; justify-content: center; margin: 10px 0 12px; }
+.nm-hist-futs .nm-head-right { justify-self: auto; }
 .nm-chip {
   display: flex; align-items: center; gap: 12px;
   background: var(--bg-surface); border: 1px solid var(--border);

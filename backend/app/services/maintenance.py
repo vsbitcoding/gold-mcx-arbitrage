@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import activity, extra_instruments, mcxccl_service, options_history_service, span_service
+from app.services import activity, extra_instruments, mcxccl_service, nse_mcx_history, options_history_service, span_service
 
 log = logging.getLogger("maintenance")
 
@@ -123,6 +123,7 @@ def _loop() -> None:
     last_span_refresh: str | None = None
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {"10:00": None, "15:00": None, "15:25": None}
+    last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -142,9 +143,11 @@ def _loop() -> None:
                 pruned = _prune_history()
                 act_pruned = _prune_activity()
                 snap_pruned = options_history_service.prune()
+                nm_pruned = nse_mcx_history.prune()
                 log.info(
-                    "Nightly prune: %d history rows, %d activity rows, %d option snapshots.",
-                    pruned, act_pruned, snap_pruned,
+                    "Nightly prune: %d history rows, %d activity rows, %d option snapshots, "
+                    "%d NSE/MCX snapshots.",
+                    pruned, act_pruned, snap_pruned, nm_pruned,
                 )
                 if pruned > 0:
                     _vacuum()
@@ -167,6 +170,21 @@ def _loop() -> None:
                     except Exception as e:
                         log.warning("Options snapshot %s raised: %s", _slot, e)
                     last_optsnap[_slot] = today_str
+
+            # NSE-vs-MCX board snapshot (10:00, 12:00 & 15:00 IST) — the client
+            # wants the whole table stored so the drift between the two
+            # exchanges can be read back later. No exchange sells NSE-commodity
+            # history, so a missed capture is gone for good; the service still
+            # refuses to store a cold or mislabelled board.
+            for _slot in nse_mcx_history.SLOTS:
+                _h, _m = nse_mcx_history.SLOTS[_slot]
+                if last_nmsnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
+                    try:
+                        log.info("NSE/MCX snapshot %s: %s", _slot,
+                                 nse_mcx_history.snapshot_all(_slot))
+                    except Exception as e:
+                        log.warning("NSE/MCX snapshot %s raised: %s", _slot, e)
+                    last_nmsnap[_slot] = today_str
 
             # Daily SPAN margin refresh — once per IST day at 08:30 IST (before market open).
             if last_span_refresh != today_str and (now.hour, now.minute) >= (8, 30):

@@ -283,6 +283,31 @@ class OptionsSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class NseMcxSnapshot(Base):
+    """Thrice-daily (10:00, 12:00 & 15:00 IST) snapshot of the NSE-vs-MCX
+    comparison board — the client asked to track how the same strike drifts
+    apart through the day. One row per (snap_date, slot, commodity); the client
+    chose the WHOLE table, so payload_json holds every strike with both
+    exchanges' bid/ask and the difference, exactly as the live screen shows it.
+    ~6 small rows per trading day (2 commodities × 3 slots), pruned after ~370
+    days. NSE commodity has no historical API anywhere, so this file is the only
+    record that will ever exist — it can only build forward from today.
+    """
+    __tablename__ = "nse_mcx_snapshot"
+
+    id = Column(Integer, primary_key=True)
+    snap_date = Column(String(10), nullable=False, index=True)   # 'YYYY-MM-DD' IST
+    slot = Column(String(5), nullable=False, index=True)         # '10:00' | '12:00' | '15:00'
+    commodity = Column(String(10), nullable=False, index=True)   # 'crude' | 'natgas'
+    weekday = Column(Integer, nullable=False, index=True)        # 0=Mon .. 6=Sun (IST, set at write)
+    nse_future = Column(Float, nullable=True)
+    mcx_future = Column(Float, nullable=True)
+    future_diff = Column(Float, nullable=True)                   # NSE − MCX, rupees
+    atm = Column(Float, nullable=True)
+    payload_json = Column(Text, nullable=False)                  # the full board, live shape
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class BullionPdf(Base):
     """The latest scraped 'Warehouse & Vault Wise Stock Position' PDF (~47 KB),
     kept so the dashboard can View/Download it from our own server (no Akamai or
@@ -303,3 +328,5 @@ class BullionPdf(Base):
 Index("ix_bullion_date_comm", BullionStock.as_on_date, BullionStock.commodity, unique=True)
 Index("ix_dailyspread_date_pair", DailySpread.snap_date, DailySpread.pair_name, unique=True)
 Index("ix_optsnap_date_slot", OptionsSnapshot.snap_date, OptionsSnapshot.slot, unique=True)
+Index("ix_nmsnap_date_slot_comm", NseMcxSnapshot.snap_date, NseMcxSnapshot.slot,
+      NseMcxSnapshot.commodity, unique=True)
