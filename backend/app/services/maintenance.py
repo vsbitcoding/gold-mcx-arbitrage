@@ -180,11 +180,20 @@ def _loop() -> None:
                 _h, _m = nse_mcx_history.SLOTS[_slot]
                 if last_nmsnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
                     try:
-                        log.info("NSE/MCX snapshot %s: %s", _slot,
-                                 nse_mcx_history.snapshot_all(_slot))
+                        res = nse_mcx_history.snapshot_all(_slot)
+                        log.info("NSE/MCX snapshot %s: %s", _slot, res)
+                        # A restart INSIDE the capture window leaves the feeds
+                        # cold for a few seconds. Retiring the slot on that
+                        # first tick would burn it for the whole day, so retry
+                        # next minute while the only failures are transient.
+                        # The service itself stops us at the window edge by
+                        # answering "outside capture window", which is final.
+                        if not any(v.startswith("no live") or v == "busy"
+                                   for v in res.values()):
+                            last_nmsnap[_slot] = today_str
                     except Exception as e:
                         log.warning("NSE/MCX snapshot %s raised: %s", _slot, e)
-                    last_nmsnap[_slot] = today_str
+                        last_nmsnap[_slot] = today_str
 
             # Daily SPAN margin refresh — once per IST day at 08:30 IST (before market open).
             if last_span_refresh != today_str and (now.hour, now.minute) >= (8, 30):
