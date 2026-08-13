@@ -881,6 +881,23 @@ def public_crude_iv(
     return _payload(window, commodity)
 
 
+@router.get("/nse-mcx-crude")
+def public_nse_mcx_crude(
+    window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
+    _key: str = Depends(require_api_key),
+):
+    """NSE vs MCX crude - future and option chain side by side, with the
+    difference in rupees and percent on every leg.
+
+    Futures share an expiry so that difference is clean. Option expiries do NOT
+    match (MCX 17-Sep vs NSE 10-Sep), so both dates are returned and part of any
+    premium gap is time value. `traded` is false where a leg has no bid and no
+    ask - ignore its LTP, dead NSE contracts still print stale prices.
+    """
+    from app.routes.nse_mcx import _payload
+    return _payload(window)
+
+
 @router.get("/premium-inputs")
 def public_premium_inputs(_key: str = Depends(require_api_key)):
     """Live premium-calc inputs: XAU/USD (Deriv), USD/INR (TwelveData spot), MCX gold (Dhan)."""
