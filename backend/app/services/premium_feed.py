@@ -232,6 +232,39 @@ def _usdinr_thread() -> None:
             break
 
 
+# ── which USD/INR the premium maths gets ─────────────────────────────────
+# TwelveData's free tier answers every two minutes, and the Premium tab
+# multiplies a live gold price by whatever it last said - a rate 107 seconds
+# old was quietly putting tens of rupees per ten grams into every GST card.
+# Angel carries USDINR as an NSE currency future with a real two-way market,
+# already ticking every three seconds inside the NSE-vs-MCX feed, so it costs
+# no extra request. TwelveData stays as the fallback for when Angel is down or
+# between sessions.
+#
+# The two are not the same instrument: a near-month future carries a little
+# cost of carry over spot, about 0.03% (95.4275 against 95.40105 on 14-Aug,
+# ~45 rupees per ten grams of gold). Freshness is worth more than that gap.
+_FX_FRESH = 90
+
+
+def _usdinr() -> tuple[float | None, float | None, str]:
+    """Rate, age in seconds, and where it came from."""
+    try:
+        from app.services import angel_feed
+        d = angel_feed.get_data()
+        u = d.get("usdinr") or {}
+        age = d.get("age")
+        rate = u.get("mid") or u.get("ltp")
+        if rate and age is not None and age <= _FX_FRESH:
+            return round(float(rate), 4), age, "NSE USD/INR future (Angel, live)"
+    except Exception as e:  # noqa: BLE001 - the fallback below must always work
+        log.debug("Premium: Angel USD/INR unavailable (%s)", e)
+    ts = _state["usdinr_ts"]
+    return (_state["usdinr"],
+            round(time.time() - ts, 1) if ts else None,
+            "TwelveData spot (~2 min)")
+
+
 # ── MCX metal from the existing quote_store (no new subscription) ────────
 def _mcx(short: str) -> dict | None:
     """Near-month MCX future for a price_service instrument key ('gold' / 'silver')."""
@@ -282,6 +315,7 @@ def _ibkr_spots() -> dict:
 
 def get_inputs() -> dict:
     now = time.time()
+    fx, fx_age, fx_source = _usdinr()
     ib = _ibkr_spots() if settings.IBKR_SPOTS_ENABLED else {}
     if ib.get("xau"):
         return {
@@ -289,9 +323,7 @@ def get_inputs() -> dict:
             "xagusd": ib["xag"], "xagusd_age": ib["xag_age"], "xagusd_source": "IBKR spot (live)",
             "deriv_connected": bool(ib.get("connected")),
             "ibkr_connected": bool(ib.get("connected")),
-            "usdinr": _state["usdinr"],
-            "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
-            "usdinr_source": "TwelveData spot",
+            "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source,
             "wti": ib["wti"], "wti_age": ib["wti_age"],
             "brent": ib["brent"], "brent_age": ib["brent_age"],
             "finnhub_connected": bool(ib.get("connected")),
@@ -308,9 +340,7 @@ def get_inputs() -> dict:
         "xagusd_source": "Finnhub spot (live)",
         "deriv_connected": _state["finnhub_connected"],  # legacy key: UI 'spot feed connected' flag
         "ibkr_connected": _state["ibkr_connected"],
-        "usdinr": _state["usdinr"],
-        "usdinr_age": round(now - _state["usdinr_ts"], 1) if _state["usdinr_ts"] else None,
-        "usdinr_source": "TwelveData spot",
+        "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source,
         "wti": _state["wti"],
         "wti_age": round(now - _state["wti_ts"], 1) if _state["wti_ts"] else None,
         "brent": _state["brent"],
