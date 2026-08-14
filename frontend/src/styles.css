@@ -1385,6 +1385,9 @@ body.dark .margin-chip.danger { color: #fc8181; background: rgba(248,113,113,0.1
   font-weight: 600;
 }
 .intl-competing { margin: 0 0 14px; }
+/* A filter change dims the boards for the moment they take to reload, instead
+   of removing them and putting them back - that swap read as a page flash. */
+.nm-busy .oh-board { opacity: .55; transition: opacity .12s ease; }
 .nm-stale { margin: 0 0 12px; font-weight: 600; }
 .nm-stale-err { font-weight: 500; opacity: .8; }
 .nm-stale-why { margin-top: 4px; font-weight: 500; font-size: 12px; opacity: .85; }

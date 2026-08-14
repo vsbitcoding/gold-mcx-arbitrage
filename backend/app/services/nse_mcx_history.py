@@ -44,8 +44,15 @@ _CACHE_TTL = 60.0
 # Capture (called from the maintenance loop)
 # --------------------------------------------------------------------------- #
 def _usable(board: dict) -> bool:
-    """A board worth storing: both futures priced and at least one strike where
-    both exchanges quote two-way. Anything less is a cold feed, not a market."""
+    """A board worth storing: both sides current, both futures priced, and at
+    least one strike where both exchanges quote two-way. Anything less is a
+    cold feed, not a market."""
+    # `fresh` is false when either side has gone quiet. Storing then would file
+    # one exchange's live prices against the other's last known ones - a
+    # snapshot that looks ordinary for ever and is not a comparison at all.
+    # Angel's session dies at midnight, so this is not hypothetical.
+    if not board.get("fresh"):
+        return False
     fut = board.get("future") or {}
     if (fut.get("nse") or {}).get("mid") is None or (fut.get("mcx") or {}).get("mid") is None:
         return False

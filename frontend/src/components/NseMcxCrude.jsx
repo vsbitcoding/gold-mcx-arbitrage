@@ -225,19 +225,22 @@ export default function NseMcxCrude() {
   const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
   const [hist, setHist] = useState(null);
+  const [loadingHist, setLoadingHist] = useState(false);
   const [err, setErr] = useState(null);
   const timer = useRef(null);
 
   useEffect(() => { try { localStorage.setItem("arbi_nsemcx_product", product); } catch {} }, [product]);
 
-  // Live: poll while visible. History: fetch once per control change - the rows
-  // never change after they are written, so polling them would be pure waste.
+  // Switching commodity is a different market, so the old table must go.
+  // Switching Live/History is not - the futures above are the same either way
+  // and blanking them made the whole page jump. Only `product` clears state.
+  useEffect(() => { setD(null); setHist(null); }, [product]);
+
+  // The live poll keeps running in History too. It costs one 10 KB in-memory
+  // read every three seconds, and it means the futures in the header stay live
+  // and Live paints instantly on the way back instead of flashing "Loading".
   useEffect(() => {
     let alive = true;
-    clearInterval(timer.current);
-    setErr(null);
-    if (view !== "live") { setHist(null); return () => { alive = false; }; }
-    setD(null);
     async function load() {
       if (document.hidden) return;
       try {
@@ -248,16 +251,20 @@ export default function NseMcxCrude() {
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, [product, view]);
+  }, [product]);
 
+  // History rows never change once written, so this fetches on a control change
+  // and never polls. The old boards stay on screen while the new ones load.
   useEffect(() => {
     if (view !== "history") return undefined;
     let alive = true;
+    setLoadingHist(true);
     (async () => {
       try {
         const r = await api.nseMcxHistory({ commodity: product, slot, days });
         if (alive) { setHist(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
+      finally { if (alive) setLoadingHist(false); }
     })();
     return () => { alive = false; };
   }, [view, product, slot, days]);
@@ -269,7 +276,10 @@ export default function NseMcxCrude() {
     <div className="nm-head">
       <h2>{cfg.title}</h2>
 
-      {view === "live" ? <Futures f={d?.future} cfg={cfg} /> : <div />}
+      {/* Rendered in BOTH views. The futures are the current market whichever
+          tab is open, and taking them away on the way to History was most of
+          what made switching feel like a different page loading. */}
+      <Futures f={d?.future} cfg={cfg} />
 
       <div className="nm-head-end">
         <div className="oh-group" role="tablist" aria-label="Commodity">
@@ -286,12 +296,11 @@ export default function NseMcxCrude() {
               onClick={() => setView(k)}>{l}</button>
           ))}
         </div>
-        {view === "live" && (
-          <span className={`intl-status ${live ? "on" : "off"}`}
-            title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
-            {live ? "● Live" : "○ Feed issue"}
-          </span>
-        )}
+        {/* Always present, so the row never changes width when the tab changes. */}
+        <span className={`intl-status ${live ? "on" : "off"}`}
+          title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
+          {live ? "● Live" : "○ Feed issue"}
+        </span>
       </div>
     </div>
   );
@@ -301,7 +310,7 @@ export default function NseMcxCrude() {
   if (view === "history") {
     const snaps = hist?.snapshots || [];
     return (
-      <div className="cru-page">
+      <div className={`cru-page ${loadingHist && hist ? "nm-busy" : ""}`}>
         {head}
         <div className="oh-controls nm-hist-controls">
           <div className="oh-group" role="tablist" aria-label="Time">
@@ -317,8 +326,11 @@ export default function NseMcxCrude() {
           </select>
         </div>
 
-        {!hist && <div className="empty-state">Loading history…</div>}
-        {hist && snaps.length === 0 && (
+        {/* Only on the very first load. After that the boards already on screen
+            stay put while the new ones fetch, so changing a filter does not
+            empty the page and fill it again. */}
+        {!hist && loadingHist && <div className="empty-state">Loading history…</div>}
+        {hist && snaps.length === 0 && !loadingHist && (
           <div className="oh-note">
             No saved boards yet. The full table is stored automatically at <b>10:00 AM</b>,
             <b> 12:00 PM</b> and <b>3:00 PM</b> IST every trading day. No exchange sells NSE
