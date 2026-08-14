@@ -139,7 +139,8 @@ def _login(sess: requests.Session, c: dict) -> str:
         raise RuntimeError(f"Angel login failed: {d.get('message')} ({d.get('errorcode')})")
     tok = d["data"]
     try:
-        _SESSION_FILE.write_text(json.dumps({"jwt": tok["jwtToken"], "ts": time.time()}))
+        _SESSION_FILE.write_text(json.dumps({"jwt": tok["jwtToken"], "ts": time.time(),
+                                             "day": date.today().isoformat()}))
         os.chmod(_SESSION_FILE, 0o600)
     except Exception as e:  # noqa: BLE001
         log.debug("angel session not cached: %s", e)
@@ -151,7 +152,11 @@ def _session_token(sess: requests.Session, c: dict, force: bool = False) -> str:
     if not force and _SESSION_FILE.exists():
         try:
             d = json.loads(_SESSION_FILE.read_text())
-            if time.time() - d.get("ts", 0) < 8 * 3600:      # well inside Angel's 24 h
+            # A token is only good for the day it was minted. Age alone was not
+            # enough: one taken at 23:00 is dead an hour later at midnight, and
+            # the old 8-hour rule would have handed it back as fresh.
+            if (d.get("day") == date.today().isoformat()
+                    and time.time() - d.get("ts", 0) < 8 * 3600):
                 return d["jwt"]
         except Exception:  # noqa: BLE001
             pass
@@ -238,14 +243,33 @@ def _leg(row: dict | None) -> dict | None:
     }
 
 
+# Angel expires every session at midnight IST - on 14-Aug it happened at
+# 00:00:00 to the second - and it reports that with **HTTP 200** and
+# `status: false, "Invalid Token"` in the body, never a 401. Checking only the
+# status code meant a dead session read as an ordinary poll failure, so the
+# loop retried the same dead token every 15 s: 2,322 failures and nine hours of
+# midnight prices on screen before anyone restarted the backend. Their whole
+# AG80xx family is session trouble; the message check catches new siblings.
+_AUTH_CODES = {"AG8001", "AG8002", "AG8003", "AB8050", "AB8051"}
+
+
+def _is_auth_error(d: dict) -> bool:
+    code = (d.get("errorcode") or "").strip().upper()
+    msg = (d.get("message") or "").lower()
+    return code in _AUTH_CODES or "token" in msg or "session" in msg
+
+
 def _quote(sess: requests.Session, c: dict, jwt: str, tokens: dict) -> dict:
     r = sess.post(f"{_BASE}/rest/secure/angelbroking/market/v1/quote",
                   headers=_headers(c, jwt),
                   json={"mode": "FULL", "exchangeTokens": tokens}, timeout=25)
     if r.status_code == 401:
-        raise PermissionError("angel session expired")
+        raise PermissionError("angel session expired (401)")
     d = r.json()
     if not d.get("status"):
+        if _is_auth_error(d):
+            raise PermissionError("angel session rejected: %s (%s)"
+                                  % (d.get("message"), d.get("errorcode")))
         raise RuntimeError(f"quote failed: {d.get('message')}")
     return {x["symbolToken"]: x for x in (d.get("data") or {}).get("fetched", [])}
 
@@ -325,6 +349,7 @@ def _loop() -> None:
 
     order = list(COMMODITIES)
     jwt, inst, resolved_at, turn = None, None, 0.0, 0
+    force_login, login_fails = False, 0
     while not _stop.is_set():
         try:
             if inst is None or (time.time() - resolved_at) > _MASTER_TTL:
@@ -340,19 +365,30 @@ def _loop() -> None:
                 log.info("Angel: USD/INR %s",
                          inst["usdinr"] and inst["usdinr"].get("symbol"))
             if jwt is None:
-                jwt = _session_token(sess, c)
+                jwt = _session_token(sess, c, force=force_login)
+                force_login, login_fails = False, 0
             _poll(sess, c, jwt, inst, order[turn % len(order)])
             turn += 1
-        except PermissionError:
-            log.info("Angel: session expired, logging in again")
-            jwt = None
+        except PermissionError as e:
+            # force=True matters: the cached token IS the rejected one, so
+            # reading it back would loop for ever on a dead session.
+            log.info("Angel: %s - forcing a fresh login", e)
+            jwt, force_login = None, True
             _stop.wait(2)
             continue
         except Exception as e:  # noqa: BLE001 - a bad poll must never kill the thread
             _state["ok"] = False
             _state["error"] = str(e)[:160]
-            log.warning("Angel poll failed: %s", _state["error"])
-            _stop.wait(15)
+            if force_login:
+                # The login itself is failing. Angel throttles logins hard, so
+                # backing off is the only way through - hammering it keeps the
+                # feed down longer than waiting does.
+                login_fails += 1
+                wait = min(30 * login_fails, 300)
+            else:
+                wait = 15
+            log.warning("Angel poll failed: %s (retry in %ss)", _state["error"], wait)
+            _stop.wait(wait)
             continue
         _stop.wait(_POLL_SECONDS)
 

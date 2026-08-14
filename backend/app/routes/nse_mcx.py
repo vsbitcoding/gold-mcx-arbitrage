@@ -62,6 +62,19 @@ def _mid(leg: dict | None) -> float | None:
 # as solid numbers.
 _WIDE_SPREAD = 0.25
 
+# One side going quiet is worse than both going quiet, because the screen keeps
+# subtracting. On 14-Aug the NSE session died at midnight and the feed served
+# 00:00 prices until 09:40 while MCX stayed live - every difference on the page
+# was last night's NSE against this morning's MCX, and nothing said so. A
+# difference is only a difference if both sides are current.
+_FRESH_SECONDS = 120
+
+
+def _age_of(*ages) -> float | None:
+    """The worst age among the clocks a side has. None means never updated."""
+    seen = [a for a in ages if a is not None]
+    return max(seen) if seen else None
+
 
 def _leg(leg: dict | None) -> dict:
     b, a = (leg or {}).get("bid"), (leg or {}).get("ask")
@@ -74,17 +87,18 @@ def _leg(leg: dict | None) -> dict:
     }
 
 
-def _num_diff(n: float | None, m: float | None, wide: bool = False) -> dict:
+def _num_diff(n: float | None, m: float | None, wide: bool = False,
+              fresh: bool = True) -> dict:
     """Difference both ways, as the client asked: rupees and percent.
     Percent is against the MCX leg, the liquid one."""
-    if n is None or m is None:
+    if n is None or m is None or not fresh:
         return {"rupees": None, "percent": None, "wide": False}
     d = round(n - m, 2)
     return {"rupees": d, "percent": round(d / m * 100, 2) if m else None, "wide": wide}
 
 
-def _diff(nse: dict, mcx: dict) -> dict:
-    return _num_diff(nse["mid"], mcx["mid"], nse["wide"] or mcx["wide"])
+def _diff(nse: dict, mcx: dict, fresh: bool = True) -> dict:
+    return _num_diff(nse["mid"], mcx["mid"], nse["wide"] or mcx["wide"], fresh)
 
 
 def payload(commodity: str = "crude", window: int = 10) -> dict:
@@ -99,6 +113,12 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
     mrows = {r["strike"]: r for r in (m.get("rows") or [])}
     mfut = m.get("future_price")
     nfut = _mid(a.get("future")) or (a.get("future") or {}).get("ltp")
+
+    n_age = _age_of(a.get("age"), a.get("chain_age"))
+    m_age = _age_of(m.get("age"))
+    n_stale = n_age is None or n_age > _FRESH_SECONDS
+    m_stale = m_age is None or m_age > _FRESH_SECONDS
+    fresh = not (n_stale or m_stale)
 
     # Narrow by POSITION, not by price. Crude strikes step 50 and gas steps 5,
     # so any "within N x step" arithmetic silently returns one row for gas.
@@ -116,7 +136,8 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
             # function, and shadowing it blanked the contract symbol, both
             # expiries and the feed status for an hour on 13-Aug.
             n_leg, m_leg = _leg(r.get(side)), _leg(mr.get(side))
-            out[side] = {"nse": n_leg, "mcx": m_leg, "diff": _diff(n_leg, m_leg)}
+            out[side] = {"nse": n_leg, "mcx": m_leg,
+                         "diff": _diff(n_leg, m_leg, fresh)}
         rows.append(out)
 
     return {
@@ -128,9 +149,10 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
             # option chain's date and showing it here was simply wrong
             "mcx": {"symbol": m.get("symbol"), "expiry": _fut_expiry(m.get("symbol")),
                     "mid": mfut},
-            "diff": _num_diff(nfut, mfut),
+            "diff": _num_diff(nfut, mfut, fresh=fresh),
             "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
+        "fresh": fresh,
         "options": {
             "nse_expiry": a.get("opt_expiry"),
             "mcx_expiry": m.get("expiry"),
@@ -139,9 +161,12 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
             "rows": rows,
         },
         "usdinr": a.get("usdinr"),
-        "nse": {"ok": a.get("ok"), "age": a.get("age"),
-                "chain_age": a.get("chain_age"), "error": a.get("error")},
-        "mcx": {"ok": m.get("ok"), "age": m.get("age"), "error": m.get("error")},
+        "nse": {"ok": a.get("ok"), "age": a.get("age"), "chain_age": a.get("chain_age"),
+                "stale": n_stale, "stale_seconds": n_age if n_stale else None,
+                "error": a.get("error")},
+        "mcx": {"ok": m.get("ok"), "age": m.get("age"),
+                "stale": m_stale, "stale_seconds": m_age if m_stale else None,
+                "error": m.get("error")},
     }
 
 

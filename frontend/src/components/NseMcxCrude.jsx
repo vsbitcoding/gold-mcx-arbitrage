@@ -178,6 +178,41 @@ function ChainTable({ o, cfg }) {
 
 const slotLabel = (s) => (SLOTS.find((x) => x.key === s) || {}).label || s;
 
+// "4 minutes" reads; "247 s" makes the reader do arithmetic before they can
+// judge whether the number above is worth looking at.
+function ageWords(sec) {
+  if (sec == null) return "not once since the page loaded";
+  if (sec < 90) return Math.round(sec) + " seconds old";
+  const m = Math.round(sec / 60);
+  if (m < 90) return m + (m === 1 ? " minute old" : " minutes old");
+  const h = Math.floor(sec / 3600), r = Math.round((sec % 3600) / 60);
+  return h + (h === 1 ? " hour " : " hours ") + (r ? r + " min " : "") + "old";
+}
+
+// A stale side is the one failure this screen cannot afford to whisper about.
+// On 14-Aug the NSE session died at midnight and the page served 00:00 prices
+// against a live MCX until 09:40, with nothing but a small red pill to say so.
+function StaleNote({ d }) {
+  const bad = [];
+  if (d?.nse?.stale) bad.push({ who: "NSE", sec: d.nse.stale_seconds, err: d.nse.error });
+  if (d?.mcx?.stale) bad.push({ who: "MCX", sec: d.mcx.stale_seconds, err: d.mcx.error });
+  if (!bad.length) return null;
+  return (
+    <div className="settings-banner danger nm-stale">
+      {bad.map((b) => (
+        <div key={b.who}>
+          <b>{b.who} prices are {ageWords(b.sec)}.</b>{" "}
+          {b.err ? <span className="nm-stale-err">{b.err}</span> : null}
+        </div>
+      ))}
+      <div className="nm-stale-why">
+        The difference column is blank while this lasts — subtracting a live price
+        from an old one is not a difference.
+      </div>
+    </div>
+  );
+}
+
 export default function NseMcxCrude() {
   const [product, setProduct] = useState(() => {
     try {
@@ -252,7 +287,8 @@ export default function NseMcxCrude() {
           ))}
         </div>
         {view === "live" && (
-          <span className={`intl-status ${live ? "on" : "off"}`}>
+          <span className={`intl-status ${live ? "on" : "off"}`}
+            title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
             {live ? "● Live" : "○ Feed issue"}
           </span>
         )}
@@ -312,6 +348,7 @@ export default function NseMcxCrude() {
   return (
     <div className="cru-page">
       {head}
+      <StaleNote d={d} />
       <ChainTable o={d.options} cfg={cfg} />
     </div>
   );
