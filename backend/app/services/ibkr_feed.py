@@ -41,7 +41,24 @@ _IV_WINDOW = 10
 # The monthly option class is chosen as the one listing the most strikes: for
 # crude that is LO (451 vs ~185 on the weeklies), for gas LNE (236 vs 61). The
 # weeklies expire in days, so their IV is time-decay noise next to MCX.
-_IV_SYMS = (("CL", "NYMEX", "cl"), ("NG", "NYMEX", "ng"))
+# (symbol, exchange, chain key, futures-price key, month index).
+#
+# The client's own terminal shows next month beside the front one, so both are
+# streamed (his developer, 13-Aug). Next month is a SEPARATE entry rather than a
+# list inside one, so every path below - re-centring, the roll guard, the row
+# builder - keeps working on a chain without caring which month it is. When the
+# front expires the reconnect rebuilds all four and month 1 becomes month 0 on
+# its own.
+#
+# This is what the Quote Booster pack bought: 4 chains x 21 strikes x 2 sides =
+# 168, plus 5 futures and 2 spots = 175 of the 200 lines. The free allowance is
+# 100, which is why only two chains fitted before (subscribed 17-Aug, USD 30/mo).
+_IV_SYMS = (
+    ("CL", "NYMEX", "cl",  "cl", 0),
+    ("NG", "NYMEX", "ng",  "ng", 0),
+    ("CL", "NYMEX", "cl2", "cl", 1),
+    ("NG", "NYMEX", "ng2", "ng", 1),
+)
 
 _state: dict = {
     "xau": None, "xau_ts": 0.0,          # spot metals (CMDTY on SMART)
@@ -346,26 +363,39 @@ async def _loop() -> None:
             # listing the most strikes; the weeklies expire in days, so their IV
             # is time-decay noise and useless next to MCX's monthly.
             iv: dict = {}
-            for sym, exch, key in _IV_SYMS:
-                try:
-                    ch = await asyncio.wait_for(
-                        ib.reqSecDefOptParamsAsync(sym, exch, "FUT", futs[key][0].conId),
-                        timeout=_REQ_TIMEOUT)
-                    best = max((c for c in ch if c.exchange == exch), key=lambda c: len(c.strikes), default=None)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("IBKR: no option classes for %s (%s)", sym, e)
-                    best = None
+            classes: dict = {}          # one reqSecDefOptParams per symbol, not per month
+            for sym, exch, key, px_key, month in _IV_SYMS:
+                if (sym, exch) not in classes:
+                    try:
+                        ch = await asyncio.wait_for(
+                            ib.reqSecDefOptParamsAsync(sym, exch, "FUT", futs[px_key][0].conId),
+                            timeout=_REQ_TIMEOUT)
+                        classes[(sym, exch)] = max((c for c in ch if c.exchange == exch),
+                                                   key=lambda c: len(c.strikes), default=None)
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("IBKR: no option classes for %s (%s)", sym, e)
+                        classes[(sym, exch)] = None
+                best = classes[(sym, exch)]
+                # Sorted expirations: [0] is the front month, [1] the next. A
+                # class with only one listed month simply gets no second entry
+                # rather than reusing the front one under a different name.
+                exps = sorted(best.expirations) if best else []
                 iv[key] = {
                     "sym": sym, "exch": exch, "chain": best,
+                    "px": px_key, "month": month,
                     "strikes": sorted(best.strikes) if best else [],
-                    "expiry": sorted(best.expirations)[0] if best else None,
+                    "expiry": exps[month] if len(exps) > month else None,
                     "tickers": {}, "window": [], "atm": None,
                 }
                 _state[key + "_iv_expiry"] = iv[key]["expiry"]
                 _state[key + "_iv_class"] = best.tradingClass if best else None
-                if best:
-                    log.info("IBKR: %s IV class %s (%d strikes, exp %s)",
-                             sym, best.tradingClass, len(best.strikes), iv[key]["expiry"])
+                if iv[key]["expiry"]:
+                    log.info("IBKR: %s IV class %s month %d (%d strikes, exp %s)",
+                             sym, best.tradingClass, month + 1, len(best.strikes),
+                             iv[key]["expiry"])
+                elif best:
+                    log.warning("IBKR: %s has no month %d listed - chain %s left empty",
+                                sym, month + 1, key)
 
             async def resubscribe_iv(key: str, centre: float) -> None:
                 """21 monthly strikes around the money, one side each: calls
@@ -487,12 +517,14 @@ async def _loop() -> None:
                 # the edge. Tolerance scales with the strike step.
                 if now - last_iv_check > 60:
                     last_iv_check = now
-                    for key in iv:
-                        p_ = _state.get(key) or {}
+                    for key, d in iv.items():
+                        # d["px"], not key: both months of a commodity centre on
+                        # the SAME underlying future, and "cl2" has no price of
+                        # its own to look up.
+                        p_ = _state.get(d["px"]) or {}
                         mid_ = ((p_["bid"] + p_["ask"]) / 2) if (p_.get("bid") and p_.get("ask")) else None
                         if mid_ is None:
                             continue
-                        d = iv[key]
                         step = (d["strikes"][1] - d["strikes"][0]) if len(d["strikes"]) > 1 else 0.5
                         if not d["window"] or d["atm"] is None or abs(mid_ - d["atm"]) > step * 1.5:
                             await resubscribe_iv(key, mid_)
@@ -549,12 +581,18 @@ def _chain_block(key: str, age) -> dict:
     }
 
 
+# Chain key -> the futures key its price comes from. "cl2" is next month's
+# crude chain and has no future of its own; it centres on the same CL.
+_IV_PX = {key: px for _s, _e, key, px, _m in _IV_SYMS}
+
+
 def _iv_block(key: str, age) -> dict:
-    p = _state.get(key) or {}
+    px = _IV_PX.get(key, key)
+    p = _state.get(px) or {}
     mid = ((p["bid"] + p["ask"]) / 2) if (p.get("bid") and p.get("ask")) else None
     return {
         "exchange": "NYMEX",
-        "symbol": _state.get(key + "_symbol"),
+        "symbol": _state.get(px + "_symbol"),
         "trading_class": _state.get(key + "_iv_class"),
         "future_price": mid,
         "expiry": _state.get(key + "_iv_expiry"),
@@ -598,6 +636,13 @@ def get_data() -> dict:
         # IV blocks use - one subscription per commodity, not two.
         "crude_options": _chain_block("cl", age),
         "natgas_options": _chain_block("ng", age),
+        # Next month, same shape. Added 17-Aug once the Quote Booster pack lifted
+        # the ticker limit from 100 to 200; the keys above are unchanged so
+        # nothing already reading this payload has to be touched.
+        "crude_iv_next": _iv_block("cl2", age),
+        "natgas_iv_next": _iv_block("ng2", age),
+        "crude_options_next": _chain_block("cl2", age),
+        "natgas_options_next": _chain_block("ng2", age),
         "server_time": now,
     }
 

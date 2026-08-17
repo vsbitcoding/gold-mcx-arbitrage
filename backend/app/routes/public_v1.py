@@ -742,6 +742,15 @@ def _international_payload() -> tuple[dict, str]:
         # because only the IV block existed for it (client, 12-Aug).
         "natgas_options": chain_block(d.get("natgas_options"), "NATGAS",
                                       (d.get("natgas_iv") or {}).get("future_price")),
+        # NEXT month, identical shape to the four above (client's developer,
+        # 13-Aug). Separate keys rather than a month field inside the existing
+        # ones, so an app already reading crude_options keeps working untouched.
+        "crude_iv_next": iv_block(d.get("crude_iv_next"), "CRUDE", 2),
+        "natgas_iv_next": iv_block(d.get("natgas_iv_next"), "NATGAS", 3),
+        "crude_options_next": chain_block(d.get("crude_options_next"), "CRUDE",
+                                          (d.get("crude_iv_next") or {}).get("future_price")),
+        "natgas_options_next": chain_block(d.get("natgas_options_next"), "NATGAS",
+                                           (d.get("natgas_iv_next") or {}).get("future_price")),
         "summary": {
             "gold_basis": round(gc - xau, 2) if (gc and xau) else None,
             "silver_basis": round(si - xag, 3) if (si and xag) else None,
@@ -750,7 +759,10 @@ def _international_payload() -> tuple[dict, str]:
             "atm_straddle": straddle,
         },
     }
-    ivsrc = (d.get("crude_iv") or {}).get("rows", []) + (d.get("natgas_iv") or {}).get("rows", [])
+    # Every chain feeds the digest, next month included - otherwise the socket
+    # would sit quiet while only a next-month strike moved.
+    ivsrc = [r for k in ("crude_iv", "natgas_iv", "crude_iv_next", "natgas_iv_next")
+             for r in (d.get(k) or {}).get("rows", [])]
     digest_input = json.dumps(
         [[i["bid"], i["ask"]] for i in items]
         + [[r["strike"], r["call"]["bid"], r["call"]["ask"], r["put"]["bid"], r["put"]["ask"]] for r in rows]
