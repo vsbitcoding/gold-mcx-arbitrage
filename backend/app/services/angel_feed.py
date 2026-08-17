@@ -154,7 +154,12 @@ def _login(sess: requests.Session, c: dict) -> str:
         raise RuntimeError(f"Angel login failed: {d.get('message')} ({d.get('errorcode')})")
     tok = d["data"]
     try:
-        _SESSION_FILE.write_text(json.dumps({"jwt": tok["jwtToken"], "ts": time.time(),
+        # feedToken is what Angel's streaming socket authenticates with. It
+        # arrives in every login response and was being dropped, which is why
+        # moving this feed off REST needed a login it could not safely make.
+        _SESSION_FILE.write_text(json.dumps({"jwt": tok["jwtToken"],
+                                             "feed": tok.get("feedToken", ""),
+                                             "ts": time.time(),
                                              "day": date.today().isoformat()}))
         os.chmod(_SESSION_FILE, 0o600)
     except Exception as e:  # noqa: BLE001
@@ -170,8 +175,12 @@ def _session_token(sess: requests.Session, c: dict, force: bool = False) -> str:
             # A token is only good for the day it was minted. Age alone was not
             # enough: one taken at 23:00 is dead an hour later at midnight, and
             # the old 8-hour rule would have handed it back as fresh.
+            # A cached session with no feed token predates streaming support;
+            # treat it as incomplete so the next start collects one rather than
+            # waiting for the midnight expiry to come round.
             if (d.get("day") == date.today().isoformat()
-                    and time.time() - d.get("ts", 0) < 8 * 3600):
+                    and time.time() - d.get("ts", 0) < 8 * 3600
+                    and d.get("feed")):
                 return d["jwt"]
         except Exception:  # noqa: BLE001
             pass
@@ -423,6 +432,14 @@ def _loop() -> None:
             _stop.wait(wait)
             continue
         _stop.wait(_POLL_SECONDS)
+
+
+def feed_token() -> str:
+    """The streaming credential, for whatever wants to open Angel's socket."""
+    try:
+        return json.loads(_SESSION_FILE.read_text()).get("feed", "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def get_data(commodity: str = "crude", month: int = 0) -> dict:

@@ -22,7 +22,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Query
 
-from app.services import angel_feed, crude_iv_service, nse_mcx_history
+from app.services import angel_feed, crude_iv_service, mcx_opt_stream, nse_mcx_history
 
 router = APIRouter(prefix="/api", tags=["nse-mcx"])
 
@@ -113,12 +113,25 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     want = crude_iv_service.set_want_expiry(key, a.get("opt_expiry"))
     m = crude_iv_service.get_full_chain(key, want, month)
 
-    mrows = {r["strike"]: r for r in (m.get("rows") or [])}
+    # The MCX legs come off the LIVE socket, not the REST chain. This screen
+    # compares bid against bid and never reads IV, which is the only thing the
+    # chain endpoint has that the socket does not - so there is no reason to
+    # inherit its one-call-per-3s. The chain stays as the fallback for the few
+    # seconds after a restart before the socket has ticked, and for any expiry
+    # that turns out not to be subscribed.
+    live_rows = mcx_opt_stream.get_chain(key, want)
+    live_age = mcx_opt_stream.age(key, want)
+    if live_rows:
+        mrows = {r["strike"]: r for r in live_rows}
+        m_age_src, m_src = live_age, "socket"
+    else:
+        mrows = {r["strike"]: r for r in (m.get("rows") or [])}
+        m_age_src, m_src = m.get("age"), "chain"
     mfut = m.get("future_price")
     nfut = _mid(a.get("future")) or (a.get("future") or {}).get("ltp")
 
     n_age = _age_of(a.get("age"), a.get("chain_age"))
-    m_age = _age_of(m.get("age"))
+    m_age = _age_of(m_age_src)
     n_stale = n_age is None or n_age > _FRESH_SECONDS
     m_stale = m_age is None or m_age > _FRESH_SECONDS
     fresh = not (n_stale or m_stale)
@@ -168,7 +181,7 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
         "nse": {"ok": a.get("ok"), "age": a.get("age"), "chain_age": a.get("chain_age"),
                 "stale": n_stale, "stale_seconds": n_age if n_stale else None,
                 "error": a.get("error")},
-        "mcx": {"ok": m.get("ok"), "age": m.get("age"),
+        "mcx": {"ok": m.get("ok"), "age": m_age_src, "source": m_src,
                 "stale": m_stale, "stale_seconds": m_age if m_stale else None,
                 "error": m.get("error")},
     }
