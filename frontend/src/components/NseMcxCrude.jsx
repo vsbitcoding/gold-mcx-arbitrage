@@ -204,6 +204,29 @@ function ageWords(sec) {
   return h + (h === 1 ? " hour " : " hours ") + (r ? r + " min " : "") + "old";
 }
 
+// NSE quotes the near month's options fully and the month after not at all -
+// 0 of 42 legs on both commodities, checked live on 17-Aug while the near month
+// showed all 42. The futures do trade in both months, so the top of the screen
+// is a real comparison and only the chain below it is empty. Saying which is
+// the difference between an honest screen and a broken-looking one.
+function NoNseChain({ d }) {
+  const rows = d?.options?.rows || [];
+  if (!rows.length) return null;
+  const anyNse = rows.some((r) => ["ce", "pe"].some((s) => r[s]?.nse?.traded));
+  if (anyNse) return null;
+  return (
+    <div className="settings-banner warn nm-stale">
+      <b>NSE is not quoting these options.</b> Not one strike has a bid or an ask
+      on the NSE side for {fmtDate(d?.options?.nse_expiry)}, so there is nothing to
+      compare in the table below.
+      <div className="nm-stale-why">
+        The futures above are real on both exchanges - that comparison holds.
+        Only the option chain is empty, and that is NSE's market, not our feed.
+      </div>
+    </div>
+  );
+}
+
 // A stale side is the one failure this screen cannot afford to whisper about.
 // On 14-Aug the NSE session died at midnight and the page served 00:00 prices
 // against a live MCX until 09:40, with nothing but a small red pill to say so.
@@ -388,6 +411,7 @@ export default function NseMcxCrude() {
     <div className="cru-page">
       {head}
       <StaleNote d={d} />
+      <NoNseChain d={d} />
       <ChainTable o={d.options} cfg={cfg} />
     </div>
   );
