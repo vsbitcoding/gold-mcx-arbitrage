@@ -70,6 +70,21 @@ COMMODITIES: dict[str, dict] = {
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])}
 
+# Two months per commodity (client, 17-Aug). Each is its own chain key, so the
+# route, the history capture and the poll rotation all handle a chain without
+# caring which month it is.
+#
+# The screen shows ONE month at a time, so they are not worth the same
+# bandwidth: the near month is the default view and the far one is thinner and
+# barely moves. The rotation below visits the near months twice as often, which
+# keeps the default view at exactly the speed it has today.
+def skey(commodity: str, month: int) -> str:
+    return commodity if month == 0 else f"{commodity}_next"
+
+
+CHAINS = [(c, m) for c in COMMODITIES for m in (0, 1)]
+POLL_ORDER = ([skey(c, 0) for c in COMMODITIES] * 2) + [skey(c, 1) for c in COMMODITIES]
+
 
 def _blank() -> dict:
     return {
@@ -82,7 +97,7 @@ def _blank() -> dict:
 
 
 _state: dict = {
-    "c": {k: _blank() for k in COMMODITIES},
+    "c": {skey(c, m): _blank() for c, m in CHAINS},
     "usdinr": None,          # {symbol, expiry, bid, ask, ltp, volume, oi}
     "ts": 0.0,
     "ok": False,
@@ -190,17 +205,31 @@ def _load_master() -> list:
     return json.loads(raw)
 
 
-def _resolve_commodity(data: list, name: str, today: date) -> dict:
-    """Nearest NSE future for `name` plus its nearest option chain."""
+def _resolve_commodity(data: list, name: str, today: date) -> list[dict]:
+    """The next two NSE months for `name`: future plus option chain for each.
+
+    Futures and options roll on their own dates and do not pair up one to one -
+    NSE crude has no August option at all, so its month 0 chain is September
+    while its month 0 future is August. Each list is therefore taken in its own
+    order rather than assuming they line up.
+    """
     nco = [x for x in data if x.get("exch_seg") == "NCO" and x.get("name") == name]
     futs = sorted([x for x in nco if x.get("instrumenttype", "").startswith("FUT")
                    and _expiry_date(x.get("expiry")) >= today],
                   key=lambda x: _expiry_date(x.get("expiry")))
     opts = [x for x in nco if x.get("instrumenttype") in ("OPTFUT", "OPTBLN")
             and _expiry_date(x.get("expiry")) >= today]
-    opt_exp = min((_expiry_date(x.get("expiry")) for x in opts), default=None)
-    chain = [x for x in opts if _expiry_date(x.get("expiry")) == opt_exp]
-    return {"future": futs[0] if futs else None, "chain": chain, "opt_expiry": opt_exp}
+    opt_exps = sorted({_expiry_date(x.get("expiry")) for x in opts})
+
+    out = []
+    for m in (0, 1):
+        exp = opt_exps[m] if len(opt_exps) > m else None
+        out.append({
+            "future": futs[m] if len(futs) > m else None,
+            "chain": [x for x in opts if _expiry_date(x.get("expiry")) == exp] if exp else [],
+            "opt_expiry": exp,
+        })
+    return out
 
 
 def _resolve() -> dict:
@@ -208,8 +237,10 @@ def _resolve() -> dict:
     data = _load_master()
     today = date.today()
 
-    out = {"c": {k: _resolve_commodity(data, cfg["name"], today)
-                 for k, cfg in COMMODITIES.items()}}
+    out = {"c": {}}
+    for c, cfg in COMMODITIES.items():
+        for m, res in enumerate(_resolve_commodity(data, cfg["name"], today)):
+            out["c"][skey(c, m)] = {**res, "commodity": c}
 
     cds = sorted([x for x in data if x.get("exch_seg") == "CDS" and x.get("name") == "USDINR"
                   and x.get("instrumenttype", "").startswith("FUT")
@@ -276,8 +307,10 @@ def _quote(sess: requests.Session, c: dict, jwt: str, tokens: dict) -> dict:
 
 def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> None:
     """One round: every future and USD/INR, then ONE commodity's option chain."""
-    # ── call 1: all futures + USD/INR, so every ATM is known ──────────────
-    nco = [inst["c"][k]["future"]["token"] for k in COMMODITIES
+    # ── call 1: every future + USD/INR, so every ATM is known ─────────────
+    # All four futures ride in the one call whichever chain's turn it is, so a
+    # month the user is not looking at still shows a current future price.
+    nco = [inst["c"][k]["future"]["token"] for k in inst["c"]
            if inst["c"][k].get("future")]
     if not nco:
         raise RuntimeError("no NSE commodity future resolved")
@@ -288,7 +321,7 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
     fetched = _quote(sess, c, jwt, tokens)
 
     mids: dict[str, float | None] = {}
-    for key in COMMODITIES:
+    for key in inst["c"]:
         fut = inst["c"][key].get("future")
         if not fut:
             continue
@@ -308,7 +341,7 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
             return float(x.get("strike", 0)) / 100.0
 
         strikes = sorted({strike_of(x) for x in chain})
-        step = COMMODITIES[turn].get("strike_step")
+        step = COMMODITIES[inst["c"][turn]["commodity"]].get("strike_step")
         if step:
             keep = [s for s in strikes if s % step == 0]
             strikes = keep or strikes          # never blank the chain on a surprise ladder
@@ -347,7 +380,7 @@ def _loop() -> None:
         log.warning("Angel feed: credentials missing (%s) - disabled", _SECRETS)
         return
 
-    order = list(COMMODITIES)
+    order = POLL_ORDER
     jwt, inst, resolved_at, turn = None, None, 0.0, 0
     force_login, login_fails = False, 0
     while not _stop.is_set():
@@ -355,8 +388,7 @@ def _loop() -> None:
             if inst is None or (time.time() - resolved_at) > _MASTER_TTL:
                 inst = _resolve()
                 resolved_at = time.time()
-                for k in COMMODITIES:
-                    r = inst["c"][k]
+                for k, r in inst["c"].items():
                     f = r.get("future")
                     log.info("Angel: NSE %s %s (exp %s), chain exp %s, %d strikes",
                              k, f and f.get("symbol"),
@@ -393,14 +425,18 @@ def _loop() -> None:
         _stop.wait(_POLL_SECONDS)
 
 
-def get_data(commodity: str = "crude") -> dict:
+def get_data(commodity: str = "crude", month: int = 0) -> dict:
     now = time.time()
-    key = commodity if commodity in _state["c"] else "crude"
+    key = skey(commodity, month)
+    if key not in _state["c"]:
+        key = "crude"
     st = _state["c"][key]
+    base = key[:-5] if key.endswith("_next") else key
     return {
         "source": "Angel One (NSE)",
-        "commodity": key,
-        "label": COMMODITIES[key]["label"],
+        "commodity": base,
+        "month": 1 if key.endswith("_next") else 0,
+        "label": COMMODITIES[base]["label"],
         "future": st["future"],
         "options": st["options"],
         "atm": st["atm"],

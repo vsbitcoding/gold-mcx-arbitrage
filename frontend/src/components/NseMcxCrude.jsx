@@ -178,6 +178,21 @@ function ChainTable({ o, cfg }) {
 
 const slotLabel = (s) => (SLOTS.find((x) => x.key === s) || {}).label || s;
 
+// The button says which month it actually is once the board has loaded, so
+// nobody has to guess what "next" means - on crude it is October, because NSE
+// lists no August option at all.
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function monthLabel(d, which) {
+  const exp = d?.options?.nse_expiry;
+  if (!exp) return which === 0 ? "This month" : "Next month";
+  const m = Number(exp.split("-")[1]) - 1;
+  const shown = d?.month ?? 0;
+  // The payload only carries the month on screen, so the other button's name is
+  // stepped from it rather than guessed.
+  const i = ((m + (which - shown)) % 12 + 12) % 12;
+  return MONTH_NAMES[i] || (which === 0 ? "This month" : "Next month");
+}
+
 // "4 minutes" reads; "247 s" makes the reader do arithmetic before they can
 // judge whether the number above is worth looking at.
 function ageWords(sec) {
@@ -221,6 +236,11 @@ export default function NseMcxCrude() {
     } catch { return "crude"; }
   });
   const [view, setView] = useState("live");
+  // Which contract month. The client asked for one at a time behind a button
+  // rather than both stacked, so only the month on screen has to be watched -
+  // which is why the feed can keep the near month at full speed and let the
+  // far one refresh slowly.
+  const [month, setMonth] = useState(0);
   const [slot, setSlot] = useState("all");
   const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
@@ -234,7 +254,7 @@ export default function NseMcxCrude() {
   // Switching commodity is a different market, so the old table must go.
   // Switching Live/History is not - the futures above are the same either way
   // and blanking them made the whole page jump. Only `product` clears state.
-  useEffect(() => { setD(null); setHist(null); }, [product]);
+  useEffect(() => { setD(null); setHist(null); }, [product, month]);
 
   // The live poll keeps running in History too. It costs one 10 KB in-memory
   // read every three seconds, and it means the futures in the header stay live
@@ -244,14 +264,14 @@ export default function NseMcxCrude() {
     async function load() {
       if (document.hidden) return;
       try {
-        const r = await api.nseMcx(product);
+        const r = await api.nseMcx(product, month);
         if (alive) { setD(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, [product]);
+  }, [product, month]);
 
   // History rows never change once written, so this fetches on a control change
   // and never polls. The old boards stay on screen while the new ones load.
@@ -261,13 +281,13 @@ export default function NseMcxCrude() {
     setLoadingHist(true);
     (async () => {
       try {
-        const r = await api.nseMcxHistory({ commodity: product, slot, days });
+        const r = await api.nseMcxHistory({ commodity: product, slot, days, month });
         if (alive) { setHist(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
       finally { if (alive) setLoadingHist(false); }
     })();
     return () => { alive = false; };
-  }, [view, product, slot, days]);
+  }, [view, product, slot, days, month]);
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
   const live = d?.nse?.ok && d?.mcx?.ok;
@@ -287,6 +307,13 @@ export default function NseMcxCrude() {
             <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
               className={`oh-chip ${product === p.key ? "on" : ""}`}
               onClick={() => setProduct(p.key)}>{p.label}</button>
+          ))}
+        </div>
+        <div className="oh-group" role="tablist" aria-label="Month">
+          {[[0, monthLabel(d, 0)], [1, monthLabel(d, 1)]].map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={month === k}
+              className={`oh-chip ${month === k ? "on" : ""}`}
+              onClick={() => setMonth(k)}>{l}</button>
           ))}
         </div>
         <div className="oh-group" role="tablist" aria-label="View">

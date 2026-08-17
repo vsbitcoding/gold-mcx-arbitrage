@@ -896,6 +896,7 @@ def public_crude_iv(
 @router.get("/nse-mcx")
 def public_nse_mcx(
     commodity: str = Query("crude", pattern="^(crude|natgas)$", description="crude | natgas"),
+    month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
     _key: str = Depends(require_api_key),
 ):
@@ -910,7 +911,7 @@ def public_nse_mcx(
     dead contracts still print stale prices.
     """
     from app.routes.nse_mcx import payload
-    return payload(commodity, window)
+    return payload(commodity, window, month)
 
 
 @router.get("/nse-mcx-crude")
@@ -931,6 +932,7 @@ def public_nse_mcx_history(
     slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),
     days: int = Query(7, ge=1, le=60, description="how many snapshot days back"),
     date: str | None = Query(None, description="YYYY-MM-DD => that day only"),
+    month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
     _key: str = Depends(require_api_key),
 ):
     """Stored 10:00 / 12:00 / 15:00 IST boards, newest first.
@@ -940,7 +942,7 @@ def public_nse_mcx_history(
     No exchange sells NSE-commodity history, so nothing before our first capture
     exists and never will.
     """
-    return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date)
+    return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date, month=month)
 
 
 @router.get("/premium-inputs")

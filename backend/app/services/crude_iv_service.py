@@ -47,12 +47,19 @@ COMMODITIES: dict[str, dict] = {
 
 def _blank() -> dict:
     return {"underlying_id": None, "underlying_name": None, "future_price": None,
+            # The month after, so the NSE-vs-MCX screen can put next month's
+            # futures side by side too. Only the FRONT one underlies the option
+            # chain request; this pair is quoted purely to be displayed.
+            "next_id": None, "next_name": None, "next_price": None,
             "expiry": None, "expiries": [], "atm": None, "rows": [],
-            # A second, caller-chosen expiry. The NSE-vs-MCX screen needs MCX's
+            # Caller-chosen expiries. The NSE-vs-MCX screen needs MCX's
             # SEPTEMBER chain to sit beside NSE's 10-Sep; pairing NSE against
             # MCX's own front month (17-Aug) puts 24 days between them and the
-            # premium "difference" comes out at +230%.
-            "want_expiry": None, "alt_expiry": None, "alt_rows": [], "alt_ts": 0.0,
+            # premium "difference" comes out at +230%. With two months on that
+            # screen there can be several at once, so they are held as a dict
+            # keyed by expiry and refreshed one per round - the far months are
+            # thin and barely move, and a chain call every 5 s is the budget.
+            "want": [], "chains": {}, "want_turn": 0,
             "ts": 0.0, "ok": False, "error": None}
 
 
@@ -66,8 +73,11 @@ def _headers(tok: str) -> dict:
             "Content-Type": "application/json", "Accept": "application/json"}
 
 
-def _resolve_underlying(underlying: str) -> tuple[str | None, str | None]:
-    """Front-month CRUDEOIL future — the option chain's underlying scrip.
+def _resolve_underlying(underlying: str) -> list[tuple[str, str]]:
+    """The next two MCX futures for `underlying`, nearest first.
+
+    The first is the option chain's underlying scrip; the second exists so the
+    comparison screen can show next month's futures beside next month's chain.
 
     Reads the same compact scrip master the rest of the app uses (SEM_* columns);
     the detailed CSV has friendlier names but is a second large download for no
@@ -79,7 +89,7 @@ def _resolve_underlying(underlying: str) -> tuple[str | None, str | None]:
         log.warning("crude IV: scrip master unavailable (%s)", e)
         return None, None
     today = datetime.now()
-    best = None
+    found = []
     for r in rows:
         if r.get("SEM_EXM_EXCH_ID") != "MCX" or r.get("SEM_INSTRUMENT_NAME") != "FUTCOM":
             continue
@@ -88,9 +98,9 @@ def _resolve_underlying(underlying: str) -> tuple[str | None, str | None]:
         exp = _parse_expiry(r.get("SEM_EXPIRY_DATE", ""))
         if not exp or exp < today:
             continue
-        if best is None or exp < best[0]:
-            best = (exp, str(r.get("SEM_SMST_SECURITY_ID")), r.get("SEM_TRADING_SYMBOL", ""))
-    return (best[1], best[2]) if best else (None, None)
+        found.append((exp, str(r.get("SEM_SMST_SECURITY_ID")), r.get("SEM_TRADING_SYMBOL", "")))
+    found.sort()
+    return [(sid, name) for _e, sid, name in found[:2]]
 
 
 def _leg(d: dict | None) -> dict | None:
@@ -120,21 +130,25 @@ def _underlying_prices(sess: requests.Session, tok: str) -> dict:
     converted to rupees) all said 7800. That 146-point error fed both the
     displayed future price and the ATM strike selection.
     """
-    ids = [int(st["underlying_id"]) for st in _state.values() if st.get("underlying_id")]
+    ids = [int(st[f]) for st in _state.values()
+           for f in ("underlying_id", "next_id") if st.get(f)]
     if not ids:
         return {}
     r = sess.post(f"{_BASE}/marketfeed/quote", headers=_headers(tok),
                   data=json.dumps({"MCX_COMM": ids}), timeout=20)
     r.raise_for_status()
     got = ((r.json() or {}).get("data") or {}).get("MCX_COMM") or {}
-    out = {}
-    for key, st in _state.items():
-        sid = str(st.get("underlying_id") or "")
-        q = got.get(sid) or {}
+    def px(sid):
+        q = got.get(str(sid or "")) or {}
         dep = q.get("depth") or {}
         bid = (dep.get("buy") or [{}])[0].get("price")
         ask = (dep.get("sell") or [{}])[0].get("price")
-        out[key] = round((bid + ask) / 2, 2) if (bid and ask) else (q.get("last_price") or None)
+        return round((bid + ask) / 2, 2) if (bid and ask) else (q.get("last_price") or None)
+
+    out = {}
+    for key, st in _state.items():
+        out[key] = px(st.get("underlying_id"))
+        st["next_price"] = px(st.get("next_id"))
     return out
 
 
@@ -196,21 +210,24 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     st.update({"future_price": spot, "rows": rows, "atm": atm,
                "ts": time.time(), "ok": True, "error": None})
 
-    # Optional second chain for whichever expiry a caller asked for.
-    want = st.get("want_expiry")
-    if not want or want == st["expiry"]:
-        # Natural gas needs no alternate - NSE's 20-Aug is nearest to MCX's own
-        # front month. Clearing matters when the front rolls INTO the wanted
-        # date: the old alt would otherwise be served as live for ever.
-        st["alt_expiry"], st["alt_rows"], st["alt_ts"] = None, [], 0.0
-    elif want in (st.get("expiries") or []):
+    # Extra chains for whichever expiries a caller asked for, ONE per round.
+    # Fetching every one each round would put five chain calls between two
+    # refreshes of the front month, which is the screen everybody watches.
+    listed = st.get("expiries") or []
+    wanted = [e for e in st.get("want") or [] if e and e != st["expiry"] and e in listed]
+    # Drop anything nobody asks for any more, so a rolled-past chain can never
+    # be served as live - that bug had the September chain frozen on screen.
+    st["chains"] = {e: v for e, v in st["chains"].items() if e in wanted}
+    if wanted:
+        st["want_turn"] = (st.get("want_turn", 0) + 1) % len(wanted)
+        pick = wanted[st["want_turn"]]
         time.sleep(_GAP_SECONDS)
         r2 = sess.post(f"{_BASE}/optionchain", headers=_headers(tok),
-                       data=json.dumps({**body, "Expiry": want}), timeout=25)
+                       data=json.dumps({**body, "Expiry": pick}), timeout=25)
         r2.raise_for_status()
-        alt_rows, _ = _chain_rows(r2.json())
-        if alt_rows:
-            st["alt_expiry"], st["alt_rows"], st["alt_ts"] = want, alt_rows, time.time()
+        rows2, _ = _chain_rows(r2.json())
+        if rows2:
+            st["chains"][pick] = {"rows": rows2, "ts": time.time()}
 
 
 def _loop() -> None:
@@ -223,7 +240,9 @@ def _loop() -> None:
             st = _state[key]
             try:
                 if not st["underlying_id"] or (time.time() - last_resolve.get(key, 0)) > 12 * 3600:
-                    sid, name = _resolve_underlying(cfg["underlying"])
+                    months = _resolve_underlying(cfg["underlying"])
+                    sid, name = months[0] if months else (None, None)
+                    st["next_id"], st["next_name"] = months[1] if len(months) > 1 else (None, None)
                     if sid:
                         if sid != st["underlying_id"]:
                             st["expiry"] = None          # contract rolled → re-read expiries
@@ -267,33 +286,52 @@ def _loop() -> None:
         _stop.wait(max(0, _ROUND_SECONDS - _GAP_SECONDS * len(COMMODITIES)))
 
 
-def set_want_expiry(commodity: str, iso_date: str | None) -> None:
-    """Ask the poller for a second chain at `iso_date` (nearest listed match)."""
+def set_want_expiry(commodity: str, iso_date: str | None) -> str | None:
+    """Ask the poller to keep a chain near `iso_date`, and say which it picked.
+
+    Callers hand over the date they want to sit beside - the NSE screen passes
+    NSE's own expiry - and get back the listed MCX expiry nearest to it, so they
+    can read exactly the chain they asked for out of `get_full_chain`.
+    """
     st = _state.get(commodity)
     if not st or not iso_date:
-        return
+        return None
     listed = st.get("expiries") or []
     if not listed:
-        st["want_expiry"] = iso_date
-        return
-    # pick the listed expiry closest to what was asked for
-    st["want_expiry"] = min(listed, key=lambda e: abs(
+        return None
+    pick = min(listed, key=lambda e: abs(
         (datetime.strptime(e, "%Y-%m-%d") - datetime.strptime(iso_date, "%Y-%m-%d")).days))
+    if pick not in st["want"]:
+        st["want"].append(pick)
+    return pick
 
 
-def get_full_chain(commodity: str = "crude", prefer_alt: bool = True) -> dict:
+def get_full_chain(commodity: str = "crude", expiry: str | None = None,
+                   month: int = 0) -> dict:
     """Every strike with BOTH legs - no calls-above/puts-below trimming.
-    Returns the alternate expiry when one has been requested and fetched."""
+
+    `expiry` names which chain is wanted (what set_want_expiry handed back).
+    Omit it for the front month. An expiry that has been asked for but not
+    fetched yet comes back empty rather than silently falling back to a
+    different month - a chain labelled September showing August prices is the
+    worst thing this screen could do.
+    """
     st = _state.get(commodity) or _state["crude"]
-    use_alt = prefer_alt and st.get("alt_rows")
+    if expiry and expiry != st["expiry"]:
+        got = (st.get("chains") or {}).get(expiry) or {}
+        rows, ts = got.get("rows", []), got.get("ts", 0.0)
+    else:
+        expiry, rows, ts = st["expiry"], st["rows"], st["ts"]
+    # month 1 shows the NEXT future beside the next chain; the front one would
+    # be a different contract wearing the right chain's label.
+    nxt = month == 1 and st.get("next_name")
     return {
-        "expiry": st["alt_expiry"] if use_alt else st["expiry"],
+        "expiry": expiry,
         "expiries": st.get("expiries") or [],
-        "future_price": st["future_price"],
-        "symbol": st["underlying_name"],
-        "rows": st["alt_rows"] if use_alt else st["rows"],
-        "age": round(time.time() - (st["alt_ts"] if use_alt else st["ts"]), 1)
-               if (st["alt_ts"] if use_alt else st["ts"]) else None,
+        "future_price": st["next_price"] if nxt else st["future_price"],
+        "symbol": st["next_name"] if nxt else st["underlying_name"],
+        "rows": rows,
+        "age": round(time.time() - ts, 1) if ts else None,
         "ok": st["ok"], "error": st["error"],
     }
 

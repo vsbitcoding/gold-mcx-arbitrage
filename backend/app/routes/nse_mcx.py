@@ -101,14 +101,17 @@ def _diff(nse: dict, mcx: dict, fresh: bool = True) -> dict:
     return _num_diff(nse["mid"], mcx["mid"], nse["wide"] or mcx["wide"], fresh)
 
 
-def payload(commodity: str = "crude", window: int = 10) -> dict:
+def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     key = commodity if commodity in COMMODITIES else "crude"
-    a = angel_feed.get_data(key)
+    month = 1 if month else 0
+    a = angel_feed.get_data(key, month)
 
-    # Ask the MCX poller for the expiry nearest NSE's, then read the FULL chain
-    # (both legs on every strike, not the calls-above/puts-below display layout).
-    crude_iv_service.set_want_expiry(key, a.get("opt_expiry"))
-    m = crude_iv_service.get_full_chain(key)
+    # Ask the MCX poller for the expiry nearest NSE's and read back exactly that
+    # chain. Naming it matters now there are two months in play: taking whatever
+    # alternate happened to be loaded would pair September's NSE strikes against
+    # October's MCX ones on the month the user is not even looking at.
+    want = crude_iv_service.set_want_expiry(key, a.get("opt_expiry"))
+    m = crude_iv_service.get_full_chain(key, want, month)
 
     mrows = {r["strike"]: r for r in (m.get("rows") or [])}
     mfut = m.get("future_price")
@@ -142,6 +145,7 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
 
     return {
         "commodity": key,
+        "month": month,
         "label": (crude_iv_service.COMMODITIES.get(key) or {}).get("label", "").replace("MCX ", ""),
         "future": {
             "nse": {**(a.get("future") or {}), "mid": nfut},
@@ -172,22 +176,25 @@ def payload(commodity: str = "crude", window: int = 10) -> dict:
 
 @router.get("/nse-mcx")
 def nse_mcx(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+            month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
             window: int = Query(10, ge=1, le=25, description="strikes each side of ATM")):
-    return payload(commodity, window)
+    return payload(commodity, window, month)
 
 
 @router.get("/nse-mcx-crude")
 def nse_mcx_crude(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                  month: int = Query(0, ge=0, le=1),
                   window: int = Query(10, ge=1, le=25)):
     """Kept because the dashboard and the client's app both already call it."""
-    return payload(commodity, window)
+    return payload(commodity, window, month)
 
 
 @router.get("/nse-mcx/history")
 def nse_mcx_history_view(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
                          slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),
                          days: int = Query(7, ge=1, le=60),
+                         month: int = Query(0, ge=0, le=1),
                          date: str | None = Query(None, description="YYYY-MM-DD")):
     """Stored 10:00 / 12:00 / 15:00 IST boards, newest first. Each snapshot's
     `board` is exactly the live shape, so one component renders both views."""
-    return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date)
+    return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date, month=month)

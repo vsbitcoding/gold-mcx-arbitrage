@@ -141,10 +141,11 @@ export const api = {
   // Live premium-calc inputs (XAU/USD Deriv + USD/INR TwelveData + MCX gold)
   premiumInputs: () => request("/api/premium-inputs"),
   international: () => request("/api/international"),
-  nseMcx: (commodity = "crude") => request("/api/nse-mcx?commodity=" + encodeURIComponent(commodity)),
-  nseMcxHistory: ({ commodity = "crude", slot = "all", days = 7 } = {}) =>
+  nseMcx: (commodity = "crude", month = 0) =>
+    request(`/api/nse-mcx?commodity=${encodeURIComponent(commodity)}&month=${month}`),
+  nseMcxHistory: ({ commodity = "crude", slot = "all", days = 7, month = 0 } = {}) =>
     request(`/api/nse-mcx/history?commodity=${encodeURIComponent(commodity)}` +
-            `&slot=${encodeURIComponent(slot)}&days=${days}`),
+            `&slot=${encodeURIComponent(slot)}&days=${days}&month=${month}`),
   crudeIv: (commodity = "crude") => request("/api/crude-iv?commodity=" + encodeURIComponent(commodity)),
   // Fire-once mean-reversion signals + accuracy track record
   signals: () => request("/api/signals"),

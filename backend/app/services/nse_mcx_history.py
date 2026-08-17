@@ -31,7 +31,19 @@ from app.models import NseMcxSnapshot
 log = logging.getLogger("nse_mcx_history")
 
 SLOTS = {"10:00": (10, 0), "12:00": (12, 0), "15:00": (15, 0)}
+# Both months are captured even though the screen shows one at a time - the
+# capture is the server's, not the viewer's, and a month nobody happened to be
+# looking at would otherwise be lost for ever. Stored as "crude" / "crude_next"
+# in the commodity column, which keeps the (date, slot, commodity) index doing
+# its job without a schema change.
 COMMODITIES = ("crude", "natgas")
+MONTHS = (0, 1)
+
+
+def _ckey(commodity: str, month: int) -> str:
+    return commodity if month == 0 else f"{commodity}_next"
+
+
 _WINDOW_MIN = 45          # minutes after the slot in which a capture is still honest
 _WEEKDAY_NAME = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -64,7 +76,7 @@ def _usable(board: dict) -> bool:
     return False
 
 
-def snapshot(slot: str, commodity: str) -> str:
+def snapshot(slot: str, commodity: str, month: int = 0) -> str:
     """Store the current board for `slot`. Idempotent; returns a status string."""
     if slot not in SLOTS:
         return f"unknown slot {slot!r}"
@@ -86,23 +98,24 @@ def snapshot(slot: str, commodity: str) -> str:
         if not dhan_feed.is_market_open():
             return "market closed; skipped"
 
-        board = payload(commodity, window=10)
+        board = payload(commodity, window=10, month=month)
         if not _usable(board):
             return "no live two-way market; skipped"
 
         today = now.date().isoformat()
         db = SessionLocal()
         try:
+            ckey = _ckey(commodity, month)
             if db.query(NseMcxSnapshot.id).filter(
                     NseMcxSnapshot.snap_date == today,
                     NseMcxSnapshot.slot == slot,
-                    NseMcxSnapshot.commodity == commodity).first():
+                    NseMcxSnapshot.commodity == ckey).first():
                 return "already snapped this slot"
             fut = board["future"]
             db.add(NseMcxSnapshot(
                 snap_date=today,
                 slot=slot,
-                commodity=commodity,
+                commodity=ckey,
                 weekday=now.weekday(),
                 nse_future=(fut.get("nse") or {}).get("mid"),
                 mcx_future=(fut.get("mcx") or {}).get("mid"),
@@ -125,15 +138,15 @@ def snapshot(slot: str, commodity: str) -> str:
 
 
 def snapshot_all(slot: str) -> dict:
-    """Both commodities for one slot."""
-    return {c: snapshot(slot, c) for c in COMMODITIES}
+    """Both commodities and both months for one slot."""
+    return {_ckey(c, m): snapshot(slot, c, m) for c in COMMODITIES for m in MONTHS}
 
 
 # --------------------------------------------------------------------------- #
 # Read (dashboard + public app API)
 # --------------------------------------------------------------------------- #
 def get_history(commodity: str = "crude", slot: str = "all",
-                days: int = 7, date: str | None = None) -> dict:
+                days: int = 7, date: str | None = None, month: int = 0) -> dict:
     """Stored boards, newest first.
 
     date='YYYY-MM-DD' -> that day's snapshots only; otherwise the last `days`
@@ -141,13 +154,14 @@ def get_history(commodity: str = "crude", slot: str = "all",
     so the History view renders with the same component as Live.
     """
     commodity = commodity if commodity in COMMODITIES else "crude"
+    ckey = _ckey(commodity, 1 if month else 0)
     slot = slot if slot in SLOTS else "all"
     try:
         days = max(1, min(int(days), 60))
     except (TypeError, ValueError):
         days = 7
 
-    key = (commodity, slot, days, date)
+    key = (ckey, slot, days, date)
     now = time.time()
     hit = _cache.get(key)
     if hit and now - hit[0] < _CACHE_TTL:
@@ -155,7 +169,7 @@ def get_history(commodity: str = "crude", slot: str = "all",
 
     db = SessionLocal()
     try:
-        q = db.query(NseMcxSnapshot).filter(NseMcxSnapshot.commodity == commodity)
+        q = db.query(NseMcxSnapshot).filter(NseMcxSnapshot.commodity == ckey)
         if date:
             q = q.filter(NseMcxSnapshot.snap_date == date)
         if slot != "all":
@@ -187,6 +201,7 @@ def get_history(commodity: str = "crude", slot: str = "all",
 
     data = {
         "commodity": commodity,
+        "month": 1 if month else 0,
         "slot": slot,
         "days_requested": days,
         "date": date,
