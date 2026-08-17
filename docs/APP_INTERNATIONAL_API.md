@@ -74,6 +74,14 @@ Header:  X-API-Key: <your key>          (same key you already use)
     ]
   },
 
+  // NEXT month, identical shape to the four blocks above (added 17-Aug).
+  // Separate keys, not a month field inside the existing ones, so nothing you
+  // already read changes.
+  "crude_iv_next":       { "expiry": "20260917", ... },   // options on CLV6
+  "crude_options_next":  { ... },
+  "natgas_iv_next":      { "expiry": "20260925", ... },   // options on NGV26
+  "natgas_options_next": { ... },
+
   "summary": {
     "gold_basis": 26.55,             // gold future - gold spot
     "silver_basis": 0.234,           // silver future - silver spot
@@ -96,6 +104,23 @@ Header:  X-API-Key: <your key>          (same key you already use)
    - `itm: "call"` → tint the three call cells; `"put"` → tint the put cells.
 4. **Status chip** — from `connected` / `delayed`.
    `connected && !delayed` = "Live real-time".
+
+## Two months, and why each one carries its own future
+
+A NYMEX option is an option **on a specific futures month**, not on the symbol.
+The `LO` class on `CLU6` lists exactly one expiry; next month's options belong
+to `CLV6`. So the `_next` blocks are a different underlying, not a second
+expiry of the same one.
+
+That is also why `future_price` differs between a block and its `_next` twin:
+on 17-Aug crude read **82.20 front against 81.40 next**, a 0.80 calendar
+spread on a 0.50 strike ladder. Use each block's own `future_price` and
+`atm_strike`; taking the front month's would put the next month's ATM a strike
+out.
+
+All four chains carry 21 strikes with both sides quoted. A `_next` block comes
+back with `expiry: null` and no rows if IBKR lists no month after the front —
+render nothing rather than falling back to the front month.
 
 ## Notes
 - Print each value with the `decimals` the API gives (silver is 3, gold 2).
