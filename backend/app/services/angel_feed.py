@@ -49,7 +49,9 @@ _SESSION_FILE = Path(__file__).resolve().parents[2] / ".angel_session.json"
 _MASTER_CACHE = Path("/tmp/angel-scrip-master.json")
 _MASTER_TTL = 12 * 3600
 
-_POLL_SECONDS = 3
+# One call per tick, not two - see _poll. Same requests per second as the old
+# two-call/3 s rhythm, at twice the refresh rate.
+_POLL_SECONDS = 1.5
 _WINDOW = 10                 # strikes each side of the money -> 21 rows
 _MAX_TOKENS = 50             # Angel's per-request cap
 
@@ -314,37 +316,33 @@ def _quote(sess: requests.Session, c: dict, jwt: str, tokens: dict) -> dict:
     return {x["symbolToken"]: x for x in (d.get("data") or {}).get("fetched", [])}
 
 
+# Last known futures mid per chain key, so the strike window can be centred
+# without spending a call to learn the price first.
+_mids: dict[str, float] = {}
+
+
 def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> None:
-    """One round: every future and USD/INR, then ONE commodity's option chain."""
-    # ── call 1: every future + USD/INR, so every ATM is known ─────────────
-    # All four futures ride in the one call whichever chain's turn it is, so a
-    # month the user is not looking at still shows a current future price.
+    """One round, ONE request: every future, USD/INR, and one option chain.
+
+    Angel takes 50 tokens per call. Four futures, USD/INR and a 21-strike chain
+    come to 47, so all of it fits in a single request - it used to be two, which
+    for the same requests-per-second meant half the refresh rate. Angel does not
+    stream NSE commodity (checked against its own REST prices on 17-Aug: no
+    exchange type on their socket returns the right instrument), so polling
+    faster is the only speed available here.
+
+    The window is centred on the PREVIOUS tick's future price. One tick of lag
+    costs nothing - the window only moves when the money crosses a strike - and
+    it is what lets the future and its chain share one call.
+    """
     nco = [inst["c"][k]["future"]["token"] for k in inst["c"]
            if inst["c"][k].get("future")]
     if not nco:
         raise RuntimeError("no NSE commodity future resolved")
-    tokens = {"NCO": nco}
-    usd = inst.get("usdinr")
-    if usd:
-        tokens["CDS"] = [usd["token"]]
-    fetched = _quote(sess, c, jwt, tokens)
 
-    mids: dict[str, float | None] = {}
-    for key in inst["c"]:
-        fut = inst["c"][key].get("future")
-        if not fut:
-            continue
-        frow = _leg(fetched.get(fut["token"]))
-        mids[key] = (frow or {}).get("mid") or (frow or {}).get("ltp")
-        _state["c"][key]["future"] = {**(frow or {}), "symbol": fut["symbol"],
-                                      "expiry": _expiry_date(fut.get("expiry")).isoformat()}
-    if usd and usd["token"] in fetched:
-        u = _leg(fetched[usd["token"]])
-        _state["usdinr"] = {**u, "symbol": usd["symbol"],
-                            "expiry": _expiry_date(usd.get("expiry")).isoformat()}
-
-    # ── call 2: the 21 strikes around the money for whichever chain's turn ─
-    chain, fmid = inst["c"][turn].get("chain"), mids.get(turn)
+    chain = inst["c"][turn].get("chain")
+    fmid = _mids.get(turn)
+    by: dict[float, dict] = {}
     if fmid and chain:
         def strike_of(x):
             return float(x.get("strike", 0)) / 100.0
@@ -356,22 +354,44 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
             strikes = keep or strikes          # never blank the chain on a surprise ladder
         atm = min(strikes, key=lambda s: abs(s - fmid))
         window = sorted(sorted(strikes, key=lambda s: abs(s - atm))[: _WINDOW * 2 + 1])
-        by: dict[float, dict] = {}
         for x in chain:
             k = strike_of(x)
             if k in window:
                 by.setdefault(k, {})[x.get("symbol", "")[-2:]] = x
-        toks = [x["token"] for legs in by.values() for x in legs.values()][: _MAX_TOKENS]
-        got = _quote(sess, c, jwt, {"NCO": toks})
+        nco += [x["token"] for legs in by.values() for x in legs.values()]
+
+    tokens = {"NCO": nco[:_MAX_TOKENS]}
+    usd = inst.get("usdinr")
+    if usd:
+        tokens["CDS"] = [usd["token"]]
+    fetched = _quote(sess, c, jwt, tokens)
+
+    for key in inst["c"]:
+        fut = inst["c"][key].get("future")
+        if not fut:
+            continue
+        frow = _leg(fetched.get(fut["token"]))
+        mid = (frow or {}).get("mid") or (frow or {}).get("ltp")
+        if mid:
+            _mids[key] = mid
+        _state["c"][key]["future"] = {**(frow or {}), "symbol": fut["symbol"],
+                                      "expiry": _expiry_date(fut.get("expiry")).isoformat()}
+    if usd and usd["token"] in fetched:
+        u = _leg(fetched[usd["token"]])
+        _state["usdinr"] = {**u, "symbol": usd["symbol"],
+                            "expiry": _expiry_date(usd.get("expiry")).isoformat()}
+
+    # the chain legs came back in the same response as the futures
+    if by:
         rows = []
-        for k in window:
-            legs = by.get(k, {})
+        for k in sorted(by):
+            legs = by[k]
             ce, pe = legs.get("CE"), legs.get("PE")
             rows.append({
                 "strike": k,
                 "atm": k == atm,
-                "ce": _leg(got.get(ce["token"])) if ce else None,
-                "pe": _leg(got.get(pe["token"])) if pe else None,
+                "ce": _leg(fetched.get(ce["token"])) if ce else None,
+                "pe": _leg(fetched.get(pe["token"])) if pe else None,
             })
         st = _state["c"][turn]
         st["options"], st["atm"], st["chain_ts"] = rows, atm, time.time()
