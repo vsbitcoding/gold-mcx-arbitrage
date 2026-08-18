@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import activity, extra_instruments, mcxccl_service, nse_mcx_history, options_history_service, span_service
+from app.services import activity, dhan_feed, extra_instruments, mcxccl_service, nse_mcx_history, options_history_service, span_service
 
 log = logging.getLogger("maintenance")
 
@@ -68,9 +68,12 @@ def _vacuum() -> None:
 
 
 def _check_calculator_rollover(active: dict) -> None:
-    """Re-resolve Full Gold + Full Silver. If 7-day-rollover would pick a new
-    contract, log a clear warning so we know to restart the backend.
-    Stores active per-day to avoid duplicate logs."""
+    """Re-resolve Full Gold + Full Silver and note when the contract moves.
+
+    A restart is no longer needed for this - the 08:40 roll above rebuilds every
+    subscription daily - so the note is now a record of what changed rather than
+    a job for somebody. Kept per-day so it is logged once, not every minute.
+    """
     try:
         prev_gold = extra_instruments.get_full_gold()
         prev_silver = extra_instruments.get_full_silver()
@@ -89,9 +92,9 @@ def _check_calculator_rollover(active: dict) -> None:
                 if active.get(key):
                     continue
                 active[key] = True
-                log.warning(
-                    "Calculator rollover due: %s should switch from %s → %s. "
-                    "Restart backend to pick up the new subscription.",
+                log.info(
+                    "Calculator rollover: %s moved %s -> %s (the 08:40 roll "
+                    "picks up the new subscription).",
                     label, prev["trading_symbol"], new["trading_symbol"],
                 )
                 # Persist a system activity row so the user sees it on the Activity tab
@@ -100,7 +103,7 @@ def _check_calculator_rollover(active: dict) -> None:
                     activity.log(
                         db, "rollover_due",
                         actor="system",
-                        summary=f"{label} rollover due: {prev['trading_symbol']} → {new['trading_symbol']} (restart backend)",
+                        summary=f"{label} rolled: {prev['trading_symbol']} to {new['trading_symbol']}",
                         details={
                             "metal": label,
                             "from_symbol": prev["trading_symbol"],
@@ -121,6 +124,7 @@ def _loop() -> None:
     last_clear_date: str | None = None
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
+    last_roll: str | None = None
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
@@ -195,6 +199,22 @@ def _loop() -> None:
                     except Exception as e:
                         log.warning("NSE/MCX snapshot %s raised: %s", _slot, e)
                         last_nmsnap[_slot] = today_str
+
+            # Daily contract roll, 08:40 IST - after the SPAN refresh and twenty
+            # minutes before MCX opens, so the gap falls where nobody is
+            # watching. Every MCX instrument list (option spreads, metal and
+            # other-commodity calendars, the NSE-vs-MCX strikes, the pair legs)
+            # is resolved only when the socket connects, so a feed that stays
+            # up serves an expired contract until something knocks it over.
+            # This is one reconnect a day at a quiet hour, which is nothing
+            # like the six-in-45-minutes that once cooled us down for 15 min.
+            if last_roll != today_str and (now.hour, now.minute) >= (8, 40):
+                try:
+                    log.info("Daily contract roll: %s",
+                             dhan_feed.request_resubscribe("daily contract roll"))
+                except Exception as e:
+                    log.warning("Daily contract roll raised: %s", e)
+                last_roll = today_str
 
             # Daily SPAN margin refresh — once per IST day at 08:30 IST (before market open).
             if last_span_refresh != today_str and (now.hour, now.minute) >= (8, 30):

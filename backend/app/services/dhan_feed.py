@@ -135,6 +135,31 @@ def _trigger_reconnect(reason: str) -> None:
     _safe_close_active()
 
 
+def request_resubscribe(reason: str) -> str:
+    """Rebuild the instrument list without touching the token.
+
+    Contracts roll. An option expires, a future moves to the next month, and
+    every security id resolved at the last connect is then pointing at
+    something that no longer trades. The list is only ever built when the
+    socket connects, so with a feed that stays up the app keeps serving
+    yesterday's contract: on 18-Aug the Commodity Options tab showed the
+    expired 17-Aug crude chain all night and only corrected at 09:17, when the
+    feed happened to reconnect on its own. That was luck, not design.
+
+    Deliberately NOT `_trigger_reconnect`: that invalidates the Dhan token,
+    which is the right move for a dead feed and the wrong one here. The token
+    is healthy - it is the instrument list that is stale - and minting a new
+    one would kill the session this very feed is using.
+    """
+    with _state_lock:
+        cur_mode = _state["mode"]
+    if cur_mode in ("reconnecting", "starting"):
+        return f"skipped, feed is {cur_mode}"
+    log.info("Rebuilding subscriptions: %s", reason)
+    _safe_close_active()          # the loop re-enters and re-resolves everything
+    return "resubscribing"
+
+
 def _watchdog() -> None:
     log.info("Watchdog thread started.")
     last_postmarket_open = None
