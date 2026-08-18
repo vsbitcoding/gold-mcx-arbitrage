@@ -15,11 +15,11 @@ const PAD = { t: 22, r: 74, b: 34, l: 66 };
 const H = 300;
 const SIDES = [{ key: "ce", label: "Call" }, { key: "pe", label: "Put" }];
 
-// X carries the date AND the time, so one trading day occupies three slots -
-// 10, 12 and 3 (client, 18-Aug, after trying one line per capture time and
-// preferring this). The axis is therefore two rows: the hour under each
-// reading, the date centred under the day it belongs to.
-const PAD_B2 = 52;              // room for both rows
+// One trading day occupies three slots - 10, 12 and 3 - but only the DATE is
+// printed, sitting under that day's first dot; the hour is on hover (client,
+// 18-Aug). Labelling all three crowded the axis to say something the tooltip
+// already says on demand.
+const PAD_B2 = 38;
 
 const slotShort = (s) => ({ "10:00": "10 AM", "12:00": "12 PM", "15:00": "3 PM" }[s] || s);
 const dayShort = (iso) => {
@@ -118,27 +118,19 @@ function Chart({ points, dec }) {
           </g>
         ))}
 
-        {/* row 1: the hour under every reading */}
-        {pts.map((p) => (
-          <text key={"t" + p.i} className="nmg-time" x={x(p.i)} y={yBase + 15} textAnchor="middle">
-            {slotShort(p.slot)}
-          </text>
-        ))}
-
-        {/* row 2: the date at the START of its day, not centred under it - the
-            client reads the axis as "17/08, then 10, then 12, then 3, then the
-            next date", and a centred label puts the date after the readings it
-            is introducing. */}
+        {/* The date sits under its day's FIRST dot, so the axis reads
+            "14/08, then its three readings, then the next date". A faint rule
+            between days keeps the grouping visible without labelling the hours,
+            which the tooltip gives on demand. */}
         {groups.map((g, k) => {
-          const a = x(g.start), b = x(g.end);
+          const a = x(g.start);
           const edge = k ? (x(groups[k - 1].end) + a) / 2 : null;
           return (
             <g key={g.date}>
               {edge != null && (
-                <line className="nmg-daysplit" x1={edge} x2={edge} y1={PAD.t} y2={yBase + 20} />
+                <line className="nmg-daysplit" x1={edge} x2={edge} y1={PAD.t} y2={yBase + 8} />
               )}
-              <line className="nmg-dayrule" x1={a} x2={b} y1={yBase + 24} y2={yBase + 24} />
-              <text className="nmg-day" x={a} y={yBase + 40} textAnchor="start">
+              <text className="nmg-day" x={a} y={yBase + 22} textAnchor="middle">
                 {dayShort(g.date)}
               </text>
             </g>

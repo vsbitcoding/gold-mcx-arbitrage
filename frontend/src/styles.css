@@ -5371,15 +5371,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-zero { stroke: var(--text-muted); stroke-width: 1.5; opacity: .85; }
 .nmg-tick { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .nmg-zero-tick { fill: var(--text-muted); font-weight: 800; }
-/* the axis is two rows: the hour under every reading, the date centred under
-   the day it belongs to, with a rule under each day and a faint divider where
-   one day ends. Three readings a day would be unreadable on one row. */
-.nmg-time { fill: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+/* Only the date is printed, under its day's first dot; the hour is on hover.
+   A faint divider marks where one day ends, which is enough grouping without
+   three labels a day fighting for room. */
 .nmg-day {
   fill: var(--text-secondary); font-size: 11px; font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.nmg-dayrule { stroke: var(--border); stroke-width: 1; }
 .nmg-daysplit { stroke: var(--border); stroke-width: 1; opacity: .55; }
 .nmg-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 
