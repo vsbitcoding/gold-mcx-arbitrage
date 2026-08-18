@@ -320,9 +320,17 @@ def series(commodity: str = "crude", strike: float | str | None = None,
     # sides, and the picker was defaulting to the middle of the 36 - landing on
     # one with nothing to draw and an empty page (18-Aug).
     seen: dict[float, int] = {}
+    fut_seen = 0
     points = []
     for snap in hist["snapshots"]:
         rows = ((snap.get("board") or {}).get("options") or {}).get("rows") or []
+        # Counted by the SAME rule as a strike - readings the tradeable line can
+        # actually be drawn from. Counting every snapshot instead made the
+        # future the best-covered entry in the picker, so the default landed on
+        # the one contract whose main line has no history at all (18-Aug).
+        _f = (snap.get("board") or {}).get("future") or {}
+        if ((_f.get("nse") or {}).get("ask") and (_f.get("mcx") or {}).get("bid")):
+            fut_seen += 1
         for r in rows:
             seen.setdefault(r["strike"], 0)
             for sd in ("ce", "pe"):
@@ -354,7 +362,8 @@ def series(commodity: str = "crude", strike: float | str | None = None,
     usable = sorted(k for k, n in seen.items() if n)
     # The future leads the picker. It is the one line that is always drawable -
     # both exchanges quote it two-way all session, unlike the thin far strikes.
-    opts = [{"strike": FUTURE, "label": "Future", "readings": len(hist["snapshots"])}]
+    opts = [{"strike": FUTURE, "label": "Future", "readings": fut_seen,
+             "mid_readings": len(hist["snapshots"])}]
     opts += [{"strike": k, "readings": seen[k]} for k in usable]
     return {
         "commodity": commodity, "month": month, "side": side,

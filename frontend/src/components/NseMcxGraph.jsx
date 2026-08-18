@@ -300,6 +300,11 @@ export default function NseMcxGraph({ product, month, cfg }) {
   const dec = cfg.futDec ?? 2;
   const sDec = cfg.strikeDec ?? 0;
   const isFut = strike === FUT;
+  // Shown in the picker: everything drawable, either line. `readings` alone
+  // drives the DEFAULT and counts only the tradeable line, which is what stops
+  // the default landing on a contract whose main line has no history - but as a
+  // label it would have said "0" for a future that has ten mid readings.
+  const count = (o) => Math.max(o.readings || 0, o.mid_readings || 0);
   // Drives the legend: naming a line that is not drawn is worse than no legend.
   const hasDeal = (d?.points || []).some((p) => p.diff != null);
   // A point counts if EITHER line has a reading. The future's deal line is
@@ -349,7 +354,7 @@ export default function NseMcxGraph({ product, month, cfg }) {
           {opts.map((o) => (
             <option key={o.strike} value={o.strike}>
               {o.strike === FUT ? "Future" : fmtNum(o.strike, sDec)}
-              {" · "}{o.readings} reading{o.readings === 1 ? "" : "s"}
+              {" · "}{count(o)} reading{count(o) === 1 ? "" : "s"}
             </option>
           ))}
         </select>
