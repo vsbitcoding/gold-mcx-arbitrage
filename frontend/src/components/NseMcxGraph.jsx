@@ -125,11 +125,12 @@ function Chart({ points, dec }) {
           </text>
         ))}
 
-        {/* row 2: the date, centred under its own day, with a rule that shows
-            where one day ends and the next begins */}
+        {/* row 2: the date at the START of its day, not centred under it - the
+            client reads the axis as "17/08, then 10, then 12, then 3, then the
+            next date", and a centred label puts the date after the readings it
+            is introducing. */}
         {groups.map((g, k) => {
           const a = x(g.start), b = x(g.end);
-          const mid = (a + b) / 2;
           const edge = k ? (x(groups[k - 1].end) + a) / 2 : null;
           return (
             <g key={g.date}>
@@ -137,7 +138,7 @@ function Chart({ points, dec }) {
                 <line className="nmg-daysplit" x1={edge} x2={edge} y1={PAD.t} y2={yBase + 20} />
               )}
               <line className="nmg-dayrule" x1={a} x2={b} y1={yBase + 24} y2={yBase + 24} />
-              <text className="nmg-day" x={mid} y={yBase + 40} textAnchor="middle">
+              <text className="nmg-day" x={a} y={yBase + 40} textAnchor="start">
                 {dayShort(g.date)}
               </text>
             </g>
