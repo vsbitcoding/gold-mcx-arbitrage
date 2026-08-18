@@ -382,29 +382,12 @@ export default function NseMcxGraph({ product, month, cfg }) {
           <section className="nmg-card">
             {toolbar}
             <div className="nmg-body">
-              <div className="nmg-head">
-                <h3>{title}</h3>
-                <span className="nmg-sub">
-                  {shown.length < 2
-                    ? "Buy on NSE at the ask, sell on MCX at the bid."
-                    : <>Buy on NSE at the ask, sell on MCX at the bid. Above zero the
-                        pair pays you to open it. The dashed line is the plain gap
-                        between the exchanges; the space between the two is what
-                        both spreads cost you.</>}
-                </span>
-              </div>
-
-              {/* The future's solid line starts on 18-Aug: MCX future bid/ask
-                  were not stored before that, only the mid. Say so rather than
-                  leave a dashed line on its own with no explanation. */}
-              {shown.length >= 2 && !stats && (
-                <p className="nmg-widenote">
-                  Only the dashed mid line has history here. The tradeable line needs
-                  MCX bid and ask on the future, which we began saving on 18 Aug, so it
-                  starts from the next capture.
-                </p>
-              )}
-
+              {/* No heading and no prose above the chart (client, 18-Aug). The
+                  page header already names the commodity, the picker names the
+                  contract, and the legend names both lines - three sentences
+                  restating that just pushed the plot down the screen. `title`
+                  survives for the empty state, which does need to say what is
+                  empty. */}
               {stats && shown.length >= 2 && (
                 <div className="nmg-stats">
                   <div><em>LATEST DEAL</em>
