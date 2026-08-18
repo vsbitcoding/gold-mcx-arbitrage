@@ -926,6 +926,28 @@ def public_nse_mcx_crude(
     return payload(commodity, window)
 
 
+@router.get("/nse-mcx/graph")
+def public_nse_mcx_graph(
+    commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+    strike: float | None = Query(None, description="omit to just list the strikes available"),
+    side: str = Query("ce", pattern="^(ce|pe)$"),
+    month: int = Query(0, ge=0, le=1),
+    days: int = Query(30, ge=1, le=60),
+    _key: str = Depends(require_api_key),
+):
+    """One strike's tradeable difference over time, for charting.
+
+    `diff = MCX bid - NSE ask`, the number you net buying on NSE and selling on
+    MCX. Positive means opening the pair pays you. A point is `null` where
+    either side had no quote - draw a gap, not a zero.
+
+    Points come oldest-first. `strikes` lists everything available in the window
+    so a picker can be built from one call; omit `strike` to fetch just that.
+    """
+    return nse_mcx_history.series(commodity=commodity, strike=strike, side=side,
+                                  days=days, month=month)
+
+
 @router.get("/nse-mcx/history")
 def public_nse_mcx_history(
     commodity: str = Query("crude", pattern="^(crude|natgas)$"),

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
+import NseMcxGraph from "./NseMcxGraph.jsx";
 
 // NSE vs MCX — future and option chain side by side, with the difference in
 // rupees AND percent on every leg (client, 13-Aug). Crude oil first, natural
@@ -340,7 +341,7 @@ export default function NseMcxCrude() {
           ))}
         </div>
         <div className="oh-group" role="tablist" aria-label="View">
-          {[["live", "Live"], ["history", "History"]].map(([k, l]) => (
+          {[["live", "Live"], ["history", "History"], ["graph", "Graph"]].map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k}
               className={`oh-chip ${view === k ? "on" : ""}`}
               onClick={() => setView(k)}>{l}</button>
@@ -356,6 +357,15 @@ export default function NseMcxCrude() {
   );
 
   if (err) return <div className="cru-page">{head}<div className="settings-banner danger">⚠ {err}</div></div>;
+
+  if (view === "graph") {
+    return (
+      <div className="cru-page">
+        {head}
+        <NseMcxGraph product={product} month={month} cfg={cfg} />
+      </div>
+    );
+  }
 
   if (view === "history") {
     const snaps = hist?.snapshots || [];

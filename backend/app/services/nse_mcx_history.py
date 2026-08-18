@@ -219,6 +219,61 @@ def get_history(commodity: str = "crude", slot: str = "all",
     return data
 
 
+def series(commodity: str = "crude", strike: float | None = None, side: str = "ce",
+           days: int = 30, month: int = 0) -> dict:
+    """One strike's tradeable difference over time, for the graph.
+
+    The client trades this pair by BUYING on NSE and SELLING on MCX, so the
+    number that matters is what he actually nets:
+
+        difference = MCX bid  -  NSE ask
+
+    Not mid against mid. A mid is the midpoint of a spread nobody fills at; buy
+    and you pay the ask, sell and you receive the bid. The mid version flatters
+    the trade by roughly half of both spreads, which on a thin NSE strike is the
+    whole number. Positive means opening the pair pays you.
+
+    Returns the points oldest-first, so a chart can read them straight through,
+    plus every strike seen in the window for the picker.
+    """
+    commodity = commodity if commodity in COMMODITIES else "crude"
+    side = "pe" if str(side).lower() == "pe" else "ce"
+    hist = get_history(commodity=commodity, slot="all", days=days, month=month)
+
+    strikes: set[float] = set()
+    points = []
+    for snap in hist["snapshots"]:
+        rows = ((snap.get("board") or {}).get("options") or {}).get("rows") or []
+        for r in rows:
+            strikes.add(r["strike"])
+        if strike is None:
+            continue
+        row = next((r for r in rows if abs(r["strike"] - strike) < 1e-9), None)
+        leg = (row or {}).get(side) or {}
+        nse_ask = (leg.get("nse") or {}).get("ask")
+        mcx_bid = (leg.get("mcx") or {}).get("bid")
+        points.append({
+            "date": snap["snap_date"], "slot": snap["slot"],
+            "captured_at": snap.get("captured_at"),
+            "nse_ask": nse_ask, "mcx_bid": mcx_bid,
+            # None, not 0, when either side had no quote - a gap in the line is
+            # honest and a zero would read as "no edge today".
+            "diff": round(mcx_bid - nse_ask, 2) if (nse_ask and mcx_bid) else None,
+        })
+
+    points.reverse()          # get_history returns newest first; a chart reads forward
+    return {
+        "commodity": commodity, "month": month, "side": side,
+        "strike": strike,
+        "formula": "MCX bid - NSE ask",
+        "strikes": sorted(strikes),
+        "count": sum(1 for p in points if p["diff"] is not None),
+        "points": points,
+        "note": ("Buy on NSE at the ask, sell on MCX at the bid. Positive means "
+                 "opening the pair pays you. Captured at 10:00, 12:00 and 15:00 IST."),
+    }
+
+
 def prune(days: int = 370) -> int:
     """Nightly retention: drop snapshots older than ~a year. Returns rows removed."""
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")

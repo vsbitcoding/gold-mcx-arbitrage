@@ -202,6 +202,21 @@ def nse_mcx_crude(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
     return payload(commodity, window, month)
 
 
+@router.get("/nse-mcx/graph")
+def nse_mcx_graph(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                  strike: float | None = Query(None, description="omit to just list the strikes"),
+                  side: str = Query("ce", pattern="^(ce|pe)$"),
+                  month: int = Query(0, ge=0, le=1),
+                  days: int = Query(30, ge=1, le=60)):
+    """One strike's tradeable difference over time: MCX bid minus NSE ask.
+
+    The client buys on NSE and sells on MCX, so that is the number he nets - not
+    mid against mid, which is the midpoint of a spread nobody fills at.
+    """
+    return nse_mcx_history.series(commodity=commodity, strike=strike, side=side,
+                                  days=days, month=month)
+
+
 @router.get("/nse-mcx/history")
 def nse_mcx_history_view(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
                          slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),

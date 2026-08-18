@@ -143,6 +143,10 @@ export const api = {
   international: () => request("/api/international"),
   nseMcx: (commodity = "crude", month = 0) =>
     request(`/api/nse-mcx?commodity=${encodeURIComponent(commodity)}&month=${month}`),
+  nseMcxGraph: ({ commodity = "crude", strike = null, side = "ce", month = 0, days = 30 } = {}) =>
+    request(`/api/nse-mcx/graph?commodity=${encodeURIComponent(commodity)}` +
+            `&side=${side}&month=${month}&days=${days}` +
+            (strike == null ? "" : `&strike=${strike}`)),
   nseMcxHistory: ({ commodity = "crude", slot = "all", days = 7, month = 0 } = {}) =>
     request(`/api/nse-mcx/history?commodity=${encodeURIComponent(commodity)}` +
             `&slot=${encodeURIComponent(slot)}&days=${days}&month=${month}`),
