@@ -253,12 +253,21 @@ def series(commodity: str = "crude", strike: float | None = None, side: str = "c
     side = "pe" if str(side).lower() == "pe" else "ce"
     hist = get_history(commodity=commodity, slot="all", days=days, month=month)
 
-    strikes: set[float] = set()
+    # Count readings per strike, not just which strikes exist. 36 strikes have
+    # appeared on some board or other but only 15 were ever quoted on both
+    # sides, and the picker was defaulting to the middle of the 36 - landing on
+    # one with nothing to draw and an empty page (18-Aug).
+    seen: dict[float, int] = {}
     points = []
     for snap in hist["snapshots"]:
         rows = ((snap.get("board") or {}).get("options") or {}).get("rows") or []
         for r in rows:
-            strikes.add(r["strike"])
+            seen.setdefault(r["strike"], 0)
+            for sd in ("ce", "pe"):
+                leg = r.get(sd) or {}
+                if (leg.get("nse") or {}).get("ask") and (leg.get("mcx") or {}).get("bid"):
+                    seen[r["strike"]] += 1
+                    break
         if strike is None:
             continue
         row = next((r for r in rows if abs(r["strike"] - strike) < 1e-9), None)
@@ -283,11 +292,15 @@ def series(commodity: str = "crude", strike: float | None = None, side: str = "c
         })
 
     points.reverse()          # get_history returns newest first; a chart reads forward
+    usable = sorted(k for k, n in seen.items() if n)
     return {
         "commodity": commodity, "month": month, "side": side,
         "strike": strike,
         "formula": "MCX bid - NSE ask",
-        "strikes": sorted(strikes),
+        # Only strikes with something to draw, newest count alongside, so the
+        # picker cannot offer a dead one and can say how much is behind each.
+        "strikes": usable,
+        "strike_options": [{"strike": k, "readings": seen[k]} for k in usable],
         "count": sum(1 for p in points if p["diff"] is not None),
         "points": points,
         "note": ("Buy on NSE at the ask, sell on MCX at the bid. Positive means "

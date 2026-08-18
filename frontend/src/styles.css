@@ -5208,10 +5208,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-head-status { justify-self: end; }
 /* title left, futures dead centre, and every control gathered on the right:
    commodity first, then Live/History, then the status pill */
+/* nowrap: a third button group pushed the status pill onto a line of its own */
 .nm-head-end {
   display: flex; align-items: center; justify-content: flex-end;
-  gap: 10px; flex-wrap: wrap; justify-self: end;
+  gap: 8px; flex-wrap: nowrap; justify-self: end;
 }
+.nm-head-end .oh-chip { padding-left: 11px; padding-right: 11px; }
 
 /* history: one stored board per section, newest first */
 .nm-hist-controls { margin-bottom: 14px; }
@@ -5323,45 +5325,49 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    includes zero and the zero rule is drawn heavier than the grid. Colours come
    from the app's own pos/neg tokens rather than a chart palette, so a number
    that is green here is green on every other screen too. */
-.nmg-page { margin-top: 6px; }
-.nmg-busy { opacity: .6; transition: opacity .12s ease; }
+.nmg-page { margin-top: 8px; }
+.nmg-busy { opacity: .55; transition: opacity .12s ease; }
 
-/* every control on ONE line - they were spread over three, with the formula
-   pill and the status chip each floating on their own row */
-.nmg-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-.nmg-pick { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
-.nmg-pick span { font-weight: 800; letter-spacing: .05em; }
+.nmg-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 14px; align-items: start; }
+.nmg-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; }
+
+/* the controls sit INSIDE the chart card, so they stop reading as a third
+   floating row between the header and the content */
+.nmg-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+.nmg-pick { display: flex; align-items: center; gap: 8px; }
+.nmg-pick span { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--text-secondary); }
+.nmg-toggle {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12px; color: var(--text-secondary);
+}
 .nmg-formula {
-  margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
-  color: var(--text-secondary); background: var(--bg-surface);
-  border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px;
+  margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: .03em;
+  color: var(--text-secondary); border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px 13px; white-space: nowrap;
 }
 
-/* chart and table side by side on a wide screen: the chart was marooned in the
-   middle with the table in a far corner and half the page empty */
-.nmg-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 14px; align-items: start; }
-.nmg-card {
-  background: var(--bg-surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 14px 16px 10px;
-}
+.nmg-body { padding: 14px 16px 8px; }
 .nmg-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.nmg-head h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.nmg-head h3 { margin: 0; font-size: 16px; font-weight: 800; }
 .nmg-sub { font-size: 12px; color: var(--text-secondary); }
 
-.nmg-stats { display: flex; gap: 26px; flex-wrap: wrap; margin: 12px 0 4px; }
+.nmg-stats { display: flex; gap: 30px; flex-wrap: wrap; margin: 13px 0 4px; }
 .nmg-stats div { display: flex; flex-direction: column; gap: 1px; }
 .nmg-stats em {
-  font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
-  color: var(--text-secondary);
+  font-style: normal; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .07em; color: var(--text-secondary);
 }
-.nmg-stats b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.nmg-stats b { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .nmg-stats i { font-style: normal; font-size: 10.5px; color: var(--text-muted); }
 
 .nmg-wrap { position: relative; width: 100%; }
 .nmg-svg { display: block; overflow: visible; }
 /* recessive: hairline, solid, one step off the surface */
 .nmg-grid { stroke: var(--border); stroke-width: 1; }
-.nmg-zero { stroke: var(--text-muted); stroke-width: 1.5; opacity: .8; }
+.nmg-zero { stroke: var(--text-muted); stroke-width: 1.5; opacity: .85; }
 .nmg-tick { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .nmg-zero-tick { fill: var(--text-muted); font-weight: 800; }
 .nmg-day { fill: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
@@ -5370,8 +5376,8 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-dot { stroke: var(--bg-surface); stroke-width: 2; }
 .nmg-dot.pos { fill: var(--pos, #1a7f37); }
 .nmg-dot.neg { fill: var(--neg, #c62828); }
-/* a reading taken off an absurdly wide quote is drawn hollow - it is on the
-   chart because it happened, not because it was tradeable */
+/* a reading taken off an absurdly wide quote is hollow - on the chart because
+   it happened, not because it was tradeable */
 .nmg-dot.wide { fill: var(--bg-surface); stroke: #c9a227; stroke-width: 2.5; }
 .nmg-lastval { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .nmg-lastval.pos { fill: var(--pos, #1a7f37); }
@@ -5391,20 +5397,30 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-tip b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .nmg-tip em { font-style: normal; font-size: 11px; color: var(--text-secondary); }
 .nmg-tip span {
-  display: flex; justify-content: space-between; gap: 14px;
+  display: flex; justify-content: space-between; gap: 16px;
   font-size: 11px; color: var(--text-muted);
 }
 .nmg-tip span i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .nmg-tip u { text-decoration: none; font-size: 10.5px; color: #c9a227; margin-top: 2px; }
 
-.nmg-tablecard { padding: 8px 10px 10px; }
+.nmg-rhd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+.nmg-rhd b { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--text-secondary); }
+.nmg-rhd span { font-size: 12px; color: var(--text-muted); }
+.nmg-tablecard { overflow: hidden; }
 .nmg-table { width: 100%; }
-.nmg-table th, .nmg-table td { padding: 5px 12px; text-align: right; }
-.nmg-table th:first-child, .nmg-table td:first-child,
-.nmg-table th:nth-child(2), .nmg-table td:nth-child(2) { text-align: left; }
+.nmg-table th, .nmg-table td { padding: 6px 14px; text-align: right; }
+.nmg-table th:nth-child(-n+2), .nmg-table td:nth-child(-n+2) { text-align: left; }
 .nmg-widerow td { background: rgba(201,162,39,.07); }
-.nmg-widenote { margin: 8px 4px 2px; font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+.nmg-widenote { margin: 9px 14px 12px; font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
 .nmg-pos { color: var(--pos, #1a7f37); font-weight: 700; }
 .nmg-neg { color: var(--neg, #c62828); font-weight: 700; }
+
+/* an empty strike gets a sentence, not an empty table with headers */
+.nmg-empty { padding: 34px 18px; text-align: center; }
+.nmg-empty b { display: block; font-size: 14px; margin-bottom: 5px; }
+.nmg-empty span { font-size: 12.5px; color: var(--text-secondary); }
 
 @media (max-width: 1280px) { .nmg-grid-2 { grid-template-columns: 1fr; } }

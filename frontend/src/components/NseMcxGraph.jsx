@@ -8,11 +8,11 @@ import { fmtNum } from "../utils/format.js";
 // actually nets. Not mid against mid: a mid is the middle of a spread nobody
 // fills at, and on a thin NSE strike the two spreads are most of the number.
 //
-// Form: one line against a zero baseline, because the sign IS the story - above
-// it the pair pays you to open, below it costs you. One series, so no legend;
-// the heading names it and the last point carries its value.
-const PAD = { t: 22, r: 66, b: 34, l: 66 };
-const H = 320;
+// One line against a zero baseline, because the sign IS the story: above it the
+// pair pays you to open, below it costs you. One series, so no legend - the
+// heading names it and the last point carries its value.
+const PAD = { t: 22, r: 74, b: 34, l: 66 };
+const H = 300;
 const SIDES = [{ key: "ce", label: "Call" }, { key: "pe", label: "Put" }];
 
 const slotShort = (s) => ({ "10:00": "10 AM", "12:00": "12 PM", "15:00": "3 PM" }[s] || s);
@@ -20,22 +20,17 @@ const dayShort = (iso) => {
   const [, m, d] = (iso || "").split("-");
   return d ? `${d}/${m}` : iso;
 };
-const sign = (v, d) => (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d);
+const sign = (v, d) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d));
 
-// Axis ticks a person can read: 0, 25, 50 - never 39.4 or -113.9. Steps climb
-// through 1/2/2.5/5 x a power of ten, which is what makes the labels land on
-// numbers the eye already knows.
+// Axis ticks a person can read: -100, 0, 100 - never 39.4 or -267.3. Steps climb
+// through 1/2/2.5/5 x a power of ten, and bracket the data so the plot fills its
+// box instead of floating inside it.
 function niceTicks(lo, hi, count = 4) {
-  const span = hi - lo || 1;
-  const raw = span / count;
+  const raw = (hi - lo || 1) / count;
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || 10 * mag;
-  // Bracket the data rather than sit inside it, so the top and bottom
-  // gridlines are above and below every point and the plot fills its box.
   const out = [];
-  const first = Math.floor(lo / step) * step;
-  const stop = Math.ceil(hi / step) * step;
-  for (let v = first; v <= stop + 1e-9; v += step) {
+  for (let v = Math.floor(lo / step) * step; v <= Math.ceil(hi / step) * step + 1e-9; v += step) {
     out.push(Math.abs(v) < 1e-9 ? 0 : Math.round(v * 1e6) / 1e6);
   }
   return out;
@@ -46,9 +41,8 @@ function Chart({ points, dec }) {
   const [w, setW] = useState(900);
   const wrap = useRef(null);
 
-  // The SVG is measured, not letterboxed. A fixed viewBox scaled with
-  // preserveAspectRatio leaves the chart floating in the middle of a wide
-  // screen with dead space either side, which is what it was doing.
+  // Measured, not letterboxed. A fixed viewBox scaled to fit left the chart
+  // floating in the middle of a wide screen with dead space either side.
   useLayoutEffect(() => {
     const el = wrap.current;
     if (!el) return undefined;
@@ -59,14 +53,6 @@ function Chart({ points, dec }) {
 
   const pts = points.map((p, i) => ({ ...p, i }));
   const vals = pts.filter((p) => p.diff != null);
-  if (vals.length < 2) {
-    return (
-      <div className="oh-note oh-slim">
-        Only {vals.length} reading so far. The line needs two, and one is saved at
-        10:00, 12:00 and 3:00 each trading day.
-      </div>
-    );
-  }
 
   // The scale always includes zero: this chart is about which side of it a
   // number sits on, so cropping the baseline would hide the whole point.
@@ -74,11 +60,11 @@ function Chart({ points, dec }) {
   let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
   const pad = (hi - lo || 1) * 0.14;
   const ticks = niceTicks(lo - pad, hi + pad);
-  lo = Math.min(lo - pad, ticks[0]);
-  hi = Math.max(hi + pad, ticks[ticks.length - 1]);
+  lo = ticks[0];
+  hi = ticks[ticks.length - 1];
 
   const x = (i) => PAD.l + (i * (w - PAD.l - PAD.r)) / Math.max(1, pts.length - 1);
-  const y = (v) => PAD.t + ((hi - v) * (H - PAD.t - PAD.b)) / (hi - lo);
+  const y = (v) => PAD.t + ((hi - v) * (H - PAD.t - PAD.b)) / (hi - lo || 1);
 
   // Break the path where a reading is missing, so a gap reads as a gap.
   const segs = [];
@@ -102,9 +88,6 @@ function Chart({ points, dec }) {
     }
     setHover(best && best.d < 80 ? best.p : null);
   }
-
-  const tipLeft = hover ? Math.min(Math.max(x(hover.i), 96), w - 96) : 0;
-  const tipAbove = hover ? y(hover.diff) > H / 2 : true;
 
   return (
     <div className="nmg-wrap" ref={wrap}
@@ -136,12 +119,11 @@ function Chart({ points, dec }) {
           <circle key={p.i}
             className={`nmg-dot ${p.diff >= 0 ? "pos" : "neg"} ${p.wide ? "wide" : ""}`}
             cx={x(p.i)} cy={y(p.diff)} r={p.wide ? 5 : 4}>
-            {p.wide && <title>One side was quoted very wide here, so treat this reading with caution.</title>}
+            {p.wide && <title>One side was quoted very wide here, so this is not a price anyone could have dealt at.</title>}
           </circle>
         ))}
 
-        {/* the latest reading is what anyone looks for first, so it is labelled */}
-        <circle className={`nmg-dot nmg-last ${last.diff >= 0 ? "pos" : "neg"}`}
+        <circle className={`nmg-dot ${last.diff >= 0 ? "pos" : "neg"}`}
           cx={x(last.i)} cy={y(last.diff)} r={5.5} />
         <text className={`nmg-lastval ${last.diff >= 0 ? "pos" : "neg"}`}
           x={x(last.i) + 12} y={y(last.diff) + 4}>{sign(last.diff, dec)}</text>
@@ -155,8 +137,9 @@ function Chart({ points, dec }) {
       </svg>
 
       {hover && (
-        <div className={`nmg-tip ${tipAbove ? "above" : "below"}`}
-          style={{ left: tipLeft, top: tipAbove ? y(hover.diff) - 12 : y(hover.diff) + 12 }}>
+        <div className={`nmg-tip ${y(hover.diff) > H / 2 ? "above" : "below"}`}
+          style={{ left: Math.min(Math.max(x(hover.i), 100), w - 100),
+                   top: y(hover.diff) + (y(hover.diff) > H / 2 ? -12 : 12) }}>
           <b className={hover.diff >= 0 ? "nmg-pos" : "nmg-neg"}>{sign(hover.diff, dec)}</b>
           <em>{dayShort(hover.date)} · {slotShort(hover.slot)}</em>
           <span>NSE ask <i>{fmtNum(hover.nse_ask, dec)}</i></span>
@@ -171,29 +154,37 @@ function Chart({ points, dec }) {
 export default function NseMcxGraph({ product, month, cfg }) {
   const [side, setSide] = useState("ce");
   const [strike, setStrike] = useState(null);
-  const [strikes, setStrikes] = useState([]);
+  const [opts, setOpts] = useState([]);
+  // On by default. A reading taken off a 90% spread is not a price anyone could
+  // have traded, and one of them drags the axis so far that every honest point
+  // flattens onto the zero line - which is exactly what the page was doing.
+  const [hideWide, setHideWide] = useState(true);
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   // The strike list is fetched ONCE per commodity/month. Folding it into the
-  // series call meant every switch fired twice - once without a strike to learn
-  // them, once with - and the chart blanked between the two.
+  // series call meant every switch fired twice - once to learn the strikes,
+  // once to use them - and the chart blanked in between.
   useEffect(() => {
     let alive = true;
     api.nseMcxGraph({ commodity: product, month, days: 30 })
       .then((r) => {
         if (!alive) return;
-        const list = r.strikes || [];
-        setStrikes(list);
-        setStrike((cur) => (cur != null && list.includes(cur)
-          ? cur : list[Math.floor(list.length / 2)] ?? null));
+        const list = r.strike_options || [];
+        setOpts(list);
+        setStrike((cur) => {
+          if (cur != null && list.some((o) => o.strike === cur)) return cur;
+          // the best-covered strike, not the middle of the list - the middle
+          // landed on one with nothing to draw and an empty page
+          return list.slice().sort((a, b) => b.readings - a.readings)[0]?.strike ?? null;
+        });
       })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
   }, [product, month]);
 
-  // The old data stays on screen while the new arrives, dimmed. Blanking it
+  // The old chart stays on screen, dimmed, while the new one loads. Blanking it
   // made every strike change flash the whole page.
   useEffect(() => {
     if (strike == null) return undefined;
@@ -207,98 +198,145 @@ export default function NseMcxGraph({ product, month, cfg }) {
   }, [product, month, side, strike]);
 
   const dec = cfg.futDec ?? 2;
-  const rows = useMemo(
-    () => (d?.points || []).filter((p) => p.diff != null).reverse(), [d]);
+  const sDec = cfg.strikeDec ?? 0;
+  const all = useMemo(() => (d?.points || []).filter((p) => p.diff != null), [d]);
+  const wide = useMemo(() => all.filter((p) => p.wide), [all]);
+  const shown = hideWide ? all.filter((p) => !p.wide) : all;
   const stats = useMemo(() => {
-    const v = rows.filter((p) => !p.wide).map((p) => p.diff);
-    if (!v.length) return null;
-    return { last: rows[0], min: Math.min(...v), max: Math.max(...v),
-             avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length };
-  }, [rows]);
+    const clean = all.filter((p) => !p.wide);
+    if (!clean.length) return null;
+    const v = clean.map((p) => p.diff);
+    const at = (t) => clean.find((p) => p.diff === t);
+    return {
+      last: clean[clean.length - 1], n: clean.length,
+      avg: v.reduce((a, b) => a + b, 0) / v.length,
+      max: Math.max(...v), min: Math.min(...v),
+      atMax: at(Math.max(...v)), atMin: at(Math.min(...v)),
+    };
+  }, [all]);
+
+  const title = `${cfg.label} ${fmtNum(strike, sDec)} ${side === "ce" ? "Call" : "Put"}`;
+
+  const toolbar = (
+    <div className="nmg-bar">
+      <div className="oh-group" role="tablist" aria-label="Option side">
+        {SIDES.map((s) => (
+          <button key={s.key} type="button" role="tab" aria-selected={side === s.key}
+            className={`oh-chip ${side === s.key ? "on" : ""}`}
+            onClick={() => setSide(s.key)}>{s.label}</button>
+        ))}
+      </div>
+      <label className="nmg-pick">
+        <span>STRIKE</span>
+        <select className="oh-weeks" value={strike ?? ""}
+          onChange={(e) => setStrike(Number(e.target.value))}>
+          {opts.map((o) => (
+            <option key={o.strike} value={o.strike}>
+              {fmtNum(o.strike, sDec)} · {o.readings} reading{o.readings === 1 ? "" : "s"}
+            </option>
+          ))}
+        </select>
+      </label>
+      {wide.length > 0 && (
+        <label className="nmg-toggle" title="A reading taken off a very wide quote is not a price anyone could have dealt at, and one of them flattens the whole line.">
+          <input type="checkbox" checked={hideWide}
+            onChange={(e) => setHideWide(e.target.checked)} />
+          hide unusable
+        </label>
+      )}
+      <span className="nmg-formula">MCX bid − NSE ask</span>
+    </div>
+  );
 
   return (
     <div className={`nmg-page ${busy ? "nmg-busy" : ""}`}>
-      <div className="nmg-bar">
-        <div className="oh-group" role="tablist" aria-label="Option side">
-          {SIDES.map((s) => (
-            <button key={s.key} type="button" role="tab" aria-selected={side === s.key}
-              className={`oh-chip ${side === s.key ? "on" : ""}`}
-              onClick={() => setSide(s.key)}>{s.label}</button>
-          ))}
-        </div>
-        <label className="nmg-pick">
-          <span>Strike</span>
-          <select className="oh-weeks" value={strike ?? ""}
-            onChange={(e) => setStrike(Number(e.target.value))}>
-            {strikes.map((s) => (
-              <option key={s} value={s}>{fmtNum(s, cfg.strikeDec ?? 0)}</option>
-            ))}
-          </select>
-        </label>
-        <span className="nmg-formula">MCX bid − NSE ask</span>
-      </div>
-
       {err && <div className="settings-banner danger">⚠ {err}</div>}
       {!d && !err && <div className="empty-state">Loading…</div>}
 
       {d && (
         <div className="nmg-grid-2">
           <section className="nmg-card">
-            <div className="nmg-head">
-              <h3>{cfg.label} {fmtNum(strike, cfg.strikeDec ?? 0)} {side === "ce" ? "Call" : "Put"}</h3>
-              <span className="nmg-sub">
-                Buy on NSE at the ask, sell on MCX at the bid. Above zero the pair
-                pays you to open it.
-              </span>
-            </div>
-
-            {stats && (
-              <div className="nmg-stats">
-                <div><em>Latest</em>
-                  <b className={stats.last.diff >= 0 ? "nmg-pos" : "nmg-neg"}>
-                    {sign(stats.last.diff, dec)}</b>
-                  <i>{dayShort(stats.last.date)} · {slotShort(stats.last.slot)}</i></div>
-                <div><em>Average</em><b>{sign(stats.avg, dec)}</b><i>{stats.n} readings</i></div>
-                <div><em>Best</em><b className="nmg-pos">{sign(stats.max, dec)}</b></div>
-                <div><em>Worst</em><b className={stats.min >= 0 ? "nmg-pos" : "nmg-neg"}>
-                  {sign(stats.min, dec)}</b></div>
+            {toolbar}
+            <div className="nmg-body">
+              <div className="nmg-head">
+                <h3>{title}</h3>
+                <span className="nmg-sub">
+                  {shown.length < 2
+                    ? "Buy on NSE at the ask, sell on MCX at the bid."
+                    : <>Buy on NSE at the ask, sell on MCX at the bid. Above zero the
+                        pair pays you to open it.</>}
+                </span>
               </div>
-            )}
 
-            <Chart points={d.points || []} dec={dec} />
+              {stats && shown.length >= 2 && (
+                <div className="nmg-stats">
+                  <div><em>LATEST</em>
+                    <b className={stats.last.diff >= 0 ? "nmg-pos" : "nmg-neg"}>
+                      {sign(stats.last.diff, dec)}</b>
+                    <i>{dayShort(stats.last.date)} · {slotShort(stats.last.slot)}</i></div>
+                  <div><em>AVERAGE</em><b>{sign(stats.avg, dec)}</b>
+                    <i>{stats.n} reading{stats.n === 1 ? "" : "s"}</i></div>
+                  <div><em>BEST</em><b className="nmg-pos">{sign(stats.max, dec)}</b>
+                    <i>{dayShort(stats.atMax.date)} · {slotShort(stats.atMax.slot)}</i></div>
+                  <div><em>WORST</em>
+                    <b className={stats.min >= 0 ? "nmg-pos" : "nmg-neg"}>{sign(stats.min, dec)}</b>
+                    <i>{dayShort(stats.atMin.date)} · {slotShort(stats.atMin.slot)}</i></div>
+                </div>
+              )}
+
+              {shown.length >= 2
+                ? <Chart points={shown} dec={dec} />
+                : (
+                  <div className="nmg-empty">
+                    <b>Not enough readings yet for {title}</b>
+                    <span>
+                      A line needs two. One is saved at 10:00, 12:00 and 3:00 each
+                      trading day, and only when both exchanges are quoting that strike.
+                    </span>
+                  </div>
+                )}
+            </div>
           </section>
 
           {/* the numbers behind the line - few enough to just show, and a chart
               alone is not readable by everyone */}
           <section className="nmg-card nmg-tablecard">
-            <div className="cru-table-wrap">
-              <table className="cru-table nmg-table">
-                <thead>
-                  <tr><th>Date</th><th>Time</th><th>NSE ask</th><th>MCX bid</th><th>Difference</th></tr>
-                </thead>
-                <tbody>
-                  {rows.map((p) => (
-                    <tr key={p.date + p.slot} className={p.wide ? "nmg-widerow" : ""}>
-                      <td>{dayShort(p.date)}</td>
-                      <td>{slotShort(p.slot)}</td>
-                      <td>{fmtNum(p.nse_ask, dec)}</td>
-                      <td>{fmtNum(p.mcx_bid, dec)}</td>
-                      <td className={p.diff >= 0 ? "nmg-pos" : "nmg-neg"}
-                        title={p.wide ? "One side was quoted very wide here." : ""}>
-                        {sign(p.diff, dec)}{p.wide && " ?"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="nmg-rhd">
+              <b>READINGS</b>
+              <span>{all.length}{wide.length ? ` · ${wide.length} unusable` : ""}</span>
             </div>
-            {rows.some((p) => p.wide) && (
-              <p className="nmg-widenote">
-                A <b>?</b> means one exchange was quoting that leg very wide at the
-                time, so the difference beside it is arithmetic rather than a price
-                anyone could have dealt at. Those readings are left out of the
-                average, best and worst.
-              </p>
+            {all.length === 0 ? (
+              <div className="nmg-empty"><span>Nothing to list yet.</span></div>
+            ) : (
+              <>
+                <table className="cru-table nmg-table">
+                  <thead>
+                    <tr><th>Date</th><th>Time</th><th>NSE ask</th><th>MCX bid</th><th>Diff</th></tr>
+                  </thead>
+                  <tbody>
+                    {all.slice().reverse().map((p) => (
+                      <tr key={p.date + p.slot} className={p.wide ? "nmg-widerow" : ""}>
+                        <td>{dayShort(p.date)}</td>
+                        <td>{slotShort(p.slot)}</td>
+                        <td>{fmtNum(p.nse_ask, dec)}</td>
+                        <td>{fmtNum(p.mcx_bid, dec)}</td>
+                        <td className={p.diff >= 0 ? "nmg-pos" : "nmg-neg"}
+                          title={p.wide ? "One side was quoted very wide here." : ""}>
+                          {sign(p.diff, dec)}{p.wide && " ?"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {wide.length > 0 && (
+                  <p className="nmg-widenote">
+                    A <b>?</b> means one exchange was quoting that leg very wide at the
+                    time, so the difference beside it is arithmetic rather than a price
+                    anyone could have dealt at. Those stay out of the average, best and
+                    worst{hideWide ? ", and off the line" : ""}.
+                  </p>
+                )}
+              </>
             )}
           </section>
         </div>
