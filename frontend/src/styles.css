@@ -10,6 +10,11 @@
   --border: #dadce0;
   --border-light: #f1f3f4;
   --accent: #c9a24e;          /* brand gold — fills, tabs, buttons */
+  /* Second graph series. Gold vs blue is the colourblind-safe pair: validated
+     against the brand gold at deltaE 33.5 protan / 37.6 normal on white, far
+     above the 8 target. Green and red are unavailable here, they already mean
+     positive and negative on the dots. */
+  --series-2: #2563eb;
   --accent-hover: #b08d33;    /* deeper gold for hover */
   --accent-bg: #f7efd6;       /* pale gold tint */
   --accent-ink: #8f6f16;      /* deep gold for accent-coloured TEXT on light */
@@ -47,6 +52,10 @@ body.dark {
   --border: #2d3748;
   --border-light: #2a3a50;
   --accent: #d9b45c;          /* brighter gold on dark */
+  /* Lighter step for the navy ground: a deep blue technically clears 3:1 but
+     sits in the same hue family as #16213e and reads muddy. deltaE 27.3 protan
+     against the dark gold. */
+  --series-2: #4d97ff;
   --accent-hover: #e1c06e;
   --accent-bg: #2f2712;       /* dark gold tint */
   --accent-ink: #e5c877;      /* light gold for accent TEXT on dark */
@@ -5326,7 +5335,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-page { margin-top: 8px; }
 .nmg-busy { opacity: .55; transition: opacity .12s ease; }
 
-.nmg-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 14px; align-items: start; }
+.nmg-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) 470px; gap: 14px; align-items: start; }
 .nmg-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; }
 
 /* the controls sit INSIDE the chart card, so they stop reading as a third
@@ -5352,7 +5361,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 .nmg-legend i { width: 16px; height: 0; display: inline-block; }
 .nmg-legend i.deal { border-top: 2px solid var(--accent); }
-.nmg-legend i.mid { border-top: 2px dashed var(--accent); opacity: .55; margin-left: 6px; }
+.nmg-legend i.mid { border-top: 2px dashed var(--series-2); margin-left: 6px; }
 
 .nmg-body { padding: 14px 16px 8px; }
 .nmg-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -5384,13 +5393,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 .nmg-daysplit { stroke: var(--border); stroke-width: 1; opacity: .55; }
 .nmg-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-/* The mid gap is context for the solid line, never the headline: same hue so
-   the pair reads as one story, thinner and dashed so which is which survives a
-   glance and a greyscale print. */
-.nmg-line.mid { stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .5; }
-.nmg-dot.mid { fill: var(--accent); stroke: none; opacity: .45; }
-.nmg-hoverdot.mid { opacity: .5; }
-.nmg-lastval.mid { fill: var(--text-muted, var(--text-secondary)); font-weight: 700; opacity: .85; }
+/* The mid gap gets its OWN colour, not a faded gold - the client could not tell
+   the two apart at a glance (18-Aug). Full strength, because a line you can
+   barely see is not a second series. The dash stays as secondary encoding, so
+   identity survives a greyscale print and does not rest on colour alone. */
+.nmg-line.mid { stroke: var(--series-2); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.nmg-line.midlead { stroke: var(--series-2); stroke-width: 2; stroke-dasharray: 6 4; }
+.nmg-dot.mid { fill: var(--series-2); stroke: var(--bg-surface); stroke-width: 1.5; }
+.nmg-hoverdot.mid { stroke: var(--series-2); }
+.nmg-lastval.mid { fill: var(--series-2); font-weight: 800; }
 
 /* a 2px surface ring keeps a dot legible where it sits on the line */
 .nmg-dot { stroke: var(--bg-surface); stroke-width: 2; }
@@ -5433,8 +5444,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-rhd b { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--text-secondary); }
 .nmg-rhd span { font-size: 12px; color: var(--text-muted); }
 .nmg-tablecard { overflow: hidden; }
+/* Seven columns did not fit the 400px card and overflow:hidden cut the last one
+   in half rather than showing it (client, 18-Aug). Its own scroller means a
+   wide table can never be silently truncated again, whatever gets added next. */
+.nmg-tablescroll { overflow-x: auto; }
 .nmg-table { width: 100%; }
-.nmg-table th, .nmg-table td { padding: 6px 14px; text-align: right; }
+.nmg-table th, .nmg-table td { padding: 6px 9px; text-align: right; white-space: nowrap; }
 .nmg-table th:nth-child(-n+2), .nmg-table td:nth-child(-n+2) { text-align: left; }
 .nmg-widerow td { background: rgba(201,162,39,.07); }
 .nmg-widenote { margin: 9px 14px 12px; font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
@@ -5453,4 +5468,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-midcell, .nmg-futcell {
   color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
-.nmg-tip span.mid i { opacity: .75; }
+.nmg-tip span.mid i { color: var(--series-2); }
+.nmg-midcell { color: var(--series-2); }

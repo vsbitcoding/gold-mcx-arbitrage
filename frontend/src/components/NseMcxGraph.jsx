@@ -12,8 +12,12 @@ import { fmtNum } from "../utils/format.js";
 //
 // The distance between them is what the two spreads cost, which is why the
 // client asked for both: on crude 7,400 CE the mid line runs +51 to +59 while
-// the deal line runs +21 to +39, so roughly 22 rupees never reaches him. The
-// deal line is the solid one - it is the one he trades.
+// the deal line runs +21 to +39, so roughly 22 rupees never reaches him.
+//
+// Gold solid is the deal, blue dashed is the mid. Two hues, not one hue faded -
+// the faded version was indistinguishable at a glance (client, 18-Aug). Gold vs
+// blue is also the colourblind-safe pair; green and red were unavailable, they
+// already mean positive and negative on the dots.
 //
 // An earlier version drew three lines, one per capture time, and the client
 // rejected it: three lines saying the SAME thing at different hours. Two lines
@@ -120,6 +124,10 @@ function Chart({ points, dec }) {
     else groups.push({ date: p.date, start: i, end: i });
   });
 
+  // With no deal readings the mid line is not "context" any more, it is the
+  // whole chart - drawing it faint and dashed on its own read as broken rather
+  // than as secondary (client, 18-Aug).
+  const midLead = vals.length === 0;
   const last = vals[vals.length - 1] || null;
   const lastMid = mids[mids.length - 1] || null;
   const yBase = H - PAD_B2;
@@ -172,11 +180,12 @@ function Chart({ points, dec }) {
         {/* the mid gap sits behind, thinner and dashed - it is context for the
             solid line, not the number he trades */}
         {midSegs.map((seg, k) => (
-          <path key={`m${k}`} className="nmg-line mid" fill="none"
+          <path key={`m${k}`} className={`nmg-line ${midLead ? "midlead" : "mid"}`} fill="none"
             d={seg.map((p, i) => `${i ? "L" : "M"}${x(p.i)},${y(p.mid_diff)}`).join(" ")} />
         ))}
         {mids.map((p) => (
-          <circle key={`md${p.i}`} className="nmg-dot mid" cx={x(p.i)} cy={y(p.mid_diff)} r={2.5} />
+          <circle key={`md${p.i}`} className="nmg-dot mid"
+            cx={x(p.i)} cy={y(p.mid_diff)} r={midLead ? 4 : 2.5} />
         ))}
 
         {segs.map((seg, k) => (
@@ -291,6 +300,8 @@ export default function NseMcxGraph({ product, month, cfg }) {
   const dec = cfg.futDec ?? 2;
   const sDec = cfg.strikeDec ?? 0;
   const isFut = strike === FUT;
+  // Drives the legend: naming a line that is not drawn is worse than no legend.
+  const hasDeal = (d?.points || []).some((p) => p.diff != null);
   // A point counts if EITHER line has a reading. The future's deal line is
   // empty before 18-Aug, and dropping those points would throw away the mid
   // line that does exist for them.
@@ -352,8 +363,8 @@ export default function NseMcxGraph({ product, month, cfg }) {
       )}
       {/* two series, so identity can no longer rest on the heading alone */}
       <span className="nmg-legend">
-        <i className="deal" /> MCX bid − NSE ask
-        <i className="mid" /> MCX mid − NSE mid
+        {hasDeal && <><i className="deal" /> MCX bid − NSE ask</>}
+        <i className={hasDeal ? "mid" : "deal"} /> MCX mid − NSE mid
       </span>
     </div>
   );
@@ -433,10 +444,11 @@ export default function NseMcxGraph({ product, month, cfg }) {
               <div className="nmg-empty"><span>Nothing to list yet.</span></div>
             ) : (
               <>
+                <div className="nmg-tablescroll">
                 <table className="cru-table nmg-table">
                   <thead>
                     <tr><th>Date</th><th>Time</th><th>NSE ask</th><th>MCX bid</th>
-                      <th>Mid gap</th><th>MCX future</th><th>Diff</th></tr>
+                      <th>Mid</th><th>Future</th><th>Diff</th></tr>
                   </thead>
                   <tbody>
                     {all.slice().reverse().map((p) => (
@@ -457,6 +469,7 @@ export default function NseMcxGraph({ product, month, cfg }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {wide.length > 0 && (
                   <p className="nmg-widenote">
                     A <b>?</b> means one exchange was quoting that leg very wide at the
