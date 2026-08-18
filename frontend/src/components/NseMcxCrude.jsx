@@ -108,13 +108,16 @@ function Futures({ f, cfg }) {
         <b>{num(f?.nse?.mid, cfg.futDec)}</b>
         <i>{num(f?.nse?.bid, cfg.futDec)} / {num(f?.nse?.ask, cfg.futDec)}</i>
       </div>
-      <div className="nm-chip">
+      <div className="nm-chip" title={f?.mcx?.symbol || ""}>
         <div className="nm-chip-id">
           <span className="nm-chip-name">MCX FUTURE</span>
           <span className="nm-chip-exp">{fmtDate(f?.mcx?.expiry)}</span>
         </div>
         <b>{num(f?.mcx?.mid, cfg.futDec)}</b>
-        <i className="nm-chip-sym">{f?.mcx?.symbol || ""}</i>
+        {/* bid/ask, exactly like the NSE card. The contract name used to sit
+            here, wrapping onto two lines as "-19Aug2026-" / "FUT" to repeat an
+            expiry already printed above it; it is the card's tooltip now. */}
+        <i>{num(f?.mcx?.bid, cfg.futDec)} / {num(f?.mcx?.ask, cfg.futDec)}</i>
       </div>
     </div>
   );

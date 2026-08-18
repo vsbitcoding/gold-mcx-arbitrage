@@ -5249,9 +5249,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   font-style: normal; font-size: 11.5px; color: var(--text-secondary);
   font-variant-numeric: tabular-nums; line-height: 1.3; white-space: nowrap;
 }
-/* the MCX contract name is long; let it sit on two lines instead of stretching
-   the card past its twin */
-.nm-chip i.nm-chip-sym { white-space: normal; max-width: 124px; font-size: 10.5px; }
 
 .nm-fut { display: none; }
 .nm-fut-old { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 14px; }

@@ -51,6 +51,11 @@ def _blank() -> dict:
             # futures side by side too. Only the FRONT one underlies the option
             # chain request; this pair is quoted purely to be displayed.
             "next_id": None, "next_name": None, "next_price": None,
+            # bid/ask on both futures, so the comparison screen can show the
+            # MCX card the way it shows the NSE one instead of a contract name
+            # that wraps onto two lines and repeats the expiry above it.
+            "future_bid": None, "future_ask": None,
+            "next_bid": None, "next_ask": None,
             "expiry": None, "expiries": [], "atm": None, "rows": [],
             # Caller-chosen expiries. The NSE-vs-MCX screen needs MCX's
             # SEPTEMBER chain to sit beside NSE's 10-Sep; pairing NSE against
@@ -87,7 +92,8 @@ def _resolve_underlying(underlying: str) -> list[tuple[str, str]]:
         rows = list(csv.DictReader(io.StringIO(_download_csv())))
     except Exception as e:  # noqa: BLE001
         log.warning("crude IV: scrip master unavailable (%s)", e)
-        return None, None
+        return []          # a list, like every other return - a bare (None, None)
+                           # is truthy and unpacking months[0] off it would raise
     today = datetime.now()
     found = []
     for r in rows:
@@ -139,16 +145,18 @@ def _underlying_prices(sess: requests.Session, tok: str) -> dict:
     r.raise_for_status()
     got = ((r.json() or {}).get("data") or {}).get("MCX_COMM") or {}
     def px(sid):
+        """(mid, bid, ask) - mid falls back to the last trade when one-sided."""
         q = got.get(str(sid or "")) or {}
         dep = q.get("depth") or {}
-        bid = (dep.get("buy") or [{}])[0].get("price")
-        ask = (dep.get("sell") or [{}])[0].get("price")
-        return round((bid + ask) / 2, 2) if (bid and ask) else (q.get("last_price") or None)
+        bid = (dep.get("buy") or [{}])[0].get("price") or None
+        ask = (dep.get("sell") or [{}])[0].get("price") or None
+        mid = round((bid + ask) / 2, 2) if (bid and ask) else (q.get("last_price") or None)
+        return mid, bid, ask
 
     out = {}
     for key, st in _state.items():
-        out[key] = px(st.get("underlying_id"))
-        st["next_price"] = px(st.get("next_id"))
+        out[key], st["future_bid"], st["future_ask"] = px(st.get("underlying_id"))
+        st["next_price"], st["next_bid"], st["next_ask"] = px(st.get("next_id"))
     return out
 
 
@@ -329,6 +337,8 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
         "expiry": expiry,
         "expiries": st.get("expiries") or [],
         "future_price": st["next_price"] if nxt else st["future_price"],
+        "future_bid": st["next_bid"] if nxt else st["future_bid"],
+        "future_ask": st["next_ask"] if nxt else st["future_ask"],
         "symbol": st["next_name"] if nxt else st["underlying_name"],
         "rows": rows,
         "age": round(time.time() - ts, 1) if ts else None,

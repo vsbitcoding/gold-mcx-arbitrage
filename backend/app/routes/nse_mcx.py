@@ -165,7 +165,7 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
             # the FUTURE's own expiry, taken from its symbol - m["expiry"] is the
             # option chain's date and showing it here was simply wrong
             "mcx": {"symbol": m.get("symbol"), "expiry": _fut_expiry(m.get("symbol")),
-                    "mid": mfut},
+                    "mid": mfut, "bid": m.get("future_bid"), "ask": m.get("future_ask")},
             "diff": _num_diff(nfut, mfut, fresh=fresh),
             "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
