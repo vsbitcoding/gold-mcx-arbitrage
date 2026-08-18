@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import OptionsBoard from "./OptionsBoard.jsx";
 
-// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00/15:15/15:35 IST
+// History for the Nifty/Sensex PE board — renders each stored 10:00/15:00/15:16/15:35 IST
 // snapshot EXACTLY like the Live board (cards + full 3-week matrix), stacked
 // newest-first. Filters: weekday + time + how many past days. Boards are
 // fetched ON DEMAND only (control changes) — no polling, no load.
@@ -29,10 +29,12 @@ function fmtDate(iso) {
 const SLOTS = [
   { key: "10:00", label: "10:00 AM" },
   { key: "15:00", label: "3:00 PM" },
-  { key: "15:15", label: "3:15 PM" },
+  { key: "15:16", label: "3:16 PM" },
   { key: "15:35", label: "3:35 PM" },
-  // captured until 13-Aug-2026, when the client swapped it for 3:15 and 3:35.
-  // Kept as a filter so those older boards stay reachable.
+  // Both are retired labels kept as filters so those boards stay reachable:
+  // 3:25 ran until 13-Aug-2026, 3:15 from then until 18-Aug, when the client
+  // moved the afternoon reading to 3:16.
+  { key: "15:15", label: "3:15 PM", legacy: true },
   { key: "15:25", label: "3:25 PM", legacy: true },
 ];
 // The three afternoon boards sit within 35 minutes of each other, so seeing a
@@ -106,7 +108,7 @@ export default function OptionsHistory({ side }) {
       {!loading && snaps.length === 0 && !err && (
         <div className="oh-note">
           No snapshots yet for this filter. Boards are saved automatically at <b>10:00</b>, <b>3:00</b>,
-          <b> 3:15</b> and <b>3:35</b> IST every trading day — history builds up from today onward.
+          <b> 3:16</b> and <b>3:35</b> IST every trading day — history builds up from today onward.
         </div>
       )}
 

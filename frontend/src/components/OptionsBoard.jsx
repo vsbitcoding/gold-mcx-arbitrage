@@ -29,7 +29,26 @@ function itmCls(v) {
   return v >= 0 ? "itm" : "otm";
 }
 
+// "15:16" reads as 3:16 PM, and the date as "yesterday" when it is - the base
+// is usually the previous session but after a weekend or a holiday it is not,
+// and getting that wrong is the difference between a real number and a puzzle.
+function refLabel(slot) {
+  if (!slot) return "REFERENCE";
+  const [h, m] = slot.split(":").map(Number);
+  const ap = h >= 12 ? "PM" : "AM";
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${ap}`;
+}
+
+function refDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - d.getTime()) / 86400000);
+  if (days === 1) return "yesterday";
+  return d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short" });
+}
+
 export default function OptionsBoard({ data, side, live = false }) {
+  const rd = data?.ref_divergence;
   const matrix = useMemo(() => {
     if (!data?.weeks?.length) return null;
     const baseRows = data.weeks[0].rows;
@@ -116,6 +135,53 @@ export default function OptionsBoard({ data, side, live = false }) {
             </div>
           </div>
         </div>
+        {/* The same sum measured from the previous day's 3:16 reading instead
+            of its close (client, 18-Aug). He watches the move from that mark,
+            so both are on screen and neither replaces the other. The label
+            carries the date and the time actually used - for four days in
+            August the reference was 3:15, and calling that 3:16 would be a
+            quiet lie about where the number came from. */}
+        {rd && rd.divergence != null && (
+          <div
+            className="opt-spot-chip opt-day-chip"
+            title={"Move since the previous day's " + rd.ref_slot + " reading.\n"
+                   + "Expected = Nifty change x 3.2; divergence = actual Sensex change - expected.\n"
+                   + "Base: Nifty " + rd.nifty_ref + " / Sensex " + rd.sensex_ref}
+          >
+            <span className="opt-spot-label">
+              {dot(rd.divergence)}SINCE {refLabel(rd.ref_slot)}
+              <em className="opt-ref-when">{refDate(rd.ref_date)}</em>
+            </span>
+            <div className="opt-day-flex">
+              <div className="opt-day-seg">
+                <em>Divergence</em>
+                <b className={`opt-day-hero ${rd.divergence >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+                  {fmtSigned(rd.divergence, 1)}
+                </b>
+              </div>
+              <div className="opt-nse-left">
+                <span className="opt-nse-row">
+                  <em>Nifty</em>
+                  <b className={rd.nifty_change == null ? "" : rd.nifty_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                    {rd.nifty_change == null ? "—" : fmtSigned(rd.nifty_change, 1)}
+                  </b>
+                </span>
+                <span className="opt-nse-row">
+                  <em>Sensex</em>
+                  <b className={rd.sensex_change == null ? "" : rd.sensex_change >= 0 ? "opt-div-pos" : "opt-div-neg"}>
+                    {rd.sensex_change == null ? "—" : fmtSigned(rd.sensex_change, 1)}
+                  </b>
+                </span>
+              </div>
+              <div className="opt-day-seg">
+                <em>Expected</em>
+                <b className={`opt-day-big ${rd.sensex_expected_change == null ? "" : rd.sensex_expected_change >= 0 ? "opt-div-pos" : "opt-div-neg"}`}>
+                  {rd.sensex_expected_change == null ? "—" : fmtSigned(rd.sensex_expected_change, 1)}
+                </b>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="opt-spot-chip">
           <span className="opt-spot-label">{dot(data?.sensex_spot)}SENSEX spot</span>
           <span className="opt-spot-value">

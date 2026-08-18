@@ -162,7 +162,7 @@ def _loop() -> None:
                 _check_calculator_rollover(rollover_logged)
                 last_rollover_check = today_str
 
-            # Nifty/Sensex options-board snapshot (10:00, 15:00, 15:15 & 15:35 IST)
+            # Nifty/Sensex options-board snapshot (10:00, 15:00, 15:16 & 15:35 IST)
             # — replaces the client's manual screenshots. In-memory read + one tiny
             # INSERT; the service itself skips weekends / cold feed / missed windows
             # (so a late restart can never store mislabelled data). The slot list

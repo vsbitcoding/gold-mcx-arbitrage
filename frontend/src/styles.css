@@ -5314,3 +5314,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 @media (max-width: 1100px) { .nm-fut { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .nm-fut { grid-template-columns: 1fr 1fr; gap: 8px; } }
+
+/* the reference card's date, small beside its label */
+.opt-ref-when { font-style: normal; font-weight: 500; opacity: .75; margin-left: 6px; }

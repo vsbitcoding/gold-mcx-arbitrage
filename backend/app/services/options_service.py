@@ -404,19 +404,40 @@ def get_spread_table(side: str = "below") -> dict:
             "rows": rows,
         })
 
-    # Day change vs previous close + index divergence (client analytic):
-    # Sensex "should" move nifty_change × 3.2; divergence = actual − expected.
-    # Positive → Sensex stronger than the ratio implies; negative → weaker.
+    # Index divergence (client analytic): Sensex "should" move
+    # nifty_change × 3.2, so divergence = actual − expected. Positive → Sensex
+    # stronger than the ratio implies; negative → weaker.
+    def _diverge(n_base, s_base):
+        n_ch = round(nifty_spot - n_base, 2) if (nifty_spot and n_base) else None
+        s_ch = round(sensex_spot - s_base, 2) if (sensex_spot and s_base) else None
+        s_exp = round(n_ch * NIFTY_TO_SENSEX_RATIO, 2) if n_ch is not None else None
+        div = round(s_ch - s_exp, 2) if (s_ch is not None and s_exp is not None) else None
+        return n_ch, s_ch, s_exp, div
+
     nifty_prev = prev_close_store.get(NIFTY_SPOT_ID)
     sensex_prev = prev_close_store.get(SENSEX_SPOT_ID)
-    nifty_change = round(nifty_spot - nifty_prev, 2) if (nifty_spot and nifty_prev) else None
-    sensex_change = round(sensex_spot - sensex_prev, 2) if (sensex_spot and sensex_prev) else None
-    sensex_expected = round(nifty_change * NIFTY_TO_SENSEX_RATIO, 2) if nifty_change is not None else None
-    divergence = (
-        round(sensex_change - sensex_expected, 2)
-        if (sensex_change is not None and sensex_expected is not None)
-        else None
-    )
+    nifty_change, sensex_change, sensex_expected, divergence = _diverge(nifty_prev, sensex_prev)
+
+    # The SAME sum measured from the previous day's 15:16 reading instead of its
+    # close (client, 18-Aug). He watches the move from that mark, not from the
+    # closing print; both are returned so the two can be read side by side.
+    # The reference can fall back to 15:15 for the four days that slot ran, and
+    # `ref_slot` says which was used - a 15:15 base labelled 15:16 would be a
+    # quiet lie about where the number came from.
+    ref_div = {"ref_date": None, "ref_slot": None, "nifty_ref": None, "sensex_ref": None,
+               "nifty_change": None, "sensex_change": None,
+               "sensex_expected_change": None, "divergence": None}
+    try:
+        from app.services import options_history_service
+        ref = options_history_service.last_reference()
+        if ref:
+            n_ch, s_ch, s_exp, div = _diverge(ref["nifty"], ref["sensex"])
+            ref_div = {"ref_date": ref["date"], "ref_slot": ref["slot"],
+                       "nifty_ref": ref["nifty"], "sensex_ref": ref["sensex"],
+                       "nifty_change": n_ch, "sensex_change": s_ch,
+                       "sensex_expected_change": s_exp, "divergence": div}
+    except Exception:  # noqa: BLE001 - the live board must never fail over history
+        pass
 
     return {
         "side": side,
@@ -431,6 +452,8 @@ def get_spread_table(side: str = "below") -> dict:
         "sensex_day_change": sensex_change,
         "sensex_expected_change": sensex_expected,
         "day_divergence": divergence,
+        # measured from the previous day's 15:16 reading, alongside the above
+        "ref_divergence": ref_div,
         "weeks": weeks_out,
     }
 

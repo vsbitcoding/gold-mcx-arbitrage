@@ -24,16 +24,22 @@ from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import OptionsSnapshot
 
-_SLOTS = {"10:00": (10, 0), "15:00": (15, 0), "15:15": (15, 15), "15:35": (15, 35)}
+_SLOTS = {"10:00": (10, 0), "15:00": (15, 0), "15:16": (15, 16), "15:35": (15, 35)}
+# The afternoon reference the divergence measures from, newest label first.
+# 15:15 ran for four days before the client moved it to 15:16 (18-Aug), so the
+# fallback is what lets the new divergence work from the day it ships instead
+# of waiting for tomorrow's capture. The screen always prints which one it
+# used, so a 15:15 base is never passed off as a 15:16 one.
+REFERENCE_SLOTS = ("15:16", "15:15")
 # 15:25 was captured until 13-Aug-2026, when the client swapped it for 15:15 and
 # added 15:35. Old rows stay readable, so the read side has to know the label
 # even though nothing writes it any more.
-_READ_SLOTS = {**_SLOTS, "15:25": (15, 25)}
+_READ_SLOTS = {**_SLOTS, "15:25": (15, 25), "15:15": (15, 15)}
 _WINDOW_MIN = 45          # minutes after the slot in which a capture is still honest
 # The afternoon slots sit either side of the 15:30 index close, so their windows
 # have to be tight - a late run at 16:00 would otherwise store post-close numbers
 # under a pre-close label, or a stale board under 15:35.
-_SLOT_WINDOW = {"15:15": 5, "15:25": 5, "15:35": 10}
+_SLOT_WINDOW = {"15:16": 5, "15:15": 5, "15:25": 5, "15:35": 10}
 _WEEKDAY_NUM = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 _WEEKDAY_NAME = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -224,14 +230,51 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
         "count": len(snapshots),
         "dates": dates_seen,
         "snapshots": snapshots,
-        "note": ("auto-captured 10:00, 15:00, 15:15 & 15:35 IST each trading day; "
-                 "holidays/weekends have no snapshot. Boards labelled 15:25 are from "
-                 "before 13-Aug-2026, when that slot was replaced by 15:15 and 15:35"),
+        "note": ("auto-captured 10:00, 15:00, 15:16 & 15:35 IST each trading day; "
+                 "holidays/weekends have no snapshot. 15:25 boards are from before "
+                 "13-Aug-2026 and 15:15 boards from 13-Aug to 18-Aug, when the "
+                 "afternoon reading moved to 15:16"),
     }
     if len(_cache) > 32:
         _cache.clear()
     _cache[key] = (now, data)
     return data
+
+
+def reference_close(on_date: str) -> dict | None:
+    """The afternoon reading the divergence measures from, for one date.
+
+    Returns the slot actually used alongside the values, because it is not
+    always the one asked for - see REFERENCE_SLOTS - and a base of 15:15 shown
+    as 15:16 would be a quiet lie about where the number came from.
+    """
+    db = SessionLocal()
+    try:
+        rows = {r.slot: r for r in db.query(OptionsSnapshot).filter(
+            OptionsSnapshot.snap_date == on_date,
+            OptionsSnapshot.slot.in_(REFERENCE_SLOTS)).all()}
+    finally:
+        db.close()
+    for slot in REFERENCE_SLOTS:
+        r = rows.get(slot)
+        if r and r.nifty_spot and r.sensex_spot:
+            return {"date": on_date, "slot": slot,
+                    "nifty": r.nifty_spot, "sensex": r.sensex_spot}
+    return None
+
+
+def last_reference(before: str | None = None, look_back: int = 10) -> dict | None:
+    """The most recent afternoon reading strictly before `before` (default today).
+
+    Walks back day by day rather than assuming yesterday: a Monday's base is
+    Friday's, and a holiday has no snapshot at all.
+    """
+    start = datetime.strptime(before, "%Y-%m-%d").date() if before else datetime.now().date()
+    for back in range(1, look_back + 1):
+        got = reference_close((start - timedelta(days=back)).isoformat())
+        if got:
+            return got
+    return None
 
 
 def prune(days: int = 370) -> int:
