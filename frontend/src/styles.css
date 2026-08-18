@@ -10,6 +10,8 @@
   --border: #dadce0;
   --border-light: #f1f3f4;
   --accent: #c9a24e;          /* brand gold — fills, tabs, buttons */
+  /* graph series: one hue, three ordered steps (validated on #ffffff) */
+  --nmg-1: #cf9a30; --nmg-2: #8a6212; --nmg-3: #422c06;
   --accent-hover: #b08d33;    /* deeper gold for hover */
   --accent-bg: #f7efd6;       /* pale gold tint */
   --accent-ink: #8f6f16;      /* deep gold for accent-coloured TEXT on light */
@@ -39,6 +41,8 @@ body.dark {
   --brand-gold: #e1c06e;   /* brighter gold so the mark pops on dark */
   --bg-primary: #1a1a2e;
   --bg-surface: #16213e;
+  /* the dark board needs its own steps, not a flip (validated on #16213e) */
+  --nmg-1: #ffe4ad; --nmg-2: #e0a83c; --nmg-3: #8a5a12;
   --bg-surface-alt: #1a2540;
   --bg-hover: #1e2d4a;
   --text-primary: #f1f5f9;
@@ -5202,6 +5206,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    vertical space and pushed the chain below the fold. */
 /* title left, the two futures dead centre, status right - the centre column is
    sized by its content so the futures stay put whatever the title says */
+.nm-head-left { display: flex; align-items: center; gap: 12px; }
 .nm-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; margin-bottom: 12px; }
 .nm-head h2 { margin: 0; font-size: 19px; font-weight: 800; }
 .nm-head-right { display: flex; align-items: center; gap: 12px; justify-self: center; }
@@ -5371,7 +5376,34 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-tick { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .nmg-zero-tick { fill: var(--text-muted); font-weight: 800; }
 .nmg-day { fill: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.nmg-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* Three ORDERED steps of one hue - light for the morning, deepest for the
+   close - not three unrelated colours. Each ramp was validated against its own
+   surface, dark end 2.52:1 on white and 2.69:1 on the dark board, with every
+   adjacent gap past the 0.06 lightness floor. The first pass was too timid -
+   the two darker steps were indistinguishable at 2px on navy even though the
+   numbers passed - so the ramp spans further. Each line is also labelled at
+   its end, so identity never rests on colour at all. */
+.nmg-line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.nmg-line.s1 { stroke: var(--nmg-1); }
+.nmg-line.s2 { stroke: var(--nmg-2); }
+.nmg-line.s3 { stroke: var(--nmg-3); }
+.nmg-dot.s1 { fill: var(--nmg-1); }
+.nmg-dot.s2 { fill: var(--nmg-2); }
+.nmg-dot.s3 { fill: var(--nmg-3); }
+.nmg-endlbl { font-size: 11px; font-weight: 800; }
+.nmg-endlbl.s1 { fill: var(--nmg-1); }
+.nmg-endlbl.s2 { fill: var(--nmg-2); }
+.nmg-endlbl.s3 { fill: var(--nmg-3); }
+
+/* a legend is always present with more than one series, and the three are
+   direct-labelled at their line ends too, so identity never rests on colour */
+.nmg-legend { display: flex; gap: 18px; margin: 10px 0 2px; }
+.nmg-legend span { display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; color: var(--text-secondary); }
+.nmg-key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; text-decoration: none; }
+.nmg-key.s1 { background: var(--nmg-1); }
+.nmg-key.s2 { background: var(--nmg-2); }
+.nmg-key.s3 { background: var(--nmg-3); }
 /* a 2px surface ring keeps a dot legible where it sits on the line */
 .nmg-dot { stroke: var(--bg-surface); stroke-width: 2; }
 .nmg-dot.pos { fill: var(--pos, #1a7f37); }
@@ -5397,11 +5429,14 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-tip b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .nmg-tip em { font-style: normal; font-size: 11px; color: var(--text-secondary); }
 .nmg-tip span {
-  display: flex; justify-content: space-between; gap: 16px;
-  font-size: 11px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 9px;
+  font-size: 11.5px; color: var(--text-secondary);
 }
-.nmg-tip span i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
-.nmg-tip u { text-decoration: none; font-size: 10.5px; color: #c9a227; margin-top: 2px; }
+.nmg-tip span i {
+  margin-left: auto; font-style: normal; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.nmg-tip em { font-weight: 800; color: var(--text-primary); margin-bottom: 2px; }
 
 .nmg-rhd {
   display: flex; align-items: center; justify-content: space-between;

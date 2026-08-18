@@ -259,12 +259,23 @@ export default function NseMcxCrude() {
       return PRODUCTS.some((x) => x.key === p) ? p : "crude";
     } catch { return "crude"; }
   });
-  const [view, setView] = useState("live");
+  // The tab, the month and the commodity all survive a refresh. Landing back on
+  // Live every time meant anyone watching History or the Graph had to click
+  // their way back after every reload (client, 18-Aug).
+  const [view, setView] = useState(() => {
+    try {
+      const v = localStorage.getItem("arbi_nsemcx_view");
+      return ["live", "history", "graph"].includes(v) ? v : "live";
+    } catch { return "live"; }
+  });
   // Which contract month. The client asked for one at a time behind a button
   // rather than both stacked, so only the month on screen has to be watched -
   // which is why the feed can keep the near month at full speed and let the
   // far one refresh slowly.
-  const [month, setMonth] = useState(0);
+  const [month, setMonth] = useState(() => {
+    try { return localStorage.getItem("arbi_nsemcx_month") === "1" ? 1 : 0; }
+    catch { return 0; }
+  });
   const [slot, setSlot] = useState("all");
   const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
@@ -274,6 +285,8 @@ export default function NseMcxCrude() {
   const timer = useRef(null);
 
   useEffect(() => { try { localStorage.setItem("arbi_nsemcx_product", product); } catch {} }, [product]);
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_view", view); } catch {} }, [view]);
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_month", String(month)); } catch {} }, [month]);
 
   // Switching commodity is a different market, so the old table must go.
   // Switching Live/History is not - the futures above are the same either way
@@ -318,7 +331,15 @@ export default function NseMcxCrude() {
 
   const head = (
     <div className="nm-head">
-      <h2>{cfg.title}</h2>
+      {/* The status belongs beside the name of the thing it describes, not
+          alone at the far right where it wrapped onto its own line. */}
+      <div className="nm-head-left">
+        <h2>{cfg.title}</h2>
+        <span className={`intl-status ${live ? "on" : "off"}`}
+          title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
+          {live ? "● Live" : "○ Feed issue"}
+        </span>
+      </div>
 
       {/* Rendered in BOTH views. The futures are the current market whichever
           tab is open, and taking them away on the way to History was most of
@@ -347,11 +368,6 @@ export default function NseMcxCrude() {
               onClick={() => setView(k)}>{l}</button>
           ))}
         </div>
-        {/* Always present, so the row never changes width when the tab changes. */}
-        <span className={`intl-status ${live ? "on" : "off"}`}
-          title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
-          {live ? "● Live" : "○ Feed issue"}
-        </span>
       </div>
     </div>
   );

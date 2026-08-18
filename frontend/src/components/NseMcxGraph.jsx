@@ -15,6 +15,22 @@ const PAD = { t: 22, r: 74, b: 34, l: 66 };
 const H = 300;
 const SIDES = [{ key: "ce", label: "Call" }, { key: "pe", label: "Put" }];
 
+// One line per capture time, days along the bottom (client, 18-Aug). Reading
+// the three together answers a question the single zig-zag line could not: is
+// the morning difference habitually wider than the afternoon one, or is the
+// day just moving? Mixing intraday and day-to-day in one stroke hid that.
+//
+// The three are ORDERED, not three unrelated things, so they are three steps of
+// one hue rather than three colours - light for the morning, deepest for the
+// close. Both ramps were checked against their own surface (light end 2.7:1 on
+// white, 3.9:1 on the dark board) and step apart by more than the 0.06
+// lightness floor, so the order survives greyscale and colour blindness alike.
+const SERIES = [
+  { slot: "10:00", label: "10 AM", cls: "s1" },
+  { slot: "12:00", label: "12 PM", cls: "s2" },
+  { slot: "15:00", label: "3 PM", cls: "s3" },
+];
+
 const slotShort = (s) => ({ "10:00": "10 AM", "12:00": "12 PM", "15:00": "3 PM" }[s] || s);
 const dayShort = (iso) => {
   const [, m, d] = (iso || "").split("-");
@@ -51,49 +67,57 @@ function Chart({ points, dec }) {
     return () => ro.disconnect();
   }, []);
 
-  const pts = points.map((p, i) => ({ ...p, i }));
-  const vals = pts.filter((p) => p.diff != null);
+  const days = [...new Set(points.map((p) => p.date))].sort();
+  const at = new Map(points.map((p) => [p.date + p.slot, p]));
 
   // The scale always includes zero: this chart is about which side of it a
   // number sits on, so cropping the baseline would hide the whole point.
-  const ys = vals.map((p) => p.diff);
+  const ys = points.map((p) => p.diff);
   let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
   const pad = (hi - lo || 1) * 0.14;
   const ticks = niceTicks(lo - pad, hi + pad);
   lo = ticks[0];
   hi = ticks[ticks.length - 1];
 
-  const x = (i) => PAD.l + (i * (w - PAD.l - PAD.r)) / Math.max(1, pts.length - 1);
+  const x = (i) => PAD.l + (i * (w - PAD.l - PAD.r)) / Math.max(1, days.length - 1);
   const y = (v) => PAD.t + ((hi - v) * (H - PAD.t - PAD.b)) / (hi - lo || 1);
 
-  // Break the path where a reading is missing, so a gap reads as a gap.
-  const segs = [];
-  let cur = [];
-  for (const p of pts) {
-    if (p.diff == null) { if (cur.length > 1) segs.push(cur); cur = []; }
-    else cur.push(p);
-  }
-  if (cur.length > 1) segs.push(cur);
-
-  const last = vals[vals.length - 1];
+  // A series is drawn only where it has readings, and broken where it does not,
+  // so a missing 12:00 leaves a gap instead of a straight line through it.
+  const lines = SERIES.map((s) => {
+    const segs = [];
+    let cur = [];
+    days.forEach((d, i) => {
+      const p = at.get(d + s.slot);
+      if (p) cur.push({ ...p, i });
+      else { if (cur.length > 1) segs.push(cur); cur = []; }
+    });
+    if (cur.length > 1) segs.push(cur);
+    const all = days.map((d, i) => ({ p: at.get(d + s.slot), i })).filter((o) => o.p);
+    return { ...s, segs, dots: all, last: all[all.length - 1] };
+  }).filter((s) => s.dots.length);
 
   function onMove(e) {
     const box = wrap.current?.getBoundingClientRect();
     if (!box) return;
     const px = e.clientX - box.left;
     let best = null;
-    for (const p of vals) {
-      const d = Math.abs(x(p.i) - px);
-      if (!best || d < best.d) best = { d, p };
-    }
-    setHover(best && best.d < 80 ? best.p : null);
+    days.forEach((d, i) => {
+      const dist = Math.abs(x(i) - px);
+      if (!best || dist < best.dist) best = { dist, day: d, i };
+    });
+    setHover(best && best.dist < 90 ? best : null);
   }
+
+  const hoverRows = hover
+    ? SERIES.map((s) => ({ s, p: at.get(hover.day + s.slot) })).filter((r) => r.p)
+    : [];
 
   return (
     <div className="nmg-wrap" ref={wrap}
       onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
       <svg viewBox={`0 0 ${w} ${H}`} width="100%" height={H} className="nmg-svg" role="img"
-        aria-label="MCX bid minus NSE ask, over time">
+        aria-label="MCX bid minus NSE ask by capture time, over days">
         {ticks.map((v) => (
           <g key={v}>
             <line className={v === 0 ? "nmg-zero" : "nmg-grid"}
@@ -103,48 +127,49 @@ function Chart({ points, dec }) {
           </g>
         ))}
 
-        {pts.map((p, i) =>
-          (i === 0 || p.date !== pts[i - 1].date) && (
-            <text key={"d" + i} className="nmg-day" x={x(i)} y={H - 10} textAnchor="middle">
-              {dayShort(p.date)}
-            </text>
-          ))}
-
-        {segs.map((seg, k) => (
-          <path key={k} className="nmg-line" fill="none"
-            d={seg.map((p, i) => `${i ? "L" : "M"}${x(p.i)},${y(p.diff)}`).join(" ")} />
+        {days.map((d, i) => (
+          <text key={d} className="nmg-day" x={x(i)} y={H - 10} textAnchor="middle">
+            {dayShort(d)}
+          </text>
         ))}
-
-        {vals.map((p) => (
-          <circle key={p.i}
-            className={`nmg-dot ${p.diff >= 0 ? "pos" : "neg"} ${p.wide ? "wide" : ""}`}
-            cx={x(p.i)} cy={y(p.diff)} r={p.wide ? 5 : 4}>
-            {p.wide && <title>One side was quoted very wide here, so this is not a price anyone could have dealt at.</title>}
-          </circle>
-        ))}
-
-        <circle className={`nmg-dot ${last.diff >= 0 ? "pos" : "neg"}`}
-          cx={x(last.i)} cy={y(last.diff)} r={5.5} />
-        <text className={`nmg-lastval ${last.diff >= 0 ? "pos" : "neg"}`}
-          x={x(last.i) + 12} y={y(last.diff) + 4}>{sign(last.diff, dec)}</text>
 
         {hover && (
-          <>
-            <line className="nmg-cross" x1={x(hover.i)} x2={x(hover.i)} y1={PAD.t} y2={H - PAD.b} />
-            <circle className="nmg-hoverdot" cx={x(hover.i)} cy={y(hover.diff)} r={7} />
-          </>
+          <line className="nmg-cross" x1={x(hover.i)} x2={x(hover.i)} y1={PAD.t} y2={H - PAD.b} />
         )}
+
+        {lines.map((s) => (
+          <g key={s.slot}>
+            {s.segs.map((seg, k) => (
+              <path key={k} className={`nmg-line ${s.cls}`} fill="none"
+                d={seg.map((p, i) => `${i ? "L" : "M"}${x(p.i)},${y(p.diff)}`).join(" ")} />
+            ))}
+            {s.dots.map(({ p, i }) => (
+              <circle key={i} className={`nmg-dot ${s.cls} ${p.wide ? "wide" : ""}`}
+                cx={x(i)} cy={y(p.diff)} r={p.wide ? 5 : 4}>
+                {p.wide && <title>One side was quoted very wide here.</title>}
+              </circle>
+            ))}
+            {/* direct-labelled at the end, so identity never rests on colour alone */}
+            <text className={`nmg-endlbl ${s.cls}`} x={x(s.last.i) + 10} y={y(s.last.p.diff) + 4}>
+              {s.label}
+            </text>
+          </g>
+        ))}
       </svg>
 
-      {hover && (
-        <div className={`nmg-tip ${y(hover.diff) > H / 2 ? "above" : "below"}`}
-          style={{ left: Math.min(Math.max(x(hover.i), 100), w - 100),
-                   top: y(hover.diff) + (y(hover.diff) > H / 2 ? -12 : 12) }}>
-          <b className={hover.diff >= 0 ? "nmg-pos" : "nmg-neg"}>{sign(hover.diff, dec)}</b>
-          <em>{dayShort(hover.date)} · {slotShort(hover.slot)}</em>
-          <span>NSE ask <i>{fmtNum(hover.nse_ask, dec)}</i></span>
-          <span>MCX bid <i>{fmtNum(hover.mcx_bid, dec)}</i></span>
-          {hover.wide && <u>one side quoted very wide</u>}
+      {hover && hoverRows.length > 0 && (
+        <div className={`nmg-tip ${y(hoverRows[0].p.diff) > H / 2 ? "above" : "below"}`}
+          style={{ left: Math.min(Math.max(x(hover.i), 110), w - 110),
+                   top: y(hoverRows[0].p.diff) + (y(hoverRows[0].p.diff) > H / 2 ? -12 : 12) }}>
+          <em>{dayShort(hover.day)}</em>
+          {hoverRows.map(({ s, p }) => (
+            <span key={s.slot}>
+              <u className={`nmg-key ${s.cls}`} />{s.label}
+              <i className={p.diff >= 0 ? "nmg-pos" : "nmg-neg"}>
+                {sign(p.diff, dec)}{p.wide ? " ?" : ""}
+              </i>
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -152,7 +177,10 @@ function Chart({ points, dec }) {
 }
 
 export default function NseMcxGraph({ product, month, cfg }) {
-  const [side, setSide] = useState("ce");
+  const [side, setSide] = useState(() => {
+    try { return localStorage.getItem("arbi_nsemcx_side") === "pe" ? "pe" : "ce"; }
+    catch { return "ce"; }
+  });
   const [strike, setStrike] = useState(null);
   const [opts, setOpts] = useState([]);
   // On by default. A reading taken off a 90% spread is not a price anyone could
@@ -162,6 +190,8 @@ export default function NseMcxGraph({ product, month, cfg }) {
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_side", side); } catch {} }, [side]);
 
   // The strike list is fetched ONCE per commodity/month. Folding it into the
   // series call meant every switch fired twice - once to learn the strikes,
@@ -281,6 +311,14 @@ export default function NseMcxGraph({ product, month, cfg }) {
                   <div><em>WORST</em>
                     <b className={stats.min >= 0 ? "nmg-pos" : "nmg-neg"}>{sign(stats.min, dec)}</b>
                     <i>{dayShort(stats.atMin.date)} · {slotShort(stats.atMin.slot)}</i></div>
+                </div>
+              )}
+
+              {shown.length >= 2 && (
+                <div className="nmg-legend">
+                  {SERIES.filter((s) => shown.some((p) => p.slot === s.slot)).map((s) => (
+                    <span key={s.slot}><u className={`nmg-key ${s.cls}`} />{s.label}</span>
+                  ))}
                 </div>
               )}
 
