@@ -84,9 +84,19 @@ _CACHE_TTL = 60.0
 # Capture (called from the maintenance loop)
 # --------------------------------------------------------------------------- #
 def _usable(board: dict) -> bool:
-    """A board worth storing: both sides current, both futures priced, and at
-    least one strike where both exchanges quote two-way. Anything less is a
-    cold feed, not a market."""
+    """A board worth storing: both sides current and both futures quoting.
+
+    The bar used to include "and at least one strike where both exchanges quote
+    two-way", which was right while this screen was only about options. It is
+    wrong now that the future is graphed in its own right (client, 18-Aug): the
+    NEXT month has live futures on both exchanges and no NSE option market at
+    all - 0 of 42 legs, OI zero - so that rule threw away every next-month board
+    on account of an option chain nobody trades. Six days of October futures
+    were lost that way, and no exchange sells the history back.
+
+    The futures check is what actually separates a market from a cold feed, so
+    it stands alone. A month with no option chain simply stores an empty one.
+    """
     # `fresh` is false when either side has gone quiet. Storing then would file
     # one exchange's live prices against the other's last known ones - a
     # snapshot that looks ordinary for ever and is not a comparison at all.
@@ -94,14 +104,11 @@ def _usable(board: dict) -> bool:
     if not board.get("fresh"):
         return False
     fut = board.get("future") or {}
-    if (fut.get("nse") or {}).get("mid") is None or (fut.get("mcx") or {}).get("mid") is None:
+    nse, mcx = fut.get("nse") or {}, fut.get("mcx") or {}
+    if nse.get("mid") is None or mcx.get("mid") is None:
         return False
-    for r in (board.get("options") or {}).get("rows") or []:
-        for side in ("ce", "pe"):
-            leg = r.get(side) or {}
-            if (leg.get("diff") or {}).get("rupees") is not None:
-                return True
-    return False
+    # Two-way on both, or the "comparison" is one exchange's single side.
+    return bool(nse.get("bid") and nse.get("ask") and mcx.get("mid"))
 
 
 def snapshot(slot: str, commodity: str, month: int = 0) -> str:

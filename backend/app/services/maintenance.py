@@ -176,7 +176,7 @@ def _loop() -> None:
                         log.warning("Options snapshot %s raised: %s", _slot, e)
                     last_optsnap[_slot] = today_str
 
-            # NSE-vs-MCX board snapshot (10:00, 12:00 & 15:00 IST) — the client
+            # NSE-vs-MCX board snapshot, nine slots 10:00-23:15 IST — the client
             # wants the whole table stored so the drift between the two
             # exchanges can be read back later. No exchange sells NSE-commodity
             # history, so a missed capture is gone for good; the service still
