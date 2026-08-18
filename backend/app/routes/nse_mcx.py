@@ -202,24 +202,39 @@ def nse_mcx_crude(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
     return payload(commodity, window, month)
 
 
+def _strike_arg(raw: str | None) -> float | str | None:
+    """Query strikes arrive as text so that "future" can share the parameter."""
+    if raw is None or raw == "":
+        return None
+    if str(raw).lower() == nse_mcx_history.FUTURE:
+        return nse_mcx_history.FUTURE
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("/nse-mcx/graph")
 def nse_mcx_graph(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
-                  strike: float | None = Query(None, description="omit to just list the strikes"),
+                  strike: str | None = Query(None, description='a strike, "future", or omit to just list them'),
                   side: str = Query("ce", pattern="^(ce|pe)$"),
                   month: int = Query(0, ge=0, le=1),
                   days: int = Query(30, ge=1, le=60)):
     """One strike's tradeable difference over time: MCX bid minus NSE ask.
 
     The client buys on NSE and sells on MCX, so that is the number he nets - not
-    mid against mid, which is the midpoint of a spread nobody fills at.
+    mid against mid, which is the midpoint of a spread nobody fills at. Both are
+    returned per point; the screen draws them as two lines.
+
+    `strike=future` graphs the futures pair instead of an option.
     """
-    return nse_mcx_history.series(commodity=commodity, strike=strike, side=side,
-                                  days=days, month=month)
+    return nse_mcx_history.series(commodity=commodity, strike=_strike_arg(strike),
+                                  side=side, days=days, month=month)
 
 
 @router.get("/nse-mcx/history")
 def nse_mcx_history_view(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
-                         slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),
+                         slot: str = Query("all", pattern="^(all|10:00|12:00|14:00|15:00|16:00|18:00|20:00|22:00|23:15)$"),
                          days: int = Query(7, ge=1, le=60),
                          month: int = Query(0, ge=0, le=1),
                          date: str | None = Query(None, description="YYYY-MM-DD")):

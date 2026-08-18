@@ -929,7 +929,7 @@ def public_nse_mcx_crude(
 @router.get("/nse-mcx/graph")
 def public_nse_mcx_graph(
     commodity: str = Query("crude", pattern="^(crude|natgas)$"),
-    strike: float | None = Query(None, description="omit to just list the strikes available"),
+    strike: str | None = Query(None, description='a strike, "future", or omit to just list them'),
     side: str = Query("ce", pattern="^(ce|pe)$"),
     month: int = Query(0, ge=0, le=1),
     days: int = Query(30, ge=1, le=60),
@@ -941,23 +941,33 @@ def public_nse_mcx_graph(
     MCX. Positive means opening the pair pays you. A point is `null` where
     either side had no quote - draw a gap, not a zero.
 
-    Points come oldest-first. `strikes` lists everything available in the window
-    so a picker can be built from one call; omit `strike` to fetch just that.
+    Every point also carries `mid_diff` (MCX mid - NSE mid), the plain gap
+    between the exchanges before either spread is paid, and `mcx_future`, where
+    the underlying stood at that moment. Draw diff and mid_diff as two lines and
+    the space between them is what the spreads cost.
+
+    Pass `strike=future` to graph the futures pair instead of an option; it is
+    also the first entry in `strike_options`.
+
+    Points come oldest-first. `strike_options` lists everything available in the
+    window so a picker can be built from one call; omit `strike` to fetch just
+    that.
     """
-    return nse_mcx_history.series(commodity=commodity, strike=strike, side=side,
-                                  days=days, month=month)
+    from app.routes.nse_mcx import _strike_arg
+    return nse_mcx_history.series(commodity=commodity, strike=_strike_arg(strike),
+                                  side=side, days=days, month=month)
 
 
 @router.get("/nse-mcx/history")
 def public_nse_mcx_history(
     commodity: str = Query("crude", pattern="^(crude|natgas)$"),
-    slot: str = Query("all", pattern="^(all|10:00|12:00|15:00)$"),
+    slot: str = Query("all", pattern="^(all|10:00|12:00|14:00|15:00|16:00|18:00|20:00|22:00|23:15)$"),
     days: int = Query(7, ge=1, le=60, description="how many snapshot days back"),
     date: str | None = Query(None, description="YYYY-MM-DD => that day only"),
     month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
     _key: str = Depends(require_api_key),
 ):
-    """Stored 10:00 / 12:00 / 15:00 IST boards, newest first.
+    """Stored boards, newest first - nine a trading day, 10:00 to 23:15 IST.
 
     Each snapshot's `board` has exactly the /nse-mcx shape, so the same renderer
     works for both. Data is static once written - fetch on demand, do not poll.

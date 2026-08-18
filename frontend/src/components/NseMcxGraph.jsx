@@ -2,15 +2,22 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
-// One strike's TRADEABLE difference over time (client, 18-Aug).
+// One strike's - or the future's - difference over time (client, 18-Aug).
 //
-// He buys on NSE and sells on MCX, so the line is `MCX bid - NSE ask` - what he
-// actually nets. Not mid against mid: a mid is the middle of a spread nobody
-// fills at, and on a thin NSE strike the two spreads are most of the number.
+// TWO lines against a zero baseline, because the sign IS the story: above it the
+// pair pays you to open, below it costs you.
 //
-// One line against a zero baseline, because the sign IS the story: above it the
-// pair pays you to open, below it costs you. One series, so no legend - the
-// heading names it and the last point carries its value.
+//   deal  `MCX bid - NSE ask`   what he actually nets, buying NSE selling MCX
+//   mid   `MCX mid - NSE mid`   the plain gap, before either spread is paid
+//
+// The distance between them is what the two spreads cost, which is why the
+// client asked for both: on crude 7,400 CE the mid line runs +51 to +59 while
+// the deal line runs +21 to +39, so roughly 22 rupees never reaches him. The
+// deal line is the solid one - it is the one he trades.
+//
+// An earlier version drew three lines, one per capture time, and the client
+// rejected it: three lines saying the SAME thing at different hours. Two lines
+// saying two different things is the case that survived.
 const PAD = { t: 22, r: 74, b: 34, l: 66 };
 const H = 300;
 const SIDES = [{ key: "ce", label: "Call" }, { key: "pe", label: "Put" }];
@@ -20,8 +27,20 @@ const SIDES = [{ key: "ce", label: "Call" }, { key: "pe", label: "Put" }];
 // 18-Aug). Labelling all three crowded the axis to say something the tooltip
 // already says on demand.
 const PAD_B2 = 38;
+// The picker's first entry. Sent to the API verbatim in place of a strike, so
+// one endpoint and one screen serve both the future and every option.
+const FUT = "future";
 
-const slotShort = (s) => ({ "10:00": "10 AM", "12:00": "12 PM", "15:00": "3 PM" }[s] || s);
+// Nine capture slots now (client, 18-Aug), so the hour is spelled the Indian
+// way rather than left as 24-hour text the client has asked us not to use.
+const slotShort = (s) => {
+  const [h, m] = String(s || "").split(":");
+  const hh = Number(h);
+  if (!Number.isFinite(hh)) return s;
+  const ampm = hh < 12 ? "AM" : "PM";
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return m === "00" ? `${h12} ${ampm}` : `${h12}:${m} ${ampm}`;
+};
 const dayShort = (iso) => {
   const [, m, d] = (iso || "").split("-");
   return d ? `${d}/${m}` : iso;
@@ -59,10 +78,12 @@ function Chart({ points, dec }) {
 
   const pts = points.map((p, i) => ({ ...p, i }));
   const vals = pts.filter((p) => p.diff != null);
+  const mids = pts.filter((p) => p.mid_diff != null);
 
   // The scale always includes zero: this chart is about which side of it a
-  // number sits on, so cropping the baseline would hide the whole point.
-  const ys = vals.map((p) => p.diff);
+  // number sits on, so cropping the baseline would hide the whole point. Both
+  // lines share it - two scales would let them cross where they do not.
+  const ys = [...vals.map((p) => p.diff), ...mids.map((p) => p.mid_diff)];
   let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
   const pad = (hi - lo || 1) * 0.14;
   const ticks = niceTicks(lo - pad, hi + pad);
@@ -71,15 +92,25 @@ function Chart({ points, dec }) {
 
   const x = (i) => PAD.l + (i * (w - PAD.l - PAD.r)) / Math.max(1, pts.length - 1);
   const y = (v) => PAD.t + ((hi - v) * (H - PAD.t - PAD_B2)) / (hi - lo || 1);
+  // The future's deal line is empty before 18-Aug; anchor the tooltip to the
+  // mid line there instead of to a NaN.
+  const tipY = (p) => y(p.diff != null ? p.diff : p.mid_diff);
 
-  // Break the path where a reading is missing, so a gap reads as a gap.
-  const segs = [];
-  let cur = [];
-  for (const p of pts) {
-    if (p.diff == null) { if (cur.length > 1) segs.push(cur); cur = []; }
-    else cur.push(p);
-  }
-  if (cur.length > 1) segs.push(cur);
+  // Break the path where a reading is missing, so a gap reads as a gap. The
+  // future's deal line is empty before 18-Aug - MCX future bid/ask only started
+  // being stored that day - and a gap says so where a joined line would lie.
+  const runs = (key) => {
+    const out = [];
+    let cur = [];
+    for (const p of pts) {
+      if (p[key] == null) { if (cur.length > 1) out.push(cur); cur = []; }
+      else cur.push(p);
+    }
+    if (cur.length > 1) out.push(cur);
+    return out;
+  };
+  const segs = runs("diff");
+  const midSegs = runs("mid_diff");
 
   // Each day's run of readings, for the date row and the divider between days.
   const groups = [];
@@ -89,7 +120,8 @@ function Chart({ points, dec }) {
     else groups.push({ date: p.date, start: i, end: i });
   });
 
-  const last = vals[vals.length - 1];
+  const last = vals[vals.length - 1] || null;
+  const lastMid = mids[mids.length - 1] || null;
   const yBase = H - PAD_B2;
 
   function onMove(e) {
@@ -97,7 +129,7 @@ function Chart({ points, dec }) {
     if (!box) return;
     const px = e.clientX - box.left;
     let best = null;
-    for (const p of vals) {
+    for (const p of (vals.length ? vals : mids)) {
       const d = Math.abs(x(p.i) - px);
       if (!best || d < best.d) best = { d, p };
     }
@@ -137,6 +169,16 @@ function Chart({ points, dec }) {
           );
         })}
 
+        {/* the mid gap sits behind, thinner and dashed - it is context for the
+            solid line, not the number he trades */}
+        {midSegs.map((seg, k) => (
+          <path key={`m${k}`} className="nmg-line mid" fill="none"
+            d={seg.map((p, i) => `${i ? "L" : "M"}${x(p.i)},${y(p.mid_diff)}`).join(" ")} />
+        ))}
+        {mids.map((p) => (
+          <circle key={`md${p.i}`} className="nmg-dot mid" cx={x(p.i)} cy={y(p.mid_diff)} r={2.5} />
+        ))}
+
         {segs.map((seg, k) => (
           <path key={k} className="nmg-line" fill="none"
             d={seg.map((p, i) => `${i ? "L" : "M"}${x(p.i)},${y(p.diff)}`).join(" ")} />
@@ -150,27 +192,44 @@ function Chart({ points, dec }) {
           </circle>
         ))}
 
-        <circle className={`nmg-dot ${last.diff >= 0 ? "pos" : "neg"}`}
-          cx={x(last.i)} cy={y(last.diff)} r={5.5} />
-        <text className={`nmg-lastval ${last.diff >= 0 ? "pos" : "neg"}`}
-          x={Math.min(x(last.i) + 12, w - 8)} y={y(last.diff) + 4}>{sign(last.diff, dec)}</text>
+        {last && (
+          <>
+            <circle className={`nmg-dot ${last.diff >= 0 ? "pos" : "neg"}`}
+              cx={x(last.i)} cy={y(last.diff)} r={5.5} />
+            <text className={`nmg-lastval ${last.diff >= 0 ? "pos" : "neg"}`}
+              x={Math.min(x(last.i) + 12, w - 8)} y={y(last.diff) + 4}>{sign(last.diff, dec)}</text>
+          </>
+        )}
+        {lastMid && (
+          <text className="nmg-lastval mid"
+            x={Math.min(x(lastMid.i) + 12, w - 8)} y={y(lastMid.mid_diff) + 4}>
+            {sign(lastMid.mid_diff, dec)}
+          </text>
+        )}
 
         {hover && (
           <>
             <line className="nmg-cross" x1={x(hover.i)} x2={x(hover.i)} y1={PAD.t} y2={yBase} />
-            <circle className="nmg-hoverdot" cx={x(hover.i)} cy={y(hover.diff)} r={7} />
+            {hover.diff != null && (
+              <circle className="nmg-hoverdot" cx={x(hover.i)} cy={y(hover.diff)} r={7} />
+            )}
+            {hover.mid_diff != null && (
+              <circle className="nmg-hoverdot mid" cx={x(hover.i)} cy={y(hover.mid_diff)} r={6} />
+            )}
           </>
         )}
       </svg>
 
       {hover && (
-        <div className={`nmg-tip ${y(hover.diff) > (H - PAD_B2) / 2 ? "above" : "below"}`}
+        <div className={`nmg-tip ${tipY(hover) > (H - PAD_B2) / 2 ? "above" : "below"}`}
           style={{ left: Math.min(Math.max(x(hover.i), 100), w - 100),
-                   top: y(hover.diff) + (y(hover.diff) > (H - PAD_B2) / 2 ? -12 : 12) }}>
+                   top: tipY(hover) + (tipY(hover) > (H - PAD_B2) / 2 ? -12 : 12) }}>
           <em>{dayShort(hover.date)} · {slotShort(hover.slot)}</em>
           <b className={hover.diff >= 0 ? "nmg-pos" : "nmg-neg"}>{sign(hover.diff, dec)}</b>
           <span>NSE ask <i>{fmtNum(hover.nse_ask, dec)}</i></span>
           <span>MCX bid <i>{fmtNum(hover.mcx_bid, dec)}</i></span>
+          <span className="mid">mid gap <i>{sign(hover.mid_diff, dec)}</i></span>
+          <span>MCX future <i>{fmtNum(hover.mcx_future, dec)}</i></span>
           {hover.wide && <u>one side quoted very wide</u>}
         </div>
       )}
@@ -231,11 +290,16 @@ export default function NseMcxGraph({ product, month, cfg }) {
 
   const dec = cfg.futDec ?? 2;
   const sDec = cfg.strikeDec ?? 0;
-  const all = useMemo(() => (d?.points || []).filter((p) => p.diff != null), [d]);
+  const isFut = strike === FUT;
+  // A point counts if EITHER line has a reading. The future's deal line is
+  // empty before 18-Aug, and dropping those points would throw away the mid
+  // line that does exist for them.
+  const all = useMemo(
+    () => (d?.points || []).filter((p) => p.diff != null || p.mid_diff != null), [d]);
   const wide = useMemo(() => all.filter((p) => p.wide), [all]);
   const shown = hideWide ? all.filter((p) => !p.wide) : all;
   const stats = useMemo(() => {
-    const clean = all.filter((p) => !p.wide);
+    const clean = all.filter((p) => !p.wide && p.diff != null);
     if (!clean.length) return null;
     const v = clean.map((p) => p.diff);
     const at = (t) => clean.find((p) => p.diff === t);
@@ -247,24 +311,34 @@ export default function NseMcxGraph({ product, month, cfg }) {
     };
   }, [all]);
 
-  const title = `${cfg.label} ${fmtNum(strike, sDec)} ${side === "ce" ? "Call" : "Put"}`;
+  const title = isFut
+    ? `${cfg.label} Future`
+    : `${cfg.label} ${fmtNum(strike, sDec)} ${side === "ce" ? "Call" : "Put"}`;
 
   const toolbar = (
     <div className="nmg-bar">
-      <div className="oh-group" role="tablist" aria-label="Option side">
-        {SIDES.map((s) => (
-          <button key={s.key} type="button" role="tab" aria-selected={side === s.key}
-            className={`oh-chip ${side === s.key ? "on" : ""}`}
-            onClick={() => setSide(s.key)}>{s.label}</button>
-        ))}
-      </div>
+      {/* a future has no call and no put, so the switch goes away rather than
+          sitting there doing nothing */}
+      {!isFut && (
+        <div className="oh-group" role="tablist" aria-label="Option side">
+          {SIDES.map((s) => (
+            <button key={s.key} type="button" role="tab" aria-selected={side === s.key}
+              className={`oh-chip ${side === s.key ? "on" : ""}`}
+              onClick={() => setSide(s.key)}>{s.label}</button>
+          ))}
+        </div>
+      )}
       <label className="nmg-pick">
-        <span>STRIKE</span>
+        <span>CONTRACT</span>
         <select className="oh-weeks" value={strike ?? ""}
-          onChange={(e) => setStrike(Number(e.target.value))}>
+          onChange={(e) => {
+            const v = e.target.value;
+            setStrike(v === FUT ? FUT : Number(v));
+          }}>
           {opts.map((o) => (
             <option key={o.strike} value={o.strike}>
-              {fmtNum(o.strike, sDec)} · {o.readings} reading{o.readings === 1 ? "" : "s"}
+              {o.strike === FUT ? "Future" : fmtNum(o.strike, sDec)}
+              {" · "}{o.readings} reading{o.readings === 1 ? "" : "s"}
             </option>
           ))}
         </select>
@@ -276,7 +350,11 @@ export default function NseMcxGraph({ product, month, cfg }) {
           hide unusable
         </label>
       )}
-      <span className="nmg-formula">MCX bid − NSE ask</span>
+      {/* two series, so identity can no longer rest on the heading alone */}
+      <span className="nmg-legend">
+        <i className="deal" /> MCX bid − NSE ask
+        <i className="mid" /> MCX mid − NSE mid
+      </span>
     </div>
   );
 
@@ -296,13 +374,26 @@ export default function NseMcxGraph({ product, month, cfg }) {
                   {shown.length < 2
                     ? "Buy on NSE at the ask, sell on MCX at the bid."
                     : <>Buy on NSE at the ask, sell on MCX at the bid. Above zero the
-                        pair pays you to open it.</>}
+                        pair pays you to open it. The dashed line is the plain gap
+                        between the exchanges; the space between the two is what
+                        both spreads cost you.</>}
                 </span>
               </div>
 
+              {/* The future's solid line starts on 18-Aug: MCX future bid/ask
+                  were not stored before that, only the mid. Say so rather than
+                  leave a dashed line on its own with no explanation. */}
+              {shown.length >= 2 && !stats && (
+                <p className="nmg-widenote">
+                  Only the dashed mid line has history here. The tradeable line needs
+                  MCX bid and ask on the future, which we began saving on 18 Aug, so it
+                  starts from the next capture.
+                </p>
+              )}
+
               {stats && shown.length >= 2 && (
                 <div className="nmg-stats">
-                  <div><em>LATEST</em>
+                  <div><em>LATEST DEAL</em>
                     <b className={stats.last.diff >= 0 ? "nmg-pos" : "nmg-neg"}>
                       {sign(stats.last.diff, dec)}</b>
                     <i>{dayShort(stats.last.date)} · {slotShort(stats.last.slot)}</i></div>
@@ -322,8 +413,9 @@ export default function NseMcxGraph({ product, month, cfg }) {
                   <div className="nmg-empty">
                     <b>Not enough readings yet for {title}</b>
                     <span>
-                      A line needs two. One is saved at 10:00, 12:00 and 3:00 each
-                      trading day, and only when both exchanges are quoting that strike.
+                      A line needs two. Readings are saved nine times a trading day,
+                      from 10 AM to 11:15 PM, and only when both exchanges are quoting
+                      it.
                     </span>
                   </div>
                 )}
@@ -343,7 +435,8 @@ export default function NseMcxGraph({ product, month, cfg }) {
               <>
                 <table className="cru-table nmg-table">
                   <thead>
-                    <tr><th>Date</th><th>Time</th><th>NSE ask</th><th>MCX bid</th><th>Diff</th></tr>
+                    <tr><th>Date</th><th>Time</th><th>NSE ask</th><th>MCX bid</th>
+                      <th>Mid gap</th><th>MCX future</th><th>Diff</th></tr>
                   </thead>
                   <tbody>
                     {all.slice().reverse().map((p) => (
@@ -352,6 +445,10 @@ export default function NseMcxGraph({ product, month, cfg }) {
                         <td>{slotShort(p.slot)}</td>
                         <td>{fmtNum(p.nse_ask, dec)}</td>
                         <td>{fmtNum(p.mcx_bid, dec)}</td>
+                        <td className="nmg-midcell">{sign(p.mid_diff, dec)}</td>
+                        {/* where the underlying stood, so a +30 can be read
+                            against the level it was earned at (client, 18-Aug) */}
+                        <td className="nmg-futcell">{fmtNum(p.mcx_future, dec)}</td>
                         <td className={p.diff >= 0 ? "nmg-pos" : "nmg-neg"}
                           title={p.wide ? "One side was quoted very wide here." : ""}>
                           {sign(p.diff, dec)}{p.wide && " ?"}
