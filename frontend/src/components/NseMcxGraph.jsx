@@ -364,7 +364,10 @@ export default function NseMcxGraph({ product, month, cfg }) {
       {/* two series, so identity can no longer rest on the heading alone */}
       <span className="nmg-legend">
         {hasDeal && <><i className="deal" /> MCX bid − NSE ask</>}
-        <i className={hasDeal ? "mid" : "deal"} /> MCX mid − NSE mid
+        {/* always the mid swatch - it was borrowing the gold "deal" style when
+            it stood alone, so the legend showed a solid gold line beside a
+            dashed blue one and named it the same thing (client, 18-Aug) */}
+        <i className="mid" /> MCX mid − NSE mid
       </span>
     </div>
   );

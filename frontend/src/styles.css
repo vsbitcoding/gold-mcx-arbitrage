@@ -5362,6 +5362,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmg-legend i { width: 16px; height: 0; display: inline-block; }
 .nmg-legend i.deal { border-top: 2px solid var(--accent); }
 .nmg-legend i.mid { border-top: 2px dashed var(--series-2); margin-left: 6px; }
+.nmg-legend i.mid:first-child { margin-left: 0; }
 
 .nmg-body { padding: 14px 16px 8px; }
 .nmg-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
