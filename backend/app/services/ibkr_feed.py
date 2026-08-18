@@ -118,6 +118,11 @@ _silence_limit = _SILENCE_LIMIT
 # comes back clean.
 _COMPETING_RETRY = 180
 _competing_at = 0.0                  # epoch of the last 10197 seen
+# A chain whose expiry passes mid-session gets ONE reconnect, then is left
+# alone for an hour. Without the brake, a chain that resolves to the same dead
+# expiry every time turns the guard into a reconnect loop (18-Aug).
+_ROLL_GRACE = 3600
+_roll_seen: dict[str, float] = {}
 _stop = threading.Event()
 
 
@@ -384,21 +389,29 @@ async def _loop() -> None:
             # next-month option chains possible at all - see the note on
             # _IV_SYMS. A month that fails to resolve leaves its chain out
             # rather than falling back to the front one under a second name.
-            for sym, exch, front_key, key in _NEXT_FUTS:
-                try:
-                    nxt = await _next_month_contract(ib, sym, exch, futs[front_key][0])
-                except Exception as e:  # noqa: BLE001
-                    log.warning("IBKR: could not resolve the month after %s (%s)", sym, e)
-                    nxt = None
-                if not nxt:
-                    log.warning("IBKR: no month listed after %s - %s chain skipped",
-                                futs[front_key][0].localSymbol, key)
-                    continue
-                futs[key] = (nxt, ib.reqMktData(nxt, "", False, False))
-                _state[key + "_symbol"] = nxt.localSymbol
-                _state[key + "_expiry"] = nxt.lastTradeDateOrContractMonth
-                log.info("IBKR: %s next month = %s (exp %s)",
-                         sym, nxt.localSymbol, nxt.lastTradeDateOrContractMonth)
+            # A THIRD month, so a slot always has somewhere to fall forward to:
+            # a future outlives its own options by a few days, and in that gap
+            # the near slot has to borrow the next future's chain, which in turn
+            # needs the one after it for the far slot.
+            for sym, exch, front_key, _k in _NEXT_FUTS:
+                prev = futs[front_key][0]
+                for n in (2, 3):
+                    key = f"{front_key}{n}"
+                    try:
+                        nxt = await _next_month_contract(ib, sym, exch, prev)
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("IBKR: could not resolve the month after %s (%s)",
+                                    prev.localSymbol, e)
+                        nxt = None
+                    if not nxt:
+                        log.warning("IBKR: no month listed after %s", prev.localSymbol)
+                        break
+                    futs[key] = (nxt, ib.reqMktData(nxt, "", False, False))
+                    _state[key + "_symbol"] = nxt.localSymbol
+                    _state[key + "_expiry"] = nxt.lastTradeDateOrContractMonth
+                    log.info("IBKR: %s month %d = %s (exp %s)",
+                             sym, n, nxt.localSymbol, nxt.lastTradeDateOrContractMonth)
+                    prev = nxt
 
             # Spot metals — same feed that used to come from Finnhub.
             spots = {}
@@ -411,10 +424,10 @@ async def _loop() -> None:
             # listing the most strikes; the weeklies expire in days, so their IV
             # is time-decay noise and useless next to MCX's monthly.
             iv: dict = {}
-            for sym, exch, key, px_key in _IV_SYMS:
-                if px_key not in futs:
-                    continue                 # its underlying never resolved
-                under = futs[px_key][0]
+            today_utc = time.strftime("%Y%m%d", time.gmtime())
+
+            async def _chain_on(sym, exch, under):
+                """The option class on this future, and its live expiries."""
                 try:
                     ch = await asyncio.wait_for(
                         ib.reqSecDefOptParamsAsync(sym, exch, "FUT", under.conId),
@@ -423,22 +436,54 @@ async def _loop() -> None:
                                key=lambda c: len(c.strikes), default=None)
                 except Exception as e:  # noqa: BLE001
                     log.warning("IBKR: no option classes on %s (%s)", under.localSymbol, e)
-                    best = None
-                # One underlying, one expiry - the chain belongs to this futures
-                # month, so there is no month to choose between here.
-                exps = sorted(best.expirations) if best else []
-                iv[key] = {
-                    "sym": sym, "exch": exch, "chain": best, "px": px_key,
-                    "strikes": sorted(best.strikes) if best else [],
-                    "expiry": exps[0] if exps else None,
-                    "tickers": {}, "window": [], "atm": None,
-                }
-                _state[key + "_iv_expiry"] = iv[key]["expiry"]
-                _state[key + "_iv_class"] = best.tradingClass if best else None
-                if iv[key]["expiry"]:
-                    log.info("IBKR: %s IV class %s on %s (%d strikes, exp %s)",
+                    return None, []
+                # ONLY expiries still ahead of us. A future outlives its own
+                # options - CLU6 expires 20-Aug while its 17-Aug options were
+                # already gone - and taking a dead one is what put the feed in a
+                # reconnect loop on 18-Aug: the roll guard saw a passed expiry,
+                # forced a reconnect, and the reconnect resolved the same dead
+                # chain, every 42 seconds for three minutes.
+                exps = sorted(e for e in (best.expirations if best else []) if e >= today_utc)
+                return best, exps
+
+            # Slots walk FORWARD through the futures until they find one whose
+            # options are still alive, so in the gap between an option expiry
+            # and its future's the near slot simply shows the next month rather
+            # than sitting empty for three days.
+            for sym, exch, base in (("CL", "NYMEX", "cl"), ("NG", "NYMEX", "ng")):
+                queue = [k for k in (base, base + "2", base + "3") if k in futs]
+                qi = 0
+                for slot in (base, base + "2"):
+                    picked = None
+                    while qi < len(queue):
+                        px_key = queue[qi]
+                        qi += 1
+                        under = futs[px_key][0]
+                        best, exps = await _chain_on(sym, exch, under)
+                        if exps:
+                            picked = (px_key, under, best, exps[0])
+                            break
+                        if best:
+                            log.info("IBKR: options on %s have all expired - looking "
+                                     "to the next month for %s", under.localSymbol, slot)
+                    if not picked:
+                        log.warning("IBKR: no live option chain left for %s", slot)
+                        continue
+                    px_key, under, best, expiry = picked
+                    iv[slot] = {
+                        "sym": sym, "exch": exch, "chain": best, "px": px_key,
+                        "strikes": sorted(best.strikes),
+                        "expiry": expiry,
+                        "tickers": {}, "window": [], "atm": None,
+                    }
+                    # Which future this slot ended up on, for the payload - it is
+                    # not always the one the slot is named after any more.
+                    _state[slot + "_iv_px"] = px_key
+                    _state[slot + "_iv_expiry"] = expiry
+                    _state[slot + "_iv_class"] = best.tradingClass
+                    log.info("IBKR: %s IV class %s on %s (%d strikes, exp %s) -> %s",
                              sym, best.tradingClass, under.localSymbol,
-                             len(best.strikes), iv[key]["expiry"])
+                             len(best.strikes), expiry, slot)
 
             async def resubscribe_iv(key: str, centre: float) -> None:
                 """21 monthly strikes around the money, one side each: calls
@@ -547,10 +592,18 @@ async def _loop() -> None:
                 # rolls to the next month instead of streaming a dead contract
                 # until the daily check happens to fire (that gap is how 06-AUG
                 # was still on screen on 07-Aug).
+                # An expiry can only pass while we are connected now - the
+                # resolver refuses a dead one - so this is the mid-session case
+                # and one reconnect settles it. Rate-limited because raising
+                # here is what produced the 18-Aug loop: reconnect, resolve the
+                # same dead chain, raise again, every 42 seconds.
                 _today_utc = time.strftime("%Y%m%d", time.gmtime())
                 for _k, _d in iv.items():
                     if _d["expiry"] and _today_utc > _d["expiry"]:
-                        log.info("IBKR: %s option expiry %s passed - rolling to next month",
+                        if now - _roll_seen.get(_k, 0) < _ROLL_GRACE:
+                            continue
+                        _roll_seen[_k] = now
+                        log.info("IBKR: %s option expiry %s passed - rolling",
                                  _d["sym"], _d["expiry"])
                         raise RuntimeError(f"{_d['sym']} option chain expired - rolling")
 
@@ -624,12 +677,12 @@ def _chain_block(key: str, age) -> dict:
     }
 
 
-# Chain key -> the futures key its price and symbol come from.
-_IV_PX = {key: px for _s, _e, key, px in _IV_SYMS}
-
-
 def _iv_block(key: str, age) -> dict:
-    px = _IV_PX.get(key, key)
+    # Which future this chain actually sits on is decided at resolve time and
+    # stamped into the state - a slot falls forward to the next month when its
+    # own future's options have expired, so a static map would name the wrong
+    # contract for the few days a month that happens.
+    px = _state.get(key + "_iv_px") or key
     p = _state.get(px) or {}
     mid = ((p["bid"] + p["ask"]) / 2) if (p.get("bid") and p.get("ask")) else None
     return {
