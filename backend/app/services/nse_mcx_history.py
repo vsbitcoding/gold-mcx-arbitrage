@@ -219,6 +219,19 @@ def get_history(commodity: str = "crude", slot: str = "all",
     return data
 
 
+# Same threshold the live screen tints amber at: a mid between 0.05 and 16.85
+# is not a price anyone can deal at.
+_WIDE_SPREAD = 0.25
+
+
+def _wide(leg: dict) -> bool:
+    b, a = leg.get("bid"), leg.get("ask")
+    if not (b and a):
+        return False
+    mid = (b + a) / 2
+    return bool(mid and (a - b) / mid > _WIDE_SPREAD)
+
+
 def series(commodity: str = "crude", strike: float | None = None, side: str = "ce",
            days: int = 30, month: int = 0) -> dict:
     """One strike's tradeable difference over time, for the graph.
@@ -250,15 +263,23 @@ def series(commodity: str = "crude", strike: float | None = None, side: str = "c
             continue
         row = next((r for r in rows if abs(r["strike"] - strike) < 1e-9), None)
         leg = (row or {}).get(side) or {}
-        nse_ask = (leg.get("nse") or {}).get("ask")
-        mcx_bid = (leg.get("mcx") or {}).get("bid")
+        n, m = leg.get("nse") or {}, leg.get("mcx") or {}
+        nse_ask, mcx_bid = n.get("ask"), m.get("bid")
         points.append({
             "date": snap["snap_date"], "slot": snap["slot"],
             "captured_at": snap.get("captured_at"),
             "nse_ask": nse_ask, "mcx_bid": mcx_bid,
+            "nse_bid": n.get("bid"), "mcx_ask": m.get("ask"),
             # None, not 0, when either side had no quote - a gap in the line is
             # honest and a zero would read as "no edge today".
             "diff": round(mcx_bid - nse_ask, 2) if (nse_ask and mcx_bid) else None,
+            # Was either side quoted absurdly wide at that moment? The whole app
+            # marks those rather than trusting them, and a graph needs it more
+            # than a table does: one bad quote drags the axis and buries every
+            # honest point. 14-Aug 10:00 on crude 7400 CE recorded an MCX bid of
+            # 299.6 against 655.7 two hours later - a -267 spike that is a stale
+            # quote, not an edge.
+            "wide": _wide(n) or _wide(m),
         })
 
     points.reverse()          # get_history returns newest first; a chart reads forward
