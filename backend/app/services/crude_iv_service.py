@@ -181,6 +181,12 @@ def _chain_rows(payload: dict) -> tuple[list, float | None]:
     return rows, data.get("last_price")
 
 
+# How many strikes vote on the forward. Nine of the tightest is plenty - the
+# whole chain agrees to a rupee or two once the wide wings are out - and small
+# enough that one bad quote is outvoted rather than merely out-weighted.
+_FWD_VOTERS = 9
+
+
 def _reprice(rows: list, expiry: str,
              fallback: float | None = None) -> tuple[float | None, int, float | None]:
     """Replace the vendor's IV and greeks with our own, in place.
@@ -231,12 +237,28 @@ def _reprice(rows: list, expiry: str,
         b, a = leg.get("bid"), leg.get("ask")
         return round((b + a) / 2, 4) if (b and a) else None
 
-    pairs, votes = [], []
+    # Only the TIGHTEST strikes vote. The full chain runs to 122 two-way pairs and
+    # most of them are deep wings quoted wide; a median cannot save an estimate
+    # when the majority of its inputs are poor, and it did not - over all 122 it
+    # returned 8166.6 while the ATM said 8183.2, the socket's 21 near-money pairs
+    # 8182.25, NSE's chain 8182.5 and the September future 8184.0.
+    #
+    # Parity error is the error in (call - put), so what matters is the ABSOLUTE
+    # bid-ask spread, not moneyness: a leg quoted 465.5/466.7 pins the forward to
+    # about a rupee and one quoted 12/28 cannot. Ranking on the summed spread
+    # needs no strike step and no moneyness band, so it works unchanged on gas,
+    # whose strikes step 5 against crude's 50.
+    cands = []
     for r in rows:
-        c, pu = mid(r.get("ce")), mid(r.get("pe"))
-        if c and pu:
-            pairs.append((r["strike"], c, pu))
-            votes.append(r["strike"] + c - pu)
+        ce, pe = r.get("ce") or {}, r.get("pe") or {}
+        cb, ca, pb, pa = ce.get("bid"), ce.get("ask"), pe.get("bid"), pe.get("ask")
+        if not (cb and ca and pb and pa):
+            continue
+        cands.append(((ca - cb) + (pa - pb), r["strike"], (cb + ca) / 2, (pb + pa) / 2))
+    cands.sort()
+    best = cands[:_FWD_VOTERS]
+    pairs = [(k, c, pu) for _s, k, c, pu in best]
+    votes = [k + c - pu for _s, k, c, pu in best]
     fwd = iv_calc.forward_from_parity(pairs) or fallback
     if not fwd:
         return None, 0, None
