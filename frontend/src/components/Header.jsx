@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { key: "stock", label: "Bullion Stock" },
   { key: "signals", label: "⚡ Signals" },
   { key: "crude", label: "Crude / Gas" },
+  { key: "crudeinr", label: "Crude / Gas INR" },
   { key: "nsemcx", label: "NSE vs MCX" },
   { key: "ivcalc", label: "IV Calculator" },
   { key: "intl", label: "International" },

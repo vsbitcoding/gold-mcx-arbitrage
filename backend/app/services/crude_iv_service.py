@@ -223,13 +223,12 @@ def _reprice(rows: list, expiry: str,
 
     Returns (forward, strikes that voted, how far apart the votes were).
     """
-    try:
-        days = (date.fromisoformat(str(expiry)[:10].replace("/", "-")) - date.today()).days
-    except (ValueError, TypeError):
+    # Counts the part of today already gone, not whole days - worth about half a
+    # point of IV by mid-afternoon, and this screen exists to be compared against
+    # another exchange.
+    T = iv_calc.years_to(expiry)
+    if not T:
         return None, 0, None
-    if days <= 0:
-        return None, 0, None
-    T = days / iv_calc.DAYS_YEAR
 
     def mid(leg):
         if not leg:

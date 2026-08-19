@@ -81,10 +81,16 @@ const PRODUCTS = [
   { key: "natgas", label: "Natural Gas", usTitle: "US NATURAL GAS (NYMEX)", usDec: 3, mcxDec: 2 },
 ];
 
-export default function CrudeOil() {
+// `currency="inr"` is the Crude / Gas INR tab: the same screen with the US side
+// restated in rupees at the USD/INR future, so both panels read in one currency
+// and the premiums can be compared line for line instead of in your head.
+// The IV is identical either way and deliberately so.
+export default function CrudeOil({ currency = "usd" }) {
+  const inr = currency === "inr";
   const [product, setProduct] = useState(() => {
     try {
-      const p = localStorage.getItem("arbi_crude_product");
+      // Separate key per tab, or picking gas on one silently moves the other.
+      const p = localStorage.getItem(`arbi_crude_product_${currency}`);
       return PRODUCTS.some((x) => x.key === p) ? p : "crude";
     } catch { return "crude"; }
   });
@@ -92,7 +98,9 @@ export default function CrudeOil() {
   const [err, setErr] = useState(null);
   const timer = useRef(null);
 
-  useEffect(() => { try { localStorage.setItem("arbi_crude_product", product); } catch {} }, [product]);
+  useEffect(() => {
+    try { localStorage.setItem(`arbi_crude_product_${currency}`, product); } catch {}
+  }, [product, currency]);
 
   useEffect(() => {
     let alive = true;
@@ -100,14 +108,14 @@ export default function CrudeOil() {
     async function load() {
       if (document.hidden) return;
       try {
-        const r = await api.crudeIv(product);
+        const r = await api.crudeIv(product, currency);
         if (alive) { setD(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, [product]);
+  }, [product, currency]);
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
 
@@ -214,15 +222,30 @@ export default function CrudeOil() {
           data={mcx} priceDecimals={mcx.decimals ?? cfg.mcxDec} strikeDecimals={0} showOi
         />
         <Chain
-          title={cfg.usTitle}
-          sub={`${us.symbol || ""}${us.trading_class ? ` (${us.trading_class})` : ""} · exp ${fmtExp(us.expiry) || "—"} · $`}
-          data={us} priceDecimals={cfg.usDec} strikeDecimals={cfg.usDec}
+          title={inr ? `${cfg.usTitle} in ₹` : cfg.usTitle}
+          sub={`${us.symbol || ""}${us.trading_class ? ` (${us.trading_class})` : ""}`
+            + ` · exp ${fmtExp(us.expiry) || "—"} · `
+            + (inr ? `₹ at ${num(us.inr_rate, 3)}` : "$")}
+          data={us}
+          /* rupee prices need the MCX decimals, not the dollar ones - two
+             decimals on 415.29 is right, on 4.39 it was necessary */
+          priceDecimals={inr ? (mcx.decimals ?? cfg.mcxDec) : cfg.usDec}
+          strikeDecimals={inr ? 0 : cfg.usDec}
         />
       </div>
 
       <div className="cru-foot">
         MCX refreshes every ~5 s (exchange API limit is one call per 3 s); the US side is live.
         IV is shown as a percentage on both.
+        {inr && (
+          <>
+            {" "}The US strikes, prices and greeks are converted at the USD/INR
+            <b> future</b>, live, so both panels read in rupees. The implied
+            volatility is the same number as on the dollar tab: multiplying the
+            forward, the strike and the price by one rate cannot change it. Delta
+            is unchanged too; vega and theta are in rupees and gamma per rupee.
+          </>
+        )}
       </div>
     </div>
   );

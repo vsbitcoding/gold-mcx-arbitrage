@@ -150,7 +150,11 @@ export const api = {
   nseMcxHistory: ({ commodity = "crude", slot = "all", days = 7, month = 0 } = {}) =>
     request(`/api/nse-mcx/history?commodity=${encodeURIComponent(commodity)}` +
             `&slot=${encodeURIComponent(slot)}&days=${days}&month=${month}`),
-  crudeIv: (commodity = "crude") => request("/api/crude-iv?commodity=" + encodeURIComponent(commodity)),
+  // currency "inr" restates the US chain in rupees at the USD/INR future. The IV
+  // is identical either way - scaling forward, strike and price by one number
+  // cannot change it - so this buys comparable premiums, not a different vol.
+  crudeIv: (commodity = "crude", currency = "usd") =>
+    request(`/api/crude-iv?commodity=${encodeURIComponent(commodity)}&currency=${currency}`),
   // Option calculator, both directions: pass `market` to solve for IV, `vol` to
   // price forwards. Underlying must be the future of the option's OWN month.
   ivCalculator: (p = {}) => {

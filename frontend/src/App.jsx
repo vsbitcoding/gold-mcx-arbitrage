@@ -19,7 +19,7 @@ import { api, getToken, clearToken } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "nsemcx", "ivcalc", "intl"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "crudeinr", "nsemcx", "ivcalc", "intl"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -237,6 +237,9 @@ function Dashboard() {
         {page === "making" && <MakingPrice priceData={priceData} />}
         {page === "premium" && <PremiumInputs />}
         {page === "crude" && <CrudeOil />}
+        {/* Same screen, US side restated in rupees at the USD/INR future. A
+            separate tab because the client wants the dollar view kept. */}
+        {page === "crudeinr" && <CrudeOil currency="inr" />}
       {page === "nsemcx" && <NseMcxCrude />}
       {page === "ivcalc" && <IvCalculator />}
       {page === "intl" && <International />}

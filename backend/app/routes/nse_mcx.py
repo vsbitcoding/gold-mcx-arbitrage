@@ -89,16 +89,10 @@ def _leg(leg: dict | None) -> dict:
 
 
 def _years(expiry: str | None) -> float | None:
-    """Calendar days to expiry over 365, the convention the client's reference
-    calculator uses. NSE and MCX expire on different dates (10-Sep vs 17-Sep on
-    crude), so each side gets its own."""
-    if not expiry:
-        return None
-    try:
-        d = (date.fromisoformat(str(expiry)) - datetime.now().date()).days
-    except ValueError:
-        return None
-    return (d / iv_calc.DAYS_YEAR) if d > 0 else None
+    """Time to expiry, counting the part of today already gone (client, 19-Aug).
+    NSE and MCX expire on different dates - 10-Sep vs 17-Sep on crude - so each
+    side gets its own."""
+    return iv_calc.years_to(expiry)
 
 
 def _forward(rows: list[dict], ex: str) -> tuple[float | None, int, float | None]:

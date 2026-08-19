@@ -39,6 +39,7 @@ across twenty strikes cannot be.
 from __future__ import annotations
 
 import math
+from datetime import date, datetime
 from statistics import median
 
 # Bisection bounds. 500% sounds absurd until a far wing quotes 0.05/16.85, and
@@ -46,6 +47,31 @@ from statistics import median
 _V_LO, _V_HI = 1e-4, 5.0
 _ITERS = 100          # 5.0 halved 100 times is far past double precision
 DAYS_YEAR = 365.0     # calendar days, matching the client's reference calculator
+
+
+def years_to(expiry: str | None, now: datetime | None = None) -> float | None:
+    """Time to expiry in years, counting the PART of today already gone.
+
+    The client asked for this in his own notation: `days to expire - 0.04166 x
+    time`, where 0.04166 is one hour as a fraction of a day. Whole days are the
+    convention his reference calculator uses and they are visibly coarse: at 29
+    days and three in the afternoon, dropping the elapsed 15 hours moves the ATM
+    IV from 45.80% to 46.30%. Half a point is not noise on a screen built to be
+    compared against another exchange.
+
+    Returns None once there is no time left, because an expired option has no
+    implied volatility and a tiny positive T would report a huge one.
+    """
+    if not expiry:
+        return None
+    s = str(expiry)[:10].replace("/", "-")
+    try:
+        exp = date.fromisoformat(s) if "-" in s else date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+    except (ValueError, IndexError):
+        return None
+    now = now or datetime.now()          # server runs in IST
+    days = (exp - now.date()).days - (now.hour + now.minute / 60.0) / 24.0
+    return (days / DAYS_YEAR) if days > 0 else None
 
 
 def _norm_cdf(x: float) -> float:
