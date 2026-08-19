@@ -128,15 +128,22 @@ def _add_iv(leg: dict, strike: float, T: float | None, fwd: float | None,
     the client chose it that way (18-Aug) - and on a thin NSE strike quoted
     712.4/721.8 a single mid figure hides how wide the real answer is.
 
-    A wide or one-sided quote still gets whichever side exists; `implied_vol`
-    returns None on its own when a price has no solution, which is the honest
-    answer and better than a plausible invented one.
+    BOTH sides must be quoted or neither IV is computed. This is the same rule
+    the rest of the app applies to prices, and it matters more here because the
+    arithmetic does not fail loudly. Live examples from the first deploy: NSE's
+    8700 put had no bid and a 2,950 ask, which solves to 329.97% - and its 8800
+    to 9200 calls had bids of 1.7 down to 0.8 with no ask, solving to 15% to 20%
+    where the smile beside them reads 52%. Every one of those is a number a
+    reader would act on, and none is a market. The existing `wide` flag cannot
+    catch them: it needs two sides to measure a spread, so a one-sided leg comes
+    through flagged as fine.
     """
-    if not (T and fwd and strike):
+    bid, ask = leg.get("bid"), leg.get("ask")
+    if not (T and fwd and strike and bid and ask):
         leg["iv_bid"] = leg["iv_ask"] = None
         return
-    leg["iv_bid"] = iv_calc.implied_vol(leg.get("bid"), fwd, strike, T, call)
-    leg["iv_ask"] = iv_calc.implied_vol(leg.get("ask"), fwd, strike, T, call)
+    leg["iv_bid"] = iv_calc.implied_vol(bid, fwd, strike, T, call)
+    leg["iv_ask"] = iv_calc.implied_vol(ask, fwd, strike, T, call)
 
 
 def _num_diff(n: float | None, m: float | None, wide: bool = False,
