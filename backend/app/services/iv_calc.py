@@ -163,6 +163,45 @@ def implied_vol(market: float, S: float, K: float, T: float, call: bool,
     return round(0.5 * (lo + hi) * 100.0, 2)
 
 
+def coarse_strikes(strikes: list[float], atm: float | None, count: int,
+                   every: int = 2) -> list[float]:
+    """`count` strikes around the money, taking every `every`-th rung of the ladder.
+
+    The next month gets half the lines the front one does, so the client asked
+    for it to skip every other strike - "100 ni strike" on MCX crude, whose
+    ladder steps 50. Same fifteen strikes, twice the price covered: crude's next
+    month went from 7550-8250 to 7200-8600, which is the range the front month
+    already shows.
+
+    The rungs are chosen as multiples of `every x step` rather than by counting
+    outward from the money, so they land on round numbers a person reads at a
+    glance - 7200, 7300, 7400 - instead of wherever the ATM happens to sit.
+
+    The ATM is always included even when it is not a round rung (gas can sit at
+    275 on a 10-step ladder), and the farthest rung is dropped to pay for it, so
+    `count` is exact. That matters upstream: each strike is two IBKR market-data
+    lines and the account has seven to spare.
+    """
+    ks = sorted({s for s in strikes if s})
+    if len(ks) < 3 or count <= 0:
+        return ks[:count]
+    step = min((round(b - a, 6) for a, b in zip(ks, ks[1:]) if b > a), default=0)
+    coarse = step * every
+    if not coarse:
+        return ks[:count]
+    rungs = [s for s in ks if abs(s / coarse - round(s / coarse)) < 1e-6]
+    # A ladder with no round rung at this spacing falls back to every strike -
+    # better a narrow chain than an empty one.
+    if len(rungs) < count:
+        rungs = ks
+    if atm is None:
+        atm = ks[len(ks) // 2]
+    near = sorted(rungs, key=lambda s: abs(s - atm))[:count]
+    if atm in ks and atm not in near:
+        near = near[:-1] + [atm]          # buy the ATM's place from the farthest
+    return sorted(near)
+
+
 def forward_from_parity(pairs: list[tuple[float, float, float]]) -> float | None:
     """The underlying the option prices themselves imply: median of K + C - P.
 

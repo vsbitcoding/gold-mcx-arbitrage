@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from app.config import settings
+from app.services import iv_calc
 
 log = logging.getLogger("ibkr_feed")
 
@@ -508,7 +509,15 @@ async def _loop() -> None:
                     return
                 atm = min(d["strikes"], key=lambda s: abs(s - centre))
                 win = _iv_window(key)
-                near = sorted(sorted(d["strikes"], key=lambda s: abs(s - atm))[: win * 2 + 1])
+                # The next month takes every SECOND rung (client, 19-Aug: "100 ni
+                # strike" on MCX crude, whose ladder steps 50). Half the lines of
+                # the front month, but the same price range covered: crude's next
+                # chain goes from 79.5-86.5 to 77-91 on the same fifteen strikes.
+                # Exactly `count` either way, which is what keeps the budget at
+                # 193 of 200.
+                near = (iv_calc.coarse_strikes(d["strikes"], atm, win * 2 + 1)
+                        if key.endswith("2")
+                        else sorted(sorted(d["strikes"], key=lambda s: abs(s - atm))[: win * 2 + 1]))
                 if near == d["window"] and atm == d["atm"]:
                     return
                 for strike in list(d["tickers"]):

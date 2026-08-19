@@ -542,10 +542,19 @@ def get_chain(commodity: str = "crude", window: int = 10, month: int = 0) -> dic
         future_price = st.get("next_price")
     out = []
     if rows and atm is not None:
-        idx = next((i for i, r in enumerate(rows) if r["strike"] == atm), None)
-        if idx is not None:
-            lo, hi = max(0, idx - window), min(len(rows), idx + window + 1)
-            for r in rows[lo:hi]:
+        if month == 1:
+            # Every second rung, matching what IBKR streams for this month, so
+            # the two panels sit strike for strike instead of one showing 50s
+            # against the other's 100s.
+            keep = set(iv_calc.coarse_strikes([r["strike"] for r in rows], atm,
+                                              window * 2 + 1))
+            picked = [r for r in rows if r["strike"] in keep]
+        else:
+            idx = next((i for i, r in enumerate(rows) if r["strike"] == atm), None)
+            picked = (rows[max(0, idx - window): idx + window + 1]
+                      if idx is not None else [])
+        if picked:
+            for r in picked:
                 is_atm = r["strike"] == atm
                 side = "ATM" if is_atm else ("CE" if r["strike"] > atm else "PE")
                 out.append({
