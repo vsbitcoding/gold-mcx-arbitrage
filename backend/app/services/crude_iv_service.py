@@ -201,15 +201,16 @@ def _reprice(rows: list, expiry: str,
     engine returns 45.83 and 45.88. Agreeing with the vendor that is right, while
     disagreeing with the one that is wrong, is the whole argument.
 
-    MCX quotes only the OTM wing - below the money there are puts and no calls,
-    above it calls and no puts - so parity usually finds just the ATM strike,
-    where both are quoted. That is not a weakness: the ATM is the tightest,
-    most-traded strike on the board and its synthetic forward is the one market
-    makers use. Checked against three independent readings at one moment, the
-    single-pair forward came to 8142.9 against 8144.85 from the socket's 21
-    pairs, 8143.0 from the September future itself, and 8142.35 from NSE's own
-    chain - inside 2.5 rupees, while the front future printed on screen said
-    8204.0.
+    This runs on the FULL chain, before `get_chain` applies the client's display
+    convention of calls above the money and puts below. Reading the published
+    payload suggests MCX quotes only one wing and that parity has a single strike
+    to work with; that is the display filter, not the market, and both wings are
+    there underneath.
+
+    Sanity-checked against three independent readings of the same September
+    forward at one moment: 8144.85 from the socket's 21 pairs, 8143.0 from the
+    September future itself, 8142.35 from NSE's own chain - inside 2.5 rupees,
+    while the front future printed on screen said 8204.0.
 
     `fallback` (the next-month future) covers the case where not even the ATM is
     two-way, so a thin morning cannot leave the whole chain without IV.
@@ -489,6 +490,13 @@ def get_chain(commodity: str = "crude", window: int = 10) -> dict:
         "decimals": cfg["decimals"],
         "symbol": st["underlying_name"],
         "future_price": st["future_price"],
+        # What the IV was actually solved against. `future_price` is the FRONT
+        # month and this chain is the month after; publishing only the future is
+        # how a wrong IV went unquestioned for two weeks.
+        "forward": st.get("forward"),
+        "fwd_strikes": st.get("fwd_strikes"),
+        "fwd_spread": st.get("fwd_spread"),
+        "iv_source": "computed (Black-76, forward from put-call parity)",
         "expiry": st["expiry"],
         "expiries": st["expiries"],
         "atm": atm,
