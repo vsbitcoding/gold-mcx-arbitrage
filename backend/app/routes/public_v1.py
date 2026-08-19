@@ -977,6 +977,33 @@ def public_nse_mcx_history(
     return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date, month=month)
 
 
+@router.get("/iv-calculator")
+def public_iv_calculator(
+    underlying: float = Query(..., gt=0, description="future price"),
+    strike: float = Query(..., gt=0),
+    days: float = Query(..., description="calendar days until expiry"),
+    rate: float = Query(0.0, description="interest rate %; 0 for a futures option"),
+    dividend: float = Query(0.0, description="dividend yield %; 0 for a futures option"),
+    vol: float | None = Query(None, gt=0, description="volatility %, to price forwards"),
+    market: float | None = Query(None, description="option market price, to solve for IV"),
+    side: str = Query("ce", pattern="^(ce|pe)$"),
+    _key: str = Depends(require_api_key),
+):
+    """Black-76 both ways: implied volatility from a market price, or price and
+    greeks from a volatility.
+
+    Underlying is the FUTURE price of the month the option belongs to - not the
+    front month. Getting that wrong is what makes a vendor's IV disagree with
+    itself between the call and the put at one strike.
+
+    Pass `market` for implied volatility, `vol` to price forwards. Both -> the
+    solved IV wins. A null `implied_vol` with a `note` means no volatility can
+    produce that price, which is a stale quote rather than a failure.
+    """
+    from app.routes.iv_calculator import _calc
+    return _calc(underlying, strike, days, rate, dividend, vol, market, side)
+
+
 @router.get("/premium-inputs")
 def public_premium_inputs(_key: str = Depends(require_api_key)):
     """Live premium-calc inputs: XAU/USD (Deriv), USD/INR (TwelveData spot), MCX gold (Dhan)."""

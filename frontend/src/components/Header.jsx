@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { key: "signals", label: "⚡ Signals" },
   { key: "crude", label: "Crude / Gas" },
   { key: "nsemcx", label: "NSE vs MCX" },
+  { key: "ivcalc", label: "IV Calculator" },
   { key: "intl", label: "International" },
 ];
 

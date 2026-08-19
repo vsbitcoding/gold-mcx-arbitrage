@@ -73,7 +73,22 @@ function DiffCell({ nse, mcx }) {
   );
 }
 
-function Leg({ leg }) {
+// The IV pair goes in the same cell as the prices it came from, on its own
+// line, rather than in four more columns. The client asked for the bid IV and
+// the ask IV separately (18-Aug) and this is the only layout where both sit
+// beside the two prices that produced them - a lone mid IV would hide that on a
+// leg quoted 712.4 / 721.8 the honest answer is a range.
+function IvLine({ leg }) {
+  const b = leg?.iv_bid, a = leg?.iv_ask;
+  if (b == null && a == null) return null;
+  return (
+    <u className="nm-iv" title="implied volatility off the bid and off the ask">
+      {b == null ? "—" : num(b, 1)} / {a == null ? "—" : num(a, 1)}
+    </u>
+  );
+}
+
+function Leg({ leg, iv }) {
   const q = quality(leg);
   if (!q.ok) {
     return (
@@ -87,6 +102,7 @@ function Leg({ leg }) {
     <td className={`nm-px ${q.wide ? "nm-shaky" : ""}`}>
       <span className="nm-mid">{num(q.mid)}</span>
       <em>{num(leg.bid)} / {num(leg.ask)}</em>
+      {iv && <IvLine leg={leg} />}
     </td>
   );
 }
@@ -123,7 +139,44 @@ function Futures({ f, cfg }) {
   );
 }
 
-function ChainTable({ o, cfg }) {
+// Shows its own workings. A vendor's IV was wrong for weeks precisely because
+// nothing on screen said which underlying it came from, so this names the
+// forward, how many strikes agreed on it, and how many days are left - the three
+// inputs that can silently make every number in the table wrong.
+function IvBasis({ b, cfg, fut }) {
+  if (!b) return null;
+  const dec = cfg.futDec ?? 2;
+  const side = (k, label, shown) => {
+    const s = b[k] || {};
+    if (!s.forward) return <span key={k}><b>{label}</b> no forward yet</span>;
+    // The gap against the future ON SCREEN is the whole point. That future is
+    // the front month; the chain is the month after. On crude they were 60
+    // apart, which is a five point IV error.
+    const gap = shown ? Math.abs(shown - s.forward) : null;
+    return (
+      <span key={k}>
+        <b>{label}</b> {num(s.forward, dec)}
+        <em> from {s.strikes} strike{s.strikes === 1 ? "" : "s"} · {s.days}d</em>
+        {gap != null && gap > 5 && (
+          <i title={"The future above is the front month; this chain belongs to the month after, "
+                  + num(gap, dec) + " away. IV must use the chain's own month or it is wrong."}>
+            {" "}({num(gap, dec)} off the future above)
+          </i>
+        )}
+      </span>
+    );
+  };
+  return (
+    <div className="oh-note oh-slim nm-ivbasis">
+      <span className="nm-ivbasis-lead">IV from the option prices themselves,
+        Black-76 with rate and dividend at zero.</span>
+      {side("nse", "NSE", fut?.nse?.mid)}
+      {side("mcx", "MCX", fut?.mcx?.mid)}
+    </div>
+  );
+}
+
+function ChainTable({ o, cfg, iv }) {
   const all = o?.rows || [];
   const rows = cfg.step
     ? all.filter((r) => r.atm || r.strike % cfg.step === 0)
@@ -146,8 +199,8 @@ function ChainTable({ o, cfg }) {
           <tr className="intl-chain-sub">
             {/* the expiry sits on the column it belongs to, so the header row
                 above the table could go and more strikes fit on screen */}
-            <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
-            <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+            <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}{iv ? " · IV" : ""}</em></th>
+            <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}{iv ? " · IV" : ""}</em></th>
             <th className="intl-call" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
               Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
             </th>
@@ -155,23 +208,23 @@ function ChainTable({ o, cfg }) {
             <th className="intl-put" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
               Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
             </th>
-            <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
-            <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
+            <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}{iv ? " · IV" : ""}</em></th>
+            <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}{iv ? " · IV" : ""}</em></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.strike} className={r.atm ? "cru-atm" : ""}>
-              <Leg leg={r.ce?.nse} />
-              <Leg leg={r.ce?.mcx} />
+              <Leg leg={r.ce?.nse} iv={iv} />
+              <Leg leg={r.ce?.mcx} iv={iv} />
               <DiffCell nse={r.ce?.nse} mcx={r.ce?.mcx} />
               <td className="cru-strike">
                 {num(r.strike, cfg.strikeDec)}
                 {r.atm && <span className="atm-badge">ATM</span>}
               </td>
               <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} />
-              <Leg leg={r.pe?.mcx} />
-              <Leg leg={r.pe?.nse} />
+              <Leg leg={r.pe?.mcx} iv={iv} />
+              <Leg leg={r.pe?.nse} iv={iv} />
             </tr>
           ))}
         </tbody>
@@ -279,6 +332,12 @@ export default function NseMcxCrude() {
     try { return localStorage.getItem("arbi_nsemcx_month") === "1" ? 1 : 0; }
     catch { return 0; }
   });
+  // On by default - the client asked for IV, so it should be there when he
+  // opens the page. The toggle exists because it costs a third line in every
+  // price cell, which is 21 rows taller on a screen he also reads for prices.
+  const [showIv, setShowIv] = useState(() => {
+    try { return localStorage.getItem("arbi_nsemcx_iv") !== "0"; } catch { return true; }
+  });
   const [slot, setSlot] = useState("all");
   const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
@@ -290,6 +349,7 @@ export default function NseMcxCrude() {
   useEffect(() => { try { localStorage.setItem("arbi_nsemcx_product", product); } catch {} }, [product]);
   useEffect(() => { try { localStorage.setItem("arbi_nsemcx_view", view); } catch {} }, [view]);
   useEffect(() => { try { localStorage.setItem("arbi_nsemcx_month", String(month)); } catch {} }, [month]);
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_iv", showIv ? "1" : "0"); } catch {} }, [showIv]);
 
   // Switching commodity is a different market, so the old table must go.
   // Switching Live/History is not - the futures above are the same either way
@@ -364,6 +424,13 @@ export default function NseMcxCrude() {
               onClick={() => setMonth(k)}>{l}</button>
           ))}
         </div>
+        {/* IV is computed here, not taken from a vendor - Dhan's MCX figure
+            disagrees with itself between the call and the put at one strike,
+            and nobody publishes NSE IV at all. */}
+        <button type="button" aria-pressed={showIv}
+          className={`oh-chip nm-ivchip ${showIv ? "on" : ""}`}
+          title="Implied volatility under each price, off the bid and off the ask"
+          onClick={() => setShowIv((v) => !v)}>IV</button>
         <div className="oh-group" role="tablist" aria-label="View">
           {[["live", "Live"], ["history", "History"], ["graph", "Graph"]].map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k}
@@ -427,7 +494,7 @@ export default function NseMcxCrude() {
             <div className="nm-hist-futs">
               <Futures f={s.board?.future} cfg={cfg} />
             </div>
-            <ChainTable o={s.board?.options} cfg={cfg} />
+            <ChainTable o={s.board?.options} cfg={cfg} iv={showIv} />
           </section>
         ))}
       </div>
@@ -441,7 +508,8 @@ export default function NseMcxCrude() {
       {head}
       <StaleNote d={d} />
       <NoNseChain d={d} />
-      <ChainTable o={d.options} cfg={cfg} />
+      {showIv && <IvBasis b={d.iv_basis} cfg={cfg} fut={d.future} />}
+      <ChainTable o={d.options} cfg={cfg} iv={showIv} />
     </div>
   );
 }

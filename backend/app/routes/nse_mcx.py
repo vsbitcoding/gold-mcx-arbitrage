@@ -18,11 +18,12 @@ Honest caveats the screen has to carry:
   * A dead contract still prints an old LTP, so only bid/ask are compared and a
     leg with neither is reported as no market.
 """
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Query
 
-from app.services import angel_feed, crude_iv_service, mcx_opt_stream, nse_mcx_history
+from app.services import (angel_feed, crude_iv_service, iv_calc, mcx_opt_stream,
+                          nse_mcx_history)
 
 router = APIRouter(prefix="/api", tags=["nse-mcx"])
 
@@ -85,6 +86,57 @@ def _leg(leg: dict | None) -> dict:
         "traded": bool(b or a),
         "wide": bool(mid and (a - b) / mid > _WIDE_SPREAD),
     }
+
+
+def _years(expiry: str | None) -> float | None:
+    """Calendar days to expiry over 365, the convention the client's reference
+    calculator uses. NSE and MCX expire on different dates (10-Sep vs 17-Sep on
+    crude), so each side gets its own."""
+    if not expiry:
+        return None
+    try:
+        d = (date.fromisoformat(str(expiry)) - datetime.now().date()).days
+    except ValueError:
+        return None
+    return (d / iv_calc.DAYS_YEAR) if d > 0 else None
+
+
+def _forward(rows: list[dict], ex: str) -> tuple[float | None, int, float | None]:
+    """The forward this exchange's own option prices imply, by put-call parity.
+
+    NOT the future on the screen. That is the front month, and the chain is the
+    month after - the error that makes Dhan's published MCX IV disagree with
+    itself by 9.8 points at a single strike. Measured 18-Aug: NSE's front future
+    was 60.8 away from where its own options said the forward was, MCX's 49.8.
+
+    Returns (forward, how many strikes voted, how far apart the votes were). The
+    spread is the chain's own consistency check - tight means trust it.
+    """
+    pairs, votes = [], []
+    for r in rows or []:
+        c = ((r.get("ce") or {}).get(ex) or {}).get("mid")
+        p = ((r.get("pe") or {}).get(ex) or {}).get("mid")
+        if c and p:
+            pairs.append((r["strike"], c, p))
+            votes.append(r["strike"] + c - p)
+    return iv_calc.forward_from_parity(pairs), len(pairs), iv_calc.spread(votes)
+
+
+def _add_iv(leg: dict, strike: float, T: float | None, fwd: float | None,
+            call: bool) -> None:
+    """IV off the bid and off the ask, in place. Two numbers, not one, because
+    the client chose it that way (18-Aug) - and on a thin NSE strike quoted
+    712.4/721.8 a single mid figure hides how wide the real answer is.
+
+    A wide or one-sided quote still gets whichever side exists; `implied_vol`
+    returns None on its own when a price has no solution, which is the honest
+    answer and better than a plausible invented one.
+    """
+    if not (T and fwd and strike):
+        leg["iv_bid"] = leg["iv_ask"] = None
+        return
+    leg["iv_bid"] = iv_calc.implied_vol(leg.get("bid"), fwd, strike, T, call)
+    leg["iv_ask"] = iv_calc.implied_vol(leg.get("ask"), fwd, strike, T, call)
 
 
 def _num_diff(n: float | None, m: float | None, wide: bool = False,
@@ -156,6 +208,22 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
                          "diff": _diff(n_leg, m_leg, fresh)}
         rows.append(out)
 
+    # Implied volatility, computed here rather than taken from Dhan - whose
+    # figure is demonstrably wrong, and who has none for NSE at all. Two per leg,
+    # off the bid and off the ask, per the client's choice on 18-Aug.
+    #
+    # Each exchange gets its own forward and its own time to expiry, because they
+    # are genuinely different contracts: on crude, NSE expires 10-Sep and MCX
+    # 17-Sep. Sharing either number across the two would produce exactly the kind
+    # of quietly-wrong figure this whole exercise is about.
+    nse_T, mcx_T = _years(a.get("opt_expiry")), _years(m.get("expiry"))
+    nse_fwd, nse_n, nse_sp = _forward(rows, "nse")
+    mcx_fwd, mcx_n, mcx_sp = _forward(rows, "mcx")
+    for r in rows:
+        for side, call in (("ce", True), ("pe", False)):
+            _add_iv(r[side]["nse"], r["strike"], nse_T, nse_fwd, call)
+            _add_iv(r[side]["mcx"], r["strike"], mcx_T, mcx_fwd, call)
+
     return {
         "commodity": key,
         "month": month,
@@ -170,6 +238,20 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
             "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
         "fresh": fresh,
+        # Everything the IV was derived from, so the screen can show its own
+        # workings and a wrong answer is traceable instead of mysterious.
+        # `strikes` is how many voted on the forward and `vote_spread` how far
+        # apart they were; a tight spread over many strikes means the chain is
+        # arbitrage-free and the forward is trustworthy.
+        "iv_basis": {
+            "nse": {"forward": nse_fwd, "strikes": nse_n, "vote_spread": nse_sp,
+                    "expiry": a.get("opt_expiry"),
+                    "days": round(nse_T * iv_calc.DAYS_YEAR) if nse_T else None},
+            "mcx": {"forward": mcx_fwd, "strikes": mcx_n, "vote_spread": mcx_sp,
+                    "expiry": m.get("expiry"),
+                    "days": round(mcx_T * iv_calc.DAYS_YEAR) if mcx_T else None},
+            "rate": 0.0, "dividend": 0.0, "model": "Black-76 (Black-Scholes, S=future, r=q=0)",
+        },
         "options": {
             "nse_expiry": a.get("opt_expiry"),
             "mcx_expiry": m.get("expiry"),

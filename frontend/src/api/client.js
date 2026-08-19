@@ -151,6 +151,14 @@ export const api = {
     request(`/api/nse-mcx/history?commodity=${encodeURIComponent(commodity)}` +
             `&slot=${encodeURIComponent(slot)}&days=${days}&month=${month}`),
   crudeIv: (commodity = "crude") => request("/api/crude-iv?commodity=" + encodeURIComponent(commodity)),
+  // Option calculator, both directions: pass `market` to solve for IV, `vol` to
+  // price forwards. Underlying must be the future of the option's OWN month.
+  ivCalculator: (p = {}) => {
+    const q = new URLSearchParams();
+    ["underlying", "strike", "days", "rate", "dividend", "vol", "market", "side"]
+      .forEach((k) => { if (p[k] != null && p[k] !== "") q.set(k, p[k]); });
+    return request(`/api/iv-calculator?${q.toString()}`);
+  },
   // Fire-once mean-reversion signals + accuracy track record
   signals: () => request("/api/signals"),
   signalsHistory: (limit = 100) => request(`/api/signals/history?limit=${limit}`),
