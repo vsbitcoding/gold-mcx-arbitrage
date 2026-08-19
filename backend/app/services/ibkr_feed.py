@@ -30,13 +30,27 @@ from app.config import settings
 
 log = logging.getLogger("ibkr_feed")
 
-# How many strikes either side of the money to stream (each = 2 lines, C+P).
-_WINDOW = 5
-# The Crude Oil comparison tab wants 21 strikes on the MONTHLY contract with
-# greeks - 10 calls above the money, the ATM row, 10 puts below (the client's
-# own layout, same as his Commodity Options tab). Only one side is streamed per
-# strike, so that is 22 lines rather than 42.
-_IV_WINDOW = 10
+# Strikes either side of the money on the monthly IV chains, and the reason they
+# now differ by month (client, 19-Aug).
+#
+# He asked for five more strikes each side. Every strike is TWO market-data lines
+# (call and put) on four chains, so +5 each side is +80 lines and the account
+# holds 200 - 177 in use, a second Quote Booster pack at USD 30/month to go
+# further, and only one month of runway left above IBKR's $500 floor if it were
+# bought. Told that, he chose to keep the money and shift the budget instead:
+# the FRONT month, which is the one he watches, gets the full +-15 he wanted, and
+# the next month drops to +-7. NSE lists no next-month option market at all and
+# MCX's is thin, so the strikes given up are the ones nobody quotes.
+#
+# 2 x 31 x 2 + 2 x 15 x 2 + 7 futures + 2 spots = 193 of 200. Anything more needs
+# the second pack.
+_IV_WINDOW = 15          # front month
+_IV_WINDOW_NEXT = 7      # the month after
+
+
+def _iv_window(key: str) -> int:
+    """Chain keys for the second month end in '2' - cl2, ng2."""
+    return _IV_WINDOW_NEXT if key.endswith("2") else _IV_WINDOW
 # Commodities that carry an IV chain, and the future each one is priced off.
 # The monthly option class is chosen as the one listing the most strikes: for
 # crude that is LO (451 vs ~185 on the weeklies), for gas LNE (236 vs 61). The
@@ -493,7 +507,8 @@ async def _loop() -> None:
                 if not d["strikes"] or not d["expiry"]:
                     return
                 atm = min(d["strikes"], key=lambda s: abs(s - centre))
-                near = sorted(sorted(d["strikes"], key=lambda s: abs(s - atm))[: _IV_WINDOW * 2 + 1])
+                win = _iv_window(key)
+                near = sorted(sorted(d["strikes"], key=lambda s: abs(s - atm))[: win * 2 + 1])
                 if near == d["window"] and atm == d["atm"]:
                     return
                 for strike in list(d["tickers"]):

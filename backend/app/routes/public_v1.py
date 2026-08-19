@@ -879,7 +879,8 @@ async def public_international_stream(
 @router.get("/crude-iv")
 def public_crude_iv(
     commodity: str = Query("crude", description="crude | natgas"),
-    window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
+    window: int | None = Query(None, ge=1, le=25,
+                               description="strikes each side of ATM; default 15 front month, 7 next"),
     currency: str = Query("usd", pattern="^(usd|inr)$",
                           description="inr restates the US chain in rupees at the USD/INR future"),
     month: int = Query(0, ge=0, le=1, description="0 = front expiry, 1 = the one after"),

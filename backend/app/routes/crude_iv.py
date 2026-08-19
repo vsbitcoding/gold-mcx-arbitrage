@@ -86,15 +86,31 @@ def _to_inr(us: dict, rate: float | None) -> dict:
     }
 
 
-def _payload(window: int, commodity: str = "crude", currency: str = "usd",
+# What each month shows by default, matching what ibkr_feed streams. The client
+# asked for five more strikes each side (19-Aug); the front month gets them and
+# the next month gives some back, because widening all four chains needs a second
+# Quote Booster pack and there is not the runway for it. See ibkr_feed.
+_DEFAULT_WINDOW = {0: 15, 1: 7}
+
+
+def _payload(window: int | None, commodity: str = "crude", currency: str = "usd",
              month: int = 0) -> dict:
     commodity = commodity if commodity in COMMODITIES else "crude"
     month = 1 if month == 1 else 0
+    win = _DEFAULT_WINDOW[month] if window is None else window
     ib = ibkr_feed.get_data()
     us = ib.get(_US_KEY[(commodity, month)]) or {}
-    if window != 10 and us.get("rows"):
-        atm = us.get("atm")
-        us = {**us, "rows": [r for r in us["rows"] if abs(r["strike"] - atm) <= window * 0.5]} if atm else us
+    # Trim by POSITION from the money, not by price distance. The old test was
+    # `abs(strike - atm) <= window * 0.5`, which hard-codes crude's 0.5 strike
+    # step; natural gas steps 0.05, so on gas it kept ten times too many strikes
+    # or, on a wider ladder, almost none. Ranking by distance needs no step at
+    # all and is the same rule the NSE-vs-MCX screen was rebuilt around.
+    rows = us.get("rows") or []
+    atm = us.get("atm")
+    if rows and atm is not None and len(rows) > win * 2 + 1:
+        keep = {r["strike"] for r in
+                sorted(rows, key=lambda r: abs(r["strike"] - atm))[: win * 2 + 1]}
+        us = {**us, "rows": [r for r in rows if r["strike"] in keep]}
     pf = premium_feed.get_inputs()
     us = {**us, "connected": ib.get("connected"), "delayed": ib.get("delayed")}
     # The FUTURE rate, which is what the client specified and what premium_feed
@@ -106,7 +122,7 @@ def _payload(window: int, commodity: str = "crude", currency: str = "usd",
         "commodity": commodity,
         "month": month,
         "currency": "INR" if currency == "inr" else "USD",
-        "mcx": crude_iv_service.get_chain(commodity=commodity, window=window, month=month),
+        "mcx": crude_iv_service.get_chain(commodity=commodity, window=win, month=month),
         "us": us,
         # client wants the rate on this screen too - MCX quotes in rupees and
         # the US chain in dollars, so it is the number he converts with
@@ -119,7 +135,8 @@ def _payload(window: int, commodity: str = "crude", currency: str = "usd",
 @router.get("/crude-iv")
 def crude_iv(
     commodity: str = Query("crude", description="crude | natgas"),
-    window: int = Query(10, ge=1, le=25, description="strikes each side of ATM"),
+    window: int | None = Query(None, ge=1, le=25,
+                               description="strikes each side of ATM; default 15 front month, 7 next"),
     currency: str = Query("usd", pattern="^(usd|inr)$",
                           description="inr restates the US chain in rupees at the USD/INR future"),
     month: int = Query(0, ge=0, le=1, description="0 = front expiry, 1 = the one after"),

@@ -23,8 +23,10 @@ Measured before it was written, since "no DB or server load" is standing:
              the in-memory feeds - no upstream call, no new subscription.
   size     : the live board serialises to 14.8 KB, which would be 433 MB a year.
              Every column the table SHOWS - strike, bid, ask, IV, delta, and OI
-             on the MCX side - packs into 3 KB, so 363 KB a day and 89 MB a year,
-             beside the 65 MB the NSE-vs-MCX history already uses.
+             on the MCX side - packs into about 3 KB. The front month carries 31
+             strikes and the next 15 (19-Aug), which averages out near where it
+             was at 21 apiece, so roughly 390 KB a day and 95 MB a year, beside
+             the 65 MB the NSE-vs-MCX history already uses.
   read     : on demand, one indexed SELECT behind a 60 s cache. Nothing polls it.
 """
 from __future__ import annotations
@@ -166,7 +168,10 @@ def snapshot(slot: str, commodity: str, month: int = 0) -> str:
         if not dhan_feed.is_market_open():
             return "MCX closed; skipped"
 
-        board = _payload(window=10, commodity=commodity, month=month)
+        # None, not 10 - the route's own per-month default (15 front, 7 next) is
+        # what the screen renders, and history has to be the same board or the
+        # stored one is ten strikes narrower than the live one it claims to be.
+        board = _payload(window=None, commodity=commodity, month=month)
         if not _usable(board):
             return "one side not live or not quoting two-way; skipped"
 

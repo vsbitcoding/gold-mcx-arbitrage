@@ -141,7 +141,7 @@ const hhmm = (s) => {
   return `${h12}:${m} ${ap}`;
 };
 const dmy = (iso) => {
-  const [y, m, d] = String(iso || "").split("-");
+  const [, m, d] = String(iso || "").split("-");
   return d ? `${d}/${m}` : iso;
 };
 

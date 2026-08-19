@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -75,14 +75,6 @@ export default function IvCalculator() {
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
   const basis = board?.iv_basis;
-
-  // Strikes that actually quote, so a prefill cannot land on an empty one.
-  const strikes = useMemo(() => {
-    const rows = board?.options?.rows || [];
-    return rows
-      .filter((r) => (r[side]?.nse?.mid != null) || (r[side]?.mcx?.mid != null))
-      .map((r) => r.strike);
-  }, [board, side]);
 
   function prefill(exchange) {
     const b = basis?.[exchange];
