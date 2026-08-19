@@ -93,6 +93,23 @@ def _to_inr(us: dict, rate: float | None) -> dict:
 _DEFAULT_WINDOW = {0: 15, 1: 7}
 
 
+_WIDE_LEG = 0.25
+
+
+def _mark_wide(chain: dict) -> dict:
+    """Flag US legs whose two sides are too far apart to price off, same rule as
+    the MCX side. IBKR sends no such flag, and gas hits it: 9 of 55 front-month
+    legs were wider than 25% on 19-Aug, the worst at 100%."""
+    for r in chain.get("rows") or []:
+        for side in ("ce", "pe"):
+            leg = r.get(side)
+            if not leg:
+                continue
+            b, a, mid = leg.get("bid"), leg.get("ask"), leg.get("mid")
+            leg["wide"] = bool(b and a and mid and (a - b) / mid > _WIDE_LEG)
+    return chain
+
+
 def _payload(window: int | None, commodity: str = "crude", currency: str = "usd",
              month: int = 0) -> dict:
     commodity = commodity if commodity in COMMODITIES else "crude"
@@ -112,7 +129,7 @@ def _payload(window: int | None, commodity: str = "crude", currency: str = "usd"
                 sorted(rows, key=lambda r: abs(r["strike"] - atm))[: win * 2 + 1]}
         us = {**us, "rows": [r for r in rows if r["strike"] in keep]}
     pf = premium_feed.get_inputs()
-    us = {**us, "connected": ib.get("connected"), "delayed": ib.get("delayed")}
+    us = _mark_wide({**us, "connected": ib.get("connected"), "delayed": ib.get("delayed")})
     # The FUTURE rate, which is what the client specified and what premium_feed
     # already serves - a spot two minutes old was replaced on 14-Aug for exactly
     # this reason.

@@ -64,7 +64,17 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
                     ) : null}
                     <td>{num(leg?.bid, priceDecimals)}</td>
                     <td>{num(leg?.ask, priceDecimals)}</td>
-                    <td className="cru-iv-col">{iv(leg?.iv)}</td>
+                    {/* A volatility solved off the mid of 100.1 / 799.9 is
+                        arithmetic, not a market reading. The MCX October chain
+                        had 12 of 13 legs like that on 19-Aug. Marked rather than
+                        blanked - removing them empties the panel, and an empty
+                        panel says less than a flagged one. */}
+                    <td className={`cru-iv-col ${leg?.wide ? "cru-shaky" : ""}`}
+                      title={leg?.wide
+                        ? "Bid and ask are more than 25% apart, so this volatility comes from a mid nobody could deal at."
+                        : ""}>
+                      {iv(leg?.iv)}{leg?.wide && leg?.iv != null ? " ?" : ""}
+                    </td>
                     <td>{leg?.delta == null ? "—" : fmtNum(leg.delta, 3)}</td>
                     {showOi && <td>{leg?.oi == null ? "—" : fmtNum(leg.oi, 0)}</td>}
                   </tr>
@@ -104,30 +114,43 @@ function monthLabel(d, which) {
 // Stored boards are flat lists with a cols_ header - the shape that took a
 // year of this history from 433 MB to 89 MB. Unpack back into the live shape so
 // one <Chain> renders both.
-function unpack(chain, cols) {
+function unpack(chain, cols, rate) {
   if (!chain?.rows) return { rows: [] };
   const at = (row, name) => {
     const i = cols.indexOf(name);
     return i < 0 ? null : row[i];
   };
+  // The US side is stored in DOLLARS and converted here, at the rate that
+  // applied when the board was captured - which is kept beside it. The History
+  // view was labelling the panel "in Rs" and printing dollars: MCX 8,102 next to
+  // US 83, the one comparison the rupee tab exists to make (client, 19-Aug).
+  // Converting at read time also beats storing both: one fact, one copy, and a
+  // six o'clock board is never restated at eight o'clock's rate.
+  const r = rate || 1;
+  const px = (v, f = 1) => (typeof v === "number" ? v * r * f : v);
   // `side` is not stored - it is derivable, and repeating "CE"/"PE" on every
   // strike of every board would be bytes for nothing. Rebuild it by the same
   // rule get_chain uses: calls above the money, puts below, both on the ATM.
   // Leaving it out is what crashed the History view on its first day: <Chain>
   // switches on it and called .toLowerCase() on undefined.
   const atmStrike = (chain.rows.find((r) => at(r, "atm")) || [])[cols.indexOf("strike")];
+  const leg = (row, s) => ({
+    bid: px(at(row, `${s}_bid`)), ask: px(at(row, `${s}_ask`)),
+    // IV is unchanged by the conversion - scaling forward, strike and price by
+    // one rate cannot move it - and delta is dimensionless.
+    iv: at(row, `${s}_iv`), delta: at(row, `${s}_delta`),
+    wide: !!at(row, `${s}_wide`), oi: at(row, `${s}_oi`),
+  });
   return {
     ...chain,
-    future_price: chain.future,
+    future_price: px(chain.future),
     rows: chain.rows.map((row) => ({
-      strike: at(row, "strike"),
+      strike: px(at(row, "strike")),
       atm: !!at(row, "atm"),
       side: at(row, "atm") ? "ATM"
         : (atmStrike != null && at(row, "strike") > atmStrike ? "CE" : "PE"),
-      ce: { bid: at(row, "ce_bid"), ask: at(row, "ce_ask"), iv: at(row, "ce_iv"),
-            delta: at(row, "ce_delta"), oi: at(row, "ce_oi") },
-      pe: { bid: at(row, "pe_bid"), ask: at(row, "pe_ask"), iv: at(row, "pe_iv"),
-            delta: at(row, "pe_delta"), oi: at(row, "pe_oi") },
+      ce: leg(row, "ce"),
+      pe: leg(row, "pe"),
     })),
   };
 }
@@ -165,8 +188,10 @@ function HistoryBoards({ h, loading, cfg, inr, mcxDec }) {
   return (
     <div className="cru-hist">
       {snaps.map((s) => {
+        // MCX is already rupees; only the US side is converted, and only here.
         const m = unpack(s.board?.mcx, s.board?.cols_mcx || []);
-        const u = unpack(s.board?.us, s.board?.cols_us || []);
+        const u = unpack(s.board?.us, s.board?.cols_us || [],
+                         inr ? (s.board?.usdinr || s.usdinr) : 1);
         return (
           <section className="cru-hist-board" key={`${s.snap_date}-${s.slot}`}>
             <div className="cru-hist-head">

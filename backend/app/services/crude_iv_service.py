@@ -185,6 +185,8 @@ def _chain_rows(payload: dict) -> tuple[list, float | None]:
 # whole chain agrees to a rupee or two once the wide wings are out - and small
 # enough that one bad quote is outvoted rather than merely out-weighted.
 _FWD_VOTERS = 9
+# Same threshold the NSE-vs-MCX screen uses to refuse a quote as untradeable.
+_WIDE_LEG = 0.25
 
 
 def _reprice(rows: list, expiry: str,
@@ -277,10 +279,18 @@ def _reprice(rows: list, expiry: str,
             # 15-20% beside a 52% smile. `wide` cannot catch those - measuring a
             # spread needs two sides.
             if not (b and a and px):
+                leg["wide"] = False
                 leg["iv"] = None
                 leg.update({"delta": None, "theta": None, "gamma": None, "vega": None})
                 leg["iv_bid"] = leg["iv_ask"] = None
                 continue
+            # How far apart the two sides are. On 19-Aug the MCX October chain
+            # had 12 of its 13 quoted legs wider than 25%, the worst at 164% -
+            # bid 100.1 against ask 799.9 - and the mid of that is not a price,
+            # so neither is the volatility solved from it. Marked rather than
+            # dropped: removing them empties the panel, and an empty panel says
+            # less than a flagged one.
+            leg["wide"] = bool((a - b) / px > _WIDE_LEG) if px else False
             leg["iv"] = iv_calc.implied_vol(px, fwd, r["strike"], T, call)
             leg["iv_bid"] = iv_calc.implied_vol(b, fwd, r["strike"], T, call)
             leg["iv_ask"] = iv_calc.implied_vol(a, fwd, r["strike"], T, call)

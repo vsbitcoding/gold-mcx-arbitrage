@@ -100,7 +100,8 @@ def _pack(board: dict) -> dict:
             row = [r.get("strike"), 1 if r.get("atm") else 0]
             for side in ("ce", "pe"):
                 leg = r.get(side) or {}
-                row += [leg.get("bid"), leg.get("ask"), leg.get("iv"), leg.get("delta")]
+                row += [leg.get("bid"), leg.get("ask"), leg.get("iv"), leg.get("delta"),
+                        1 if leg.get("wide") else 0]
                 if oi:
                     row.append(leg.get("oi"))
             out.append(row)
@@ -109,15 +110,23 @@ def _pack(board: dict) -> dict:
     m, u = board["mcx"], board["us"]
     return {
         # field order, so a reader never has to guess what column 4 is
-        "cols_mcx": ["strike", "atm", "ce_bid", "ce_ask", "ce_iv", "ce_delta", "ce_oi",
-                     "pe_bid", "pe_ask", "pe_iv", "pe_delta", "pe_oi"],
-        "cols_us": ["strike", "atm", "ce_bid", "ce_ask", "ce_iv", "ce_delta",
-                    "pe_bid", "pe_ask", "pe_iv", "pe_delta"],
+        "cols_mcx": ["strike", "atm",
+                     "ce_bid", "ce_ask", "ce_iv", "ce_delta", "ce_wide", "ce_oi",
+                     "pe_bid", "pe_ask", "pe_iv", "pe_delta", "pe_wide", "pe_oi"],
+        "cols_us": ["strike", "atm",
+                    "ce_bid", "ce_ask", "ce_iv", "ce_delta", "ce_wide",
+                    "pe_bid", "pe_ask", "pe_iv", "pe_delta", "pe_wide"],
         "mcx": {"rows": rows(m, True), "expiry": m.get("expiry"), "symbol": m.get("symbol"),
                 "forward": m.get("forward"), "future": m.get("future_price"),
                 "fwd_strikes": m.get("fwd_strikes"), "decimals": m.get("decimals")},
         "us": {"rows": rows(u, False), "expiry": u.get("expiry"), "symbol": u.get("symbol"),
                "future": u.get("future_price"), "trading_class": u.get("trading_class")},
+        # The US side is stored in DOLLARS, always, and the rupee tab converts at
+        # read time using this rate - the one that applied at capture, not
+        # today's. Storing both currencies would double the file to hold one
+        # fact twice, and converting with a later rate would quietly restate a
+        # six o'clock board at eight o'clock's exchange rate.
+        "us_currency": "USD",
         "usdinr": (board.get("usdinr") or {}).get("price"),
     }
 

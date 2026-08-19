@@ -5619,3 +5619,8 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    are ~8000 and gas's ~270, and one frame of the wrong scale under the right
    heading should look uncertain rather than authoritative. */
 .cru-stale .cru-split, .cru-stale .cru-stats { opacity: .45; transition: opacity .1s; }
+
+/* A volatility read off a mid nobody could deal at. Same amber the rest of the
+   app uses for "this number is arithmetic, not a price". */
+.cru-shaky { background: rgba(201,162,39,.10); }
+.cru-shaky::after { content: ""; }
