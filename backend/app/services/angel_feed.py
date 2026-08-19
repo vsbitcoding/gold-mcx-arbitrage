@@ -411,12 +411,22 @@ def _loop() -> None:
 
     order = POLL_ORDER
     jwt, inst, resolved_at, turn = None, None, 0.0, 0
+    resolved_day = None
     force_login, login_fails = False, 0
     while not _stop.is_set():
         try:
-            if inst is None or (time.time() - resolved_at) > _MASTER_TTL:
+            # Re-resolve on a DATE change as well as on the 12-hour timer. Every
+            # contract here is picked with `_expiry_date(...) >= today`, so the
+            # pick is only as fresh as the last resolve - and a 12-hour timer can
+            # put the next one after the open. The NSE crude future expires
+            # 19-Aug and USD/INR on 27-Aug; land on the wrong side of that timer
+            # and the board opens on a dead contract, which is exactly the bug
+            # the MCX side had before it got its 08:40 roll.
+            today = datetime.now().date()          # server runs in IST
+            if (inst is None or resolved_day != today
+                    or (time.time() - resolved_at) > _MASTER_TTL):
                 inst = _resolve()
-                resolved_at = time.time()
+                resolved_at, resolved_day = time.time(), today
                 for k, r in inst["c"].items():
                     f = r.get("future")
                     log.info("Angel: NSE %s %s (exp %s), chain exp %s, %d strikes",
