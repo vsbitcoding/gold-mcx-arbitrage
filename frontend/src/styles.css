@@ -5597,3 +5597,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 .cru-hist-head u { margin-left: auto; font-size: 11px; }
 .cru-hist-head i { font-style: normal; font-weight: 800; }
+
+/* The half-frame where the board still belongs to the previous commodity. The
+   API answers in ~5 ms so this is rarely painted at all, but crude's numbers
+   are ~8000 and gas's ~270, and one frame of the wrong scale under the right
+   heading should look uncertain rather than authoritative. */
+.cru-stale .cru-split, .cru-stale .cru-stats { opacity: .45; transition: opacity .1s; }

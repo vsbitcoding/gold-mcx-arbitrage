@@ -249,10 +249,12 @@ export default function CrudeOil({ currency = "usd" }) {
     return () => { alive = false; };
   }, [view, product, month]);
 
-  // Only a COMMODITY change clears the board. Switching month keeps the old one
-  // on screen while the new one arrives, so the layout holds still and only the
-  // numbers move - blanking it made the whole page flash on every click.
-  useEffect(() => { setD(null); }, [product]);
+  // Nothing clears the board any more, commodity switch included. The API
+  // answers in about 5 ms, so the replacement is there before the browser
+  // repaints and blanking only ever bought a flash of empty page. The board
+  // that is briefly still on screen belongs to the previous commodity, so it is
+  // dimmed until the right one lands rather than passed off as current.
+  const stale = !!d && d.commodity !== product;
 
   useEffect(() => {
     let alive = true;
@@ -325,7 +327,7 @@ export default function CrudeOil({ currency = "usd" }) {
   const gap = mIv != null && uIv != null ? mIv - uIv : null;
 
   return (
-    <div className="cru-page">
+    <div className={`cru-page ${stale ? "cru-stale" : ""}`}>
       <div className="intl-head cru-head">
         <div>
           <h2>{cfg.label} — Option Comparison</h2>
