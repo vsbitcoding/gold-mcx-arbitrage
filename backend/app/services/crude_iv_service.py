@@ -361,10 +361,16 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
         r2.raise_for_status()
         rows2, _ = _chain_rows(r2.json())
         # Same treatment - an alternate expiry has its OWN forward, and using the
-        # front chain's would recreate the bug one month over.
-        _reprice(rows2, want, st.get("next_price"))
+        # front chain's would recreate the bug one month over. Its forward and
+        # its ATM are stored WITH it: the next month trades ~60 below the front
+        # one, so borrowing either from the front chain picks the wrong strike
+        # and prices it against the wrong contract.
+        fwd2, n2, sp2 = _reprice(rows2, pick, st.get("next_price"))
         if rows2:
-            st["chains"][pick] = {"rows": rows2, "ts": time.time()}
+            atm2 = (min((r["strike"] for r in rows2), key=lambda s: abs(s - fwd2))
+                    if fwd2 else None)
+            st["chains"][pick] = {"rows": rows2, "ts": time.time(), "forward": fwd2,
+                                  "fwd_strikes": n2, "fwd_spread": sp2, "atm": atm2}
 
 
 def _loop() -> None:
@@ -457,8 +463,13 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
     if expiry and expiry != st["expiry"]:
         got = (st.get("chains") or {}).get(expiry) or {}
         rows, ts = got.get("rows", []), got.get("ts", 0.0)
+        # Its OWN forward. The front chain's is ~60 away on crude and using it
+        # here would reproduce, one month over, the exact bug this was built to
+        # remove.
+        basis = got
     else:
         expiry, rows, ts = st["expiry"], st["rows"], st["ts"]
+        basis = st
     # month 1 shows the NEXT future beside the next chain; the front one would
     # be a different contract wearing the right chain's label.
     nxt = month == 1 and st.get("next_name")
@@ -468,9 +479,9 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
         # The forward the option prices imply, which is what the IV was solved
         # against - NOT `future_price`, which is the front month. On crude they
         # sit 60 apart and that gap is a five point IV error.
-        "forward": st.get("forward"),
-        "fwd_strikes": st.get("fwd_strikes"),
-        "fwd_spread": st.get("fwd_spread"),
+        "forward": basis.get("forward"),
+        "fwd_strikes": basis.get("fwd_strikes"),
+        "fwd_spread": basis.get("fwd_spread"),
         "iv_source": "computed (Black-76, forward from put-call parity)",
         "future_price": st["next_price"] if nxt else st["future_price"],
         "future_bid": st["next_bid"] if nxt else st["future_bid"],
@@ -482,12 +493,45 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
     }
 
 
-def get_chain(commodity: str = "crude", window: int = 10) -> dict:
+def next_expiry(commodity: str) -> str | None:
+    """The listed expiry after the front one, and ask the poller to keep it warm.
+
+    An alternate chain is only fetched while something wants it, so asking is
+    part of reading it: the first call returns the date with an empty chain and
+    the round after has the rows.
+    """
+    st = _state.get(commodity)
+    listed = (st or {}).get("expiries") or []
+    if len(listed) < 2:
+        return None
+    pick = listed[1]
+    if pick not in st["want"]:
+        st["want"].append(pick)
+    return pick
+
+
+def get_chain(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     """ATM ±`window` strikes. Client's convention (same as the Commodity Options
-    tab): CE above the money, PE below it, and BOTH sides on the ATM row."""
+    tab): CE above the money, PE below it, and BOTH sides on the ATM row.
+
+    `month=1` serves the next listed expiry with its OWN forward, ATM and
+    future. The next month trades about 60 below the front one on crude, so
+    borrowing any of the three would pick the wrong strike and price it against
+    the wrong contract.
+    """
     cfg = COMMODITIES.get(commodity) or COMMODITIES["crude"]
     st = _state[commodity if commodity in _state else "crude"]
-    rows, atm = st["rows"], st["atm"]
+    rows, atm, ts = st["rows"], st["atm"], st["ts"]
+    expiry, symbol, future_price = st["expiry"], st["underlying_name"], st["future_price"]
+    basis = st
+    if month == 1:
+        expiry = next_expiry(commodity)
+        # Empty until the poller's next round reaches it. Empty is right here;
+        # showing the front month under the next month's label is not.
+        basis = (st.get("chains") or {}).get(expiry) or {}
+        rows, atm, ts = basis.get("rows") or [], basis.get("atm"), basis.get("ts", 0.0)
+        symbol = st.get("next_name") or symbol
+        future_price = st.get("next_price")
     out = []
     if rows and atm is not None:
         idx = next((i for i, r in enumerate(rows) if r["strike"] == atm), None)
@@ -503,22 +547,23 @@ def get_chain(commodity: str = "crude", window: int = 10) -> dict:
                     "ce": r["ce"] if side in ("CE", "ATM") else None,
                     "pe": r["pe"] if side in ("PE", "ATM") else None,
                 })
-    age = round(time.time() - st["ts"], 1) if st["ts"] else None
+    age = round(time.time() - ts, 1) if ts else None
     return {
         "exchange": "MCX",
         "commodity": commodity,
+        "month": month,
         "label": cfg["label"],
         "decimals": cfg["decimals"],
-        "symbol": st["underlying_name"],
-        "future_price": st["future_price"],
+        "symbol": symbol,
+        "future_price": future_price,
         # What the IV was actually solved against. `future_price` is the FRONT
         # month and this chain is the month after; publishing only the future is
         # how a wrong IV went unquestioned for two weeks.
-        "forward": st.get("forward"),
-        "fwd_strikes": st.get("fwd_strikes"),
-        "fwd_spread": st.get("fwd_spread"),
+        "forward": basis.get("forward"),
+        "fwd_strikes": basis.get("fwd_strikes"),
+        "fwd_spread": basis.get("fwd_spread"),
         "iv_source": "computed (Black-76, forward from put-call parity)",
-        "expiry": st["expiry"],
+        "expiry": expiry,
         "expiries": st["expiries"],
         "atm": atm,
         "iv_unit": "percent",

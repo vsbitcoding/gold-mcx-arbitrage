@@ -882,6 +882,7 @@ def public_crude_iv(
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
     currency: str = Query("usd", pattern="^(usd|inr)$",
                           description="inr restates the US chain in rupees at the USD/INR future"),
+    month: int = Query(0, ge=0, le=1, description="0 = front expiry, 1 = the one after"),
     _key: str = Depends(require_api_key),
 ):
     """MCX and US option chains side by side (crude oil or natural gas), with
@@ -899,7 +900,7 @@ def public_crude_iv(
     US side is live. Poll every 3-5 s - faster gains nothing.
     """
     from app.routes.crude_iv import _payload
-    return _payload(window, commodity, currency)
+    return _payload(window, commodity, currency, month)
 
 
 @router.get("/nse-mcx")

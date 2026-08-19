@@ -8,12 +8,21 @@ the money, the ATM row, 10 puts below.
 """
 from fastapi import APIRouter, Query
 
-from app.services import crude_iv_service, ibkr_feed, premium_feed
+from app.services import (crude_iv_history, crude_iv_service, ibkr_feed,
+                          premium_feed)
 
 router = APIRouter(prefix="/api", tags=["crude-iv"])
 
 
-_US_KEY = {"crude": "crude_iv", "natgas": "natgas_iv"}
+# IBKR keeps the next month as its own chain, already subscribed - the Quote
+# Booster pack bought exactly that. Both months' option expiries line up with
+# MCX to the day (17-Sep and 15-Oct on crude), so the comparison stays clean in
+# either month.
+_US_KEY = {
+    ("crude", 0): "crude_iv", ("crude", 1): "crude_iv_next",
+    ("natgas", 0): "natgas_iv", ("natgas", 1): "natgas_iv_next",
+}
+COMMODITIES = ("crude", "natgas")
 
 
 def _to_inr(us: dict, rate: float | None) -> dict:
@@ -77,10 +86,12 @@ def _to_inr(us: dict, rate: float | None) -> dict:
     }
 
 
-def _payload(window: int, commodity: str = "crude", currency: str = "usd") -> dict:
-    commodity = commodity if commodity in _US_KEY else "crude"
+def _payload(window: int, commodity: str = "crude", currency: str = "usd",
+             month: int = 0) -> dict:
+    commodity = commodity if commodity in COMMODITIES else "crude"
+    month = 1 if month == 1 else 0
     ib = ibkr_feed.get_data()
-    us = ib.get(_US_KEY[commodity]) or {}
+    us = ib.get(_US_KEY[(commodity, month)]) or {}
     if window != 10 and us.get("rows"):
         atm = us.get("atm")
         us = {**us, "rows": [r for r in us["rows"] if abs(r["strike"] - atm) <= window * 0.5]} if atm else us
@@ -93,8 +104,9 @@ def _payload(window: int, commodity: str = "crude", currency: str = "usd") -> di
         us = _to_inr(us, pf.get("usdinr"))
     return {
         "commodity": commodity,
+        "month": month,
         "currency": "INR" if currency == "inr" else "USD",
-        "mcx": crude_iv_service.get_chain(commodity=commodity, window=window),
+        "mcx": crude_iv_service.get_chain(commodity=commodity, window=window, month=month),
         "us": us,
         # client wants the rate on this screen too - MCX quotes in rupees and
         # the US chain in dollars, so it is the number he converts with
@@ -110,5 +122,28 @@ def crude_iv(
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM"),
     currency: str = Query("usd", pattern="^(usd|inr)$",
                           description="inr restates the US chain in rupees at the USD/INR future"),
+    month: int = Query(0, ge=0, le=1, description="0 = front expiry, 1 = the one after"),
 ):
-    return _payload(window, commodity, currency)
+    return _payload(window, commodity, currency, month)
+
+
+@router.get("/crude-iv/history")
+def crude_iv_history_view(
+    commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+    month: int = Query(0, ge=0, le=1, description="0 = front expiry, 1 = the one after"),
+    slot: str = Query("all", description="all, or one of 09:00 .. 23:30"),
+    days: int = Query(3, ge=1, le=30),
+    date: str | None = Query(None, description="YYYY-MM-DD => that day only"),
+):
+    """Stored MCX-vs-US boards, newest first - every half hour, 09:00 to 23:30 IST.
+
+    Rows are flat lists, not dicts; `cols_mcx` and `cols_us` name the columns in
+    order. Keeping the live shape would have cost 433 MB a year to store symbols
+    and volumes nobody reads back.
+
+    Static once written - fetch on a control change, do not poll. A slot is
+    missing when one exchange was not quoting two-way at the time, which is the
+    honest record of a thin half hour.
+    """
+    return crude_iv_history.get_history(commodity=commodity, month=month,
+                                        slot=slot, days=days, date=date)

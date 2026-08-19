@@ -16,7 +16,9 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import activity, dhan_feed, extra_instruments, mcxccl_service, nse_mcx_history, options_history_service, span_service
+from app.services import (activity, crude_iv_history, dhan_feed, extra_instruments,
+                          mcxccl_service, nse_mcx_history, options_history_service,
+                          span_service)
 
 log = logging.getLogger("maintenance")
 
@@ -128,6 +130,7 @@ def _loop() -> None:
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
+    last_civsnap: dict[str, str | None] = {s: None for s in crude_iv_history.SLOTS}
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -148,10 +151,11 @@ def _loop() -> None:
                 act_pruned = _prune_activity()
                 snap_pruned = options_history_service.prune()
                 nm_pruned = nse_mcx_history.prune()
+                civ_pruned = crude_iv_history.prune()
                 log.info(
                     "Nightly prune: %d history rows, %d activity rows, %d option snapshots, "
-                    "%d NSE/MCX snapshots.",
-                    pruned, act_pruned, snap_pruned, nm_pruned,
+                    "%d NSE/MCX snapshots, %d crude IV snapshots.",
+                    pruned, act_pruned, snap_pruned, nm_pruned, civ_pruned,
                 )
                 if pruned > 0:
                     _vacuum()
@@ -199,6 +203,32 @@ def _loop() -> None:
                     except Exception as e:
                         log.warning("NSE/MCX snapshot %s raised: %s", _slot, e)
                         last_nmsnap[_slot] = today_str
+
+            # MCX-vs-US option board, every half hour 09:00-23:30 IST, both
+            # commodities and both expiry months (client, 19-Aug). US crude
+            # trades nearly round the clock and its one daily break falls
+            # outside MCX hours, so the overlap is simply MCX's session - but
+            # the service still tests the DATA rather than the clock and skips a
+            # slot where either side has stopped quoting two-way.
+            for _slot in crude_iv_history.SLOTS:
+                _h, _m = crude_iv_history.SLOTS[_slot]
+                if last_civsnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
+                    try:
+                        res = crude_iv_history.snapshot_all(_slot)
+                        stored = sum(1 for v in res.values() if v == "snapped")
+                        if stored or any(v.startswith("outside") for v in res.values()):
+                            log.info("crude IV snapshot %s: %s", _slot, res)
+                        # Retry next minute while failures are transient - a
+                        # restart inside the window leaves the feeds cold for a
+                        # few seconds and burning the slot would lose the half
+                        # hour. "outside capture window" is the service's own
+                        # final answer and retires it.
+                        if not any(v == "busy" or v.startswith("one side")
+                                   for v in res.values()):
+                            last_civsnap[_slot] = today_str
+                    except Exception as e:                    # noqa: BLE001
+                        log.warning("crude IV snapshot %s raised: %s", _slot, e)
+                        last_civsnap[_slot] = today_str
 
             # Daily contract roll, 08:40 IST - after the SPAN refresh and twenty
             # minutes before MCX opens, so the gap falls where nobody is

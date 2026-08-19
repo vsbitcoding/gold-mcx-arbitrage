@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, LargeBinary, String, Boolean, Text
+from sqlalchemy import (Boolean, Column, DateTime, Float, Integer, LargeBinary,
+                        String, Text, UniqueConstraint)
 
 from app.database import Base
 
@@ -280,6 +281,49 @@ class OptionsSnapshot(Base):
     nifty_atm = Column(Integer, nullable=True)
     sensex_atm = Column(Integer, nullable=True)
     payload_json = Column(Text, nullable=False)                  # {"captured_at", "below": {...}, "above": {...}}
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CrudeIvSnapshot(Base):
+    """Half-hourly snapshot of the MCX-vs-US option comparison (client, 19-Aug).
+
+    One row per (snap_date, slot, commodity, month): 30 slots from 09:00 to 23:30
+    IST, two commodities, two expiry months, so 120 rows on a full trading day.
+
+    `payload_json` is COMPACT, not the live board. The board serialises to 14.8
+    KB and would come to 433 MB a year, against a standing "no DB load"
+    constraint; every column the table actually shows - strike, bid, ask, IV,
+    delta, and OI on the MCX side - packs into 3 KB and 89 MB, in line with the
+    NSE-vs-MCX history already running at 65 MB. What is dropped is symbols,
+    volumes and greeks nobody reads back.
+
+    Written only when BOTH exchanges are live and quoting two-way. The client
+    asked for "only while both markets are open"; US crude in fact trades nearly
+    around the clock and its one daily break falls outside MCX hours, so the
+    honest test is the data rather than a clock, and a thin hour simply stores
+    nothing instead of storing something misleading.
+    """
+    __tablename__ = "crude_iv_snapshot"
+    __table_args__ = (
+        UniqueConstraint("snap_date", "slot", "commodity", "month",
+                         name="uq_crude_iv_snap"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    snap_date = Column(String(10), nullable=False, index=True)   # 'YYYY-MM-DD' IST
+    slot = Column(String(5), nullable=False, index=True)         # '09:00' .. '23:30'
+    commodity = Column(String(10), nullable=False, index=True)   # 'crude' | 'natgas'
+    month = Column(Integer, nullable=False, default=0)           # 0 front, 1 next
+    weekday = Column(Integer, nullable=False, index=True)        # 0=Mon .. 6=Sun
+    # Headline numbers, denormalised so a chart never has to open the payload.
+    mcx_forward = Column(Float, nullable=True)
+    mcx_future = Column(Float, nullable=True)
+    us_future = Column(Float, nullable=True)
+    usdinr = Column(Float, nullable=True)
+    mcx_atm_iv = Column(Float, nullable=True)
+    us_atm_iv = Column(Float, nullable=True)
+    iv_diff = Column(Float, nullable=True)                       # MCX − US, points
+    payload_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
