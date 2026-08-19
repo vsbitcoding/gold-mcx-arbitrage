@@ -53,7 +53,9 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
                 return legs.map(([side, leg], i) => (
                   <tr key={`${r.strike}-${side}`}
                     className={`${r.atm ? "cru-atm" : ""} ${side === "CE" ? "cru-ce" : "cru-pe"}`}>
-                    <td className="cru-side"><span className={`cru-tag ${side.toLowerCase()}`}>{side}</span></td>
+                    <td className="cru-side">
+                      <span className={`cru-tag ${String(side || "").toLowerCase()}`}>{side}</span>
+                    </td>
                     {i === 0 ? (
                       <td className="cru-strike" rowSpan={legs.length}>
                         {num(r.strike, strikeDecimals)}
@@ -108,12 +110,20 @@ function unpack(chain, cols) {
     const i = cols.indexOf(name);
     return i < 0 ? null : row[i];
   };
+  // `side` is not stored - it is derivable, and repeating "CE"/"PE" on every
+  // strike of every board would be bytes for nothing. Rebuild it by the same
+  // rule get_chain uses: calls above the money, puts below, both on the ATM.
+  // Leaving it out is what crashed the History view on its first day: <Chain>
+  // switches on it and called .toLowerCase() on undefined.
+  const atmStrike = (chain.rows.find((r) => at(r, "atm")) || [])[cols.indexOf("strike")];
   return {
     ...chain,
     future_price: chain.future,
     rows: chain.rows.map((row) => ({
       strike: at(row, "strike"),
       atm: !!at(row, "atm"),
+      side: at(row, "atm") ? "ATM"
+        : (atmStrike != null && at(row, "strike") > atmStrike ? "CE" : "PE"),
       ce: { bid: at(row, "ce_bid"), ask: at(row, "ce_ask"), iv: at(row, "ce_iv"),
             delta: at(row, "ce_delta"), oi: at(row, "ce_oi") },
       pe: { bid: at(row, "pe_bid"), ask: at(row, "pe_ask"), iv: at(row, "pe_iv"),
@@ -217,8 +227,7 @@ export default function CrudeOil({ currency = "usd" }) {
 
   useEffect(() => {
     try { localStorage.setItem(`arbi_crude_product_${currency}`, product); } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product, currency, month]);
+  }, [product, currency]);
 
   useEffect(() => {
     try {
@@ -240,9 +249,13 @@ export default function CrudeOil({ currency = "usd" }) {
     return () => { alive = false; };
   }, [view, product, month]);
 
+  // Only a COMMODITY change clears the board. Switching month keeps the old one
+  // on screen while the new one arrives, so the layout holds still and only the
+  // numbers move - blanking it made the whole page flash on every click.
+  useEffect(() => { setD(null); }, [product]);
+
   useEffect(() => {
     let alive = true;
-    setD(null);
     async function load() {
       if (document.hidden) return;
       try {
@@ -253,7 +266,9 @@ export default function CrudeOil({ currency = "usd" }) {
     load();
     timer.current = setInterval(load, 3000);
     return () => { alive = false; clearInterval(timer.current); };
-  }, [product, currency]);
+    // `month` belongs here. Leaving it out is why Aug and Sep showed the same
+    // board: the state changed, the fetch did not.
+  }, [product, currency, month]);
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
 
