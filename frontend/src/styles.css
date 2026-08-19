@@ -5574,3 +5574,26 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   display: block; font-style: normal; font-size: 10.5px; font-weight: 700;
   color: var(--text-secondary); margin-top: 2px; cursor: help;
 }
+
+/* -------------------------------------------- crude/gas month + history ---- */
+.cru-switches { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Stored boards stack, newest first, each rendered by the same component the
+   live view uses - a half hour from last week has to read exactly like now. */
+.cru-hist { display: grid; gap: 14px; }
+.cru-hist-board {
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-surface); overflow: hidden;
+}
+.cru-hist-head {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.cru-hist-head b { font-size: 13px; font-weight: 800; }
+.cru-hist-head .oh-board-slot { font-weight: 700; }
+.cru-hist-head em, .cru-hist-head u {
+  font-style: normal; text-decoration: none; color: var(--text-secondary);
+}
+.cru-hist-head u { margin-left: auto; font-size: 11px; }
+.cru-hist-head i { font-style: normal; font-weight: 800; }

@@ -153,8 +153,16 @@ export const api = {
   // currency "inr" restates the US chain in rupees at the USD/INR future. The IV
   // is identical either way - scaling forward, strike and price by one number
   // cannot change it - so this buys comparable premiums, not a different vol.
-  crudeIv: (commodity = "crude", currency = "usd") =>
-    request(`/api/crude-iv?commodity=${encodeURIComponent(commodity)}&currency=${currency}`),
+  crudeIv: (commodity = "crude", currency = "usd", month = 0) =>
+    request(`/api/crude-iv?commodity=${encodeURIComponent(commodity)}`
+            + `&currency=${currency}&month=${month}`),
+  // Half-hourly stored boards. Static once written - fetch on a control change,
+  // never poll.
+  crudeIvHistory: ({ commodity = "crude", month = 0, slot = "all", days = 3, date } = {}) => {
+    const q = new URLSearchParams({ commodity, month, slot, days });
+    if (date) q.set("date", date);
+    return request(`/api/crude-iv/history?${q.toString()}`);
+  },
   // Option calculator, both directions: pass `market` to solve for IV, `vol` to
   // price forwards. Underlying must be the future of the option's OWN month.
   ivCalculator: (p = {}) => {

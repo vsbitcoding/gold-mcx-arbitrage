@@ -85,6 +85,110 @@ const PRODUCTS = [
 // restated in rupees at the USD/INR future, so both panels read in one currency
 // and the premiums can be compared line for line instead of in your head.
 // The IV is identical either way and deliberately so.
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Named by the expiry actually loaded. "Next" tells you nothing when the front
+// option month is already two months out, which it is on crude.
+function monthLabel(d, which) {
+  const exp = d?.mcx?.expiry;
+  if (!exp) return which === 0 ? "This month" : "Next month";
+  const m = Number(String(exp).split("-")[1]) - 1;
+  const shown = d?.month ?? 0;
+  const i = ((m + (which - shown)) % 12 + 12) % 12;
+  return MONTH_NAMES[i] || (which === 0 ? "This month" : "Next month");
+}
+
+// Stored boards are flat lists with a cols_ header - the shape that took a
+// year of this history from 433 MB to 89 MB. Unpack back into the live shape so
+// one <Chain> renders both.
+function unpack(chain, cols) {
+  if (!chain?.rows) return { rows: [] };
+  const at = (row, name) => {
+    const i = cols.indexOf(name);
+    return i < 0 ? null : row[i];
+  };
+  return {
+    ...chain,
+    future_price: chain.future,
+    rows: chain.rows.map((row) => ({
+      strike: at(row, "strike"),
+      atm: !!at(row, "atm"),
+      ce: { bid: at(row, "ce_bid"), ask: at(row, "ce_ask"), iv: at(row, "ce_iv"),
+            delta: at(row, "ce_delta"), oi: at(row, "ce_oi") },
+      pe: { bid: at(row, "pe_bid"), ask: at(row, "pe_ask"), iv: at(row, "pe_iv"),
+            delta: at(row, "pe_delta"), oi: at(row, "pe_oi") },
+    })),
+  };
+}
+
+const hhmm = (s) => {
+  const [h, m] = String(s || "").split(":");
+  const hh = Number(h);
+  if (!Number.isFinite(hh)) return s;
+  const ap = hh < 12 ? "AM" : "PM";
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${h12}:${m} ${ap}`;
+};
+const dmy = (iso) => {
+  const [y, m, d] = String(iso || "").split("-");
+  return d ? `${d}/${m}` : iso;
+};
+
+// Every stored board, newest first, each one rendered by the same <Chain> the
+// live view uses - so a half hour from last week reads exactly like now.
+function HistoryBoards({ h, loading, cfg, inr, mcxDec }) {
+  if (loading && !h) return <div className="empty-state">Loading history…</div>;
+  const snaps = h?.snapshots || [];
+  if (!snaps.length) {
+    return (
+      <div className="nmg-empty">
+        <b>Nothing stored yet</b>
+        <span>
+          A board is saved every half hour from 9:00 AM to 11:30 PM, and only
+          while both exchanges are quoting two-way. Nothing before the first
+          capture exists, and no exchange sells it back.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="cru-hist">
+      {snaps.map((s) => {
+        const m = unpack(s.board?.mcx, s.board?.cols_mcx || []);
+        const u = unpack(s.board?.us, s.board?.cols_us || []);
+        return (
+          <section className="cru-hist-board" key={`${s.snap_date}-${s.slot}`}>
+            <div className="cru-hist-head">
+              <b>{dmy(s.snap_date)}</b>
+              <span className="oh-board-dot">•</span>
+              <span className="oh-board-slot">{hhmm(s.slot)}</span>
+              <em>
+                MCX {s.mcx_atm_iv == null ? "—" : `${fmtNum(s.mcx_atm_iv, 2)}%`}
+                {" · "}US {s.us_atm_iv == null ? "—" : `${fmtNum(s.us_atm_iv, 2)}%`}
+              </em>
+              {s.iv_diff != null && (
+                <i className={s.iv_diff >= 0 ? "nmg-pos" : "nmg-neg"}>
+                  {(s.iv_diff >= 0 ? "+" : "−") + fmtNum(Math.abs(s.iv_diff), 2)}%
+                </i>
+              )}
+              <u>forward {num(s.mcx_forward, 1)} · US {num(s.us_future, 2)}</u>
+            </div>
+            <div className="cru-split">
+              <Chain title={cfg.label.toUpperCase()} sub={`MCX · ${m.expiry || ""}`}
+                data={m} priceDecimals={mcxDec ?? cfg.mcxDec} strikeDecimals={0} showOi />
+              <Chain title={inr ? `${cfg.usTitle} in ₹` : cfg.usTitle}
+                sub={`${u.symbol || ""} · ${u.expiry || ""}`}
+                data={u} priceDecimals={inr ? (mcxDec ?? cfg.mcxDec) : cfg.usDec}
+                strikeDecimals={inr ? 0 : cfg.usDec} />
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CrudeOil({ currency = "usd" }) {
   const inr = currency === "inr";
   const [product, setProduct] = useState(() => {
@@ -94,13 +198,47 @@ export default function CrudeOil({ currency = "usd" }) {
       return PRODUCTS.some((x) => x.key === p) ? p : "crude";
     } catch { return "crude"; }
   });
+  // The month and the view both survive a refresh, per tab. The client landed
+  // back on Live every time otherwise, which is the complaint that got the same
+  // thing fixed on the NSE vs MCX screen.
+  const [month, setMonth] = useState(() => {
+    try { return localStorage.getItem(`arbi_crude_month_${currency}`) === "1" ? 1 : 0; }
+    catch { return 0; }
+  });
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem(`arbi_crude_view_${currency}`) === "history" ? "history" : "live"; }
+    catch { return "live"; }
+  });
   const [d, setD] = useState(null);
+  const [hist, setHist] = useState(null);
+  const [loadingHist, setLoadingHist] = useState(false);
   const [err, setErr] = useState(null);
   const timer = useRef(null);
 
   useEffect(() => {
     try { localStorage.setItem(`arbi_crude_product_${currency}`, product); } catch {}
-  }, [product, currency]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product, currency, month]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`arbi_crude_month_${currency}`, String(month));
+      localStorage.setItem(`arbi_crude_view_${currency}`, view);
+    } catch {}
+  }, [month, view, currency]);
+
+  // History rows never change once written, so this fetches on a control change
+  // and never polls. 3 days is 90 boards, which is a lot to scroll already.
+  useEffect(() => {
+    if (view !== "history") return undefined;
+    let alive = true;
+    setLoadingHist(true);
+    api.crudeIvHistory({ commodity: product, month, days: 3 })
+      .then((r) => { if (alive) setHist(r); })
+      .catch((e) => { if (alive) setErr(e.message); })
+      .finally(() => { if (alive) setLoadingHist(false); });
+    return () => { alive = false; };
+  }, [view, product, month]);
 
   useEffect(() => {
     let alive = true;
@@ -108,7 +246,7 @@ export default function CrudeOil({ currency = "usd" }) {
     async function load() {
       if (document.hidden) return;
       try {
-        const r = await api.crudeIv(product, currency);
+        const r = await api.crudeIv(product, currency, month);
         if (alive) { setD(r); setErr(null); }
       } catch (e) { if (alive) setErr(e.message); }
     }
@@ -120,12 +258,30 @@ export default function CrudeOil({ currency = "usd" }) {
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
 
   const switcher = (
-    <div className="oh-group cru-switch" role="tablist" aria-label="Commodity">
-      {PRODUCTS.map((p) => (
-        <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
-          className={`oh-chip ${product === p.key ? "on" : ""}`}
-          onClick={() => setProduct(p.key)}>{p.label}</button>
-      ))}
+    <div className="cru-switches">
+      <div className="oh-group cru-switch" role="tablist" aria-label="Commodity">
+        {PRODUCTS.map((p) => (
+          <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
+            className={`oh-chip ${product === p.key ? "on" : ""}`}
+            onClick={() => setProduct(p.key)}>{p.label}</button>
+        ))}
+      </div>
+      {/* Named by the expiry actually loaded rather than "next" - both months
+          land on the same date on MCX and NYMEX, so one label serves both. */}
+      <div className="oh-group cru-switch" role="tablist" aria-label="Month">
+        {[0, 1].map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={month === k}
+            className={`oh-chip ${month === k ? "on" : ""}`}
+            onClick={() => setMonth(k)}>{monthLabel(d, k)}</button>
+        ))}
+      </div>
+      <div className="oh-group cru-switch" role="tablist" aria-label="View">
+        {[["live", "Live"], ["history", "History"]].map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k}
+            className={`oh-chip ${view === k ? "on" : ""}`}
+            onClick={() => setView(k)}>{l}</button>
+        ))}
+      </div>
     </div>
   );
 
@@ -214,6 +370,9 @@ export default function CrudeOil({ currency = "usd" }) {
         </div>
       </div>
 
+      {view === "history" ? (
+        <HistoryBoards h={hist} loading={loadingHist} cfg={cfg} inr={inr} mcxDec={mcx.decimals} />
+      ) : (
       <div className="cru-split">
         <Chain
           title={mcx.label || "MCX"}
@@ -233,6 +392,7 @@ export default function CrudeOil({ currency = "usd" }) {
           strikeDecimals={inr ? 0 : cfg.usDec}
         />
       </div>
+      )}
 
       <div className="cru-foot">
         MCX refreshes every ~5 s (exchange API limit is one call per 3 s); the US side is live.

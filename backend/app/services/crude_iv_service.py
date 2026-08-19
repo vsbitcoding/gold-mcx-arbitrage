@@ -308,6 +308,14 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
             raise RuntimeError("no expiries returned")
         st["expiries"] = exps
         st["expiry"] = exps[0]
+        # Keep the NEXT expiry warm without waiting to be asked. Alternate chains
+        # are fetched only while something wants one, and the half-hourly history
+        # capture is not a viewer - after a restart its first month-1 slot found
+        # an empty chain and skipped, and only recovered because a request
+        # happened to warm it inside the retry window (19-Aug). The screen offers
+        # both months now, so the second chain is wanted permanently.
+        if len(exps) > 1 and exps[1] not in st["want"]:
+            st["want"].append(exps[1])
         time.sleep(_GAP_SECONDS)            # respect the one-call-per-3s rule
 
     r = sess.post(f"{_BASE}/optionchain", headers=_headers(tok),
