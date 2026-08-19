@@ -5283,13 +5283,24 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    toward the strike, put figures left-align toward it, so each pair reads
    inward instead of drifting to the far edges. */
 .nm-table { table-layout: fixed; width: 100%; }
-.nm-table td:nth-child(n+5), .nm-table th:nth-child(n+5) { text-align: left; }
+/* The two halves read outward from the strike, so the put side is left-aligned.
+   This used to key off nth-child(n+5), which was the put side only while the
+   table had seven columns - adding the IV columns made column 5 the call-side
+   difference and would have flipped the wrong cells. A class survives the
+   column count. */
+.nm-table td.nm-put, .nm-table th.nm-put { text-align: left; }
 .nm-table td.cru-strike, .nm-table th.cru-strike { text-align: center; }
-.nm-table th, .nm-table td { padding: 6px 22px; }
+/* 22px of side padding was comfortable at seven columns and impossible at
+   eleven. The Crude/Gas table, which this now matches, has always used 10. */
+.nm-table th, .nm-table td { padding: 6px 10px; }
 .nm-table tbody tr:nth-child(even) td { background: rgba(127,127,127,.035); }
-.nm-table col.nm-c-px { width: 15%; }
-.nm-table col.nm-c-diff { width: 12.5%; }
-.nm-table col.nm-c-strike { width: 15%; }
+/* Eleven columns with IV on, seven with it off; the table is `fixed`, so the
+   widths have to be declared and they have to add up. IV is a short number and
+   gets the least. */
+.nm-table col.nm-c-px { width: 12%; }
+.nm-table col.nm-c-iv { width: 7%; }
+.nm-table col.nm-c-diff { width: 8%; }
+.nm-table col.nm-c-strike { width: 8%; }
 /* group the call block, the strike and the put block visually */
 .nm-table td:nth-child(3), .nm-table th:nth-child(3) { border-right: 1px solid var(--border); }
 .nm-table td:nth-child(4), .nm-table th:nth-child(4) { border-right: 1px solid var(--border); }
@@ -5478,7 +5489,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   font-variant-numeric: tabular-nums; text-decoration: none;
   color: var(--series-2); letter-spacing: .01em;
 }
-.nm-dead .nm-iv { color: var(--text-muted, var(--text-secondary)); }
+/* Its own column now, matching the Crude/Gas screen the client pointed at. */
+.nm-ivcell {
+  font-weight: 700; font-variant-numeric: tabular-nums; color: var(--series-2);
+  white-space: nowrap;
+}
+.nm-ivhead { font-size: 10.5px; letter-spacing: .06em; }
 .nm-ivchip { font-weight: 800; letter-spacing: .05em; }
 
 /* Shows its own workings. A vendor's IV was wrong for weeks because nothing on

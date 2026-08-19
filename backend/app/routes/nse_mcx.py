@@ -118,9 +118,12 @@ def _forward(rows: list[dict], ex: str) -> tuple[float | None, int, float | None
 
 def _add_iv(leg: dict, strike: float, T: float | None, fwd: float | None,
             call: bool) -> None:
-    """IV off the bid and off the ask, in place. Two numbers, not one, because
-    the client chose it that way (18-Aug) - and on a thin NSE strike quoted
-    712.4/721.8 a single mid figure hides how wide the real answer is.
+    """One IV off the mid, plus the bid and ask ones, in place.
+
+    The screen shows the single mid figure - the client asked for two on 18-Aug,
+    saw them, and asked for one on 19-Aug. The pair stays in the payload for the
+    app API and for the tooltip, because it is free and it is the honest width
+    of the answer on a thin NSE strike quoted 712.4 / 721.8.
 
     BOTH sides must be quoted or neither IV is computed. This is the same rule
     the rest of the app applies to prices, and it matters more here because the
@@ -134,8 +137,10 @@ def _add_iv(leg: dict, strike: float, T: float | None, fwd: float | None,
     """
     bid, ask = leg.get("bid"), leg.get("ask")
     if not (T and fwd and strike and bid and ask):
-        leg["iv_bid"] = leg["iv_ask"] = None
+        leg["iv"] = leg["iv_bid"] = leg["iv_ask"] = None
         return
+    leg["iv"] = iv_calc.implied_vol(leg.get("mid") or (bid + ask) / 2,
+                                    fwd, strike, T, call)
     leg["iv_bid"] = iv_calc.implied_vol(bid, fwd, strike, T, call)
     leg["iv_ask"] = iv_calc.implied_vol(ask, fwd, strike, T, call)
 

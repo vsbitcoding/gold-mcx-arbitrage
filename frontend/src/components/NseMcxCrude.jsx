@@ -56,16 +56,17 @@ function quality(leg) {
   return { ok: true, wide: (leg.ask - leg.bid) / mid > WIDE_SPREAD, mid };
 }
 
-function DiffCell({ nse, mcx }) {
+function DiffCell({ nse, mcx, put }) {
   const qn = quality(nse), qm = quality(mcx);
   if (!qn.ok || !qm.ok) {
-    return <td className="nm-diff nm-dead" title="one side has no two-way quote, so no honest comparison">—</td>;
+    return <td className={`nm-diff nm-dead ${put ? "nm-put" : ""}`}
+      title="one side has no two-way quote, so no honest comparison">—</td>;
   }
   const r = Math.round((qn.mid - qm.mid) * 100) / 100;
   const p = qm.mid ? (r / qm.mid) * 100 : null;
   const shaky = qn.wide || qm.wide;
   return (
-    <td className={`nm-diff ${r >= 0 ? "pos" : "neg"} ${shaky ? "nm-shaky" : ""}`}
+    <td className={`nm-diff ${r >= 0 ? "pos" : "neg"} ${shaky ? "nm-shaky" : ""} ${put ? "nm-put" : ""}`}
         title={shaky ? "One side is quoted very wide, so treat this difference with caution." : ""}>
       <span className="nm-diff-rs">{signed(r)}{shaky && " ?"}</span>
       <em>{pct(p)}</em>
@@ -73,36 +74,41 @@ function DiffCell({ nse, mcx }) {
   );
 }
 
-// The IV pair goes in the same cell as the prices it came from, on its own
-// line, rather than in four more columns. The client asked for the bid IV and
-// the ask IV separately (18-Aug) and this is the only layout where both sit
-// beside the two prices that produced them - a lone mid IV would hide that on a
-// leg quoted 712.4 / 721.8 the honest answer is a range.
-function IvLine({ leg }) {
+// ONE implied volatility per leg, off the mid, in its own column - the same
+// shape as the Crude/Gas screen, which is what the client pointed at.
+//
+// He asked for a bid/ask pair on 18-Aug, saw it, and asked for a single figure
+// the next day. The pair is still in the payload and sits in the hover, which is
+// where the width of the answer belongs on a thin NSE strike quoted
+// 712.4 / 721.8: there when wanted, out of the way when not.
+function IvCell({ leg, put }) {
+  const v = leg?.iv;
   const b = leg?.iv_bid, a = leg?.iv_ask;
-  if (b == null && a == null) return null;
   return (
-    <u className="nm-iv" title="implied volatility off the bid and off the ask">
-      {b == null ? "—" : num(b, 1)} / {a == null ? "—" : num(a, 1)}
-    </u>
+    <td className={`nm-ivcell ${put ? "nm-put" : ""}`}
+      title={v != null && b != null && a != null
+        ? `${num(v, 2)}% at the mid · ${num(b, 2)}% at the bid · ${num(a, 2)}% at the ask`
+        : ""}>
+      {v == null ? "—" : `${num(v, 1)}%`}
+    </td>
   );
 }
 
-function Leg({ leg, iv }) {
+function Leg({ leg, put }) {
   const q = quality(leg);
   if (!q.ok) {
     return (
-      <td className="nm-dead" title="no two-way quote - nothing tradeable here">
+      <td className={`nm-dead ${put ? "nm-put" : ""}`}
+        title="no two-way quote - nothing tradeable here">
         —{leg?.bid != null || leg?.ask != null
           ? <em className="nm-oneside">{num(leg.bid)} / {num(leg.ask)}</em> : null}
       </td>
     );
   }
   return (
-    <td className={`nm-px ${q.wide ? "nm-shaky" : ""}`}>
+    <td className={`nm-px ${q.wide ? "nm-shaky" : ""} ${put ? "nm-put" : ""}`}>
       <span className="nm-mid">{num(q.mid)}</span>
       <em>{num(leg.bid)} / {num(leg.ask)}</em>
-      {iv && <IvLine leg={leg} />}
     </td>
   );
 }
@@ -186,21 +192,27 @@ function ChainTable({ o, cfg, iv }) {
     <div className="cru-table-wrap">
       <table className="cru-table nm-table">
         <colgroup>
-          <col className="nm-c-px" /><col className="nm-c-px" /><col className="nm-c-diff" />
+          <col className="nm-c-px" />{iv && <col className="nm-c-iv" />}
+          <col className="nm-c-px" />{iv && <col className="nm-c-iv" />}
+          <col className="nm-c-diff" />
           <col className="nm-c-strike" />
-          <col className="nm-c-diff" /><col className="nm-c-px" /><col className="nm-c-px" />
+          <col className="nm-c-diff" />
+          {iv && <col className="nm-c-iv" />}<col className="nm-c-px" />
+          {iv && <col className="nm-c-iv" />}<col className="nm-c-px" />
         </colgroup>
         <thead>
           <tr>
-            <th colSpan={3} className="intl-call">CALL</th>
+            <th colSpan={iv ? 5 : 3} className="intl-call">CALL</th>
             <th className="cru-strike">STRIKE</th>
-            <th colSpan={3} className="intl-put">PUT</th>
+            <th colSpan={iv ? 5 : 3} className="intl-put nm-put">PUT</th>
           </tr>
           <tr className="intl-chain-sub">
             {/* the expiry sits on the column it belongs to, so the header row
                 above the table could go and more strikes fit on screen */}
-            <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}{iv ? " · IV" : ""}</em></th>
-            <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}{iv ? " · IV" : ""}</em></th>
+            <th className="intl-call">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
+            {iv && <th className="intl-call nm-ivhead">IV</th>}
+            <th className="intl-call">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+            {iv && <th className="intl-call nm-ivhead">IV</th>}
             <th className="intl-call" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
               Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
             </th>
@@ -208,23 +220,30 @@ function ChainTable({ o, cfg, iv }) {
             <th className="intl-put" title={o.same_expiry ? "" : "Expiries differ, so part of each difference is time value, not a market gap."}>
               Diff{!o.same_expiry && <em className="nm-tv">incl. time value</em>}
             </th>
-            <th className="intl-put">MCX<em>{fmtDate(o.mcx_expiry)}{iv ? " · IV" : ""}</em></th>
-            <th className="intl-put">NSE<em>{fmtDate(o.nse_expiry)}{iv ? " · IV" : ""}</em></th>
+            {/* mirrored, so each IV still sits beside the exchange it belongs to */}
+            {iv && <th className="intl-put nm-ivhead nm-put">IV</th>}
+            <th className="intl-put nm-put">MCX<em>{fmtDate(o.mcx_expiry)}</em></th>
+            {iv && <th className="intl-put nm-ivhead nm-put">IV</th>}
+            <th className="intl-put nm-put">NSE<em>{fmtDate(o.nse_expiry)}</em></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.strike} className={r.atm ? "cru-atm" : ""}>
-              <Leg leg={r.ce?.nse} iv={iv} />
-              <Leg leg={r.ce?.mcx} iv={iv} />
+              <Leg leg={r.ce?.nse} />
+              {iv && <IvCell leg={r.ce?.nse} />}
+              <Leg leg={r.ce?.mcx} />
+              {iv && <IvCell leg={r.ce?.mcx} />}
               <DiffCell nse={r.ce?.nse} mcx={r.ce?.mcx} />
               <td className="cru-strike">
                 {num(r.strike, cfg.strikeDec)}
                 {r.atm && <span className="atm-badge">ATM</span>}
               </td>
-              <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} />
-              <Leg leg={r.pe?.mcx} iv={iv} />
-              <Leg leg={r.pe?.nse} iv={iv} />
+              <DiffCell nse={r.pe?.nse} mcx={r.pe?.mcx} put />
+              {iv && <IvCell leg={r.pe?.mcx} put />}
+              <Leg leg={r.pe?.mcx} put />
+              {iv && <IvCell leg={r.pe?.nse} put />}
+              <Leg leg={r.pe?.nse} put />
             </tr>
           ))}
         </tbody>
