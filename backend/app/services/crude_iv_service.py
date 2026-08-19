@@ -22,11 +22,12 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import requests
 
 from app.config import settings
+from app.services import iv_calc
 from app.services import dhan_auth
 from app.services.instrument_resolver import _download_csv, _parse_expiry
 
@@ -65,6 +66,9 @@ def _blank() -> dict:
             # keyed by expiry and refreshed one per round - the far months are
             # thin and barely move, and a chain call every 5 s is the budget.
             "want": [], "chains": {}, "want_turn": 0,
+            # What our own IV was computed from, so a wrong number is traceable
+            # instead of mysterious - which is exactly how the vendor's survived.
+            "forward": None, "fwd_strikes": 0, "fwd_spread": None,
             "ts": 0.0, "ok": False, "error": None}
 
 
@@ -177,6 +181,97 @@ def _chain_rows(payload: dict) -> tuple[list, float | None]:
     return rows, data.get("last_price")
 
 
+def _reprice(rows: list, expiry: str,
+             fallback: float | None = None) -> tuple[float | None, int, float | None]:
+    """Replace the vendor's IV and greeks with our own, in place.
+
+    Dhan's figure is wrong and the number says so on its own: at crude 8200 it
+    reported CE 47.02% and PE 50.96% - a 3.9 point gap at ONE strike, which
+    put-call parity forbids. Its maths is fine; it is pricing a September option
+    off the August future, which is 60 rupees away.
+
+    We do not use the future either. The forward comes from the chain's own
+    prices, a median of strike + call - put over every strike quoting two-way on
+    both wings - self-calibrating, so the call and the put then agree by
+    construction. That is what "correct" looks like here and it is checkable on
+    screen: our recomputed 8200 returns 49.17% for BOTH legs.
+
+    Validated against IBKR, which resolves the right month and is therefore the
+    control: on the US 84.5 strike IBKR published 45.81% for both legs and this
+    engine returns 45.83 and 45.88. Agreeing with the vendor that is right, while
+    disagreeing with the one that is wrong, is the whole argument.
+
+    MCX quotes only the OTM wing - below the money there are puts and no calls,
+    above it calls and no puts - so parity usually finds just the ATM strike,
+    where both are quoted. That is not a weakness: the ATM is the tightest,
+    most-traded strike on the board and its synthetic forward is the one market
+    makers use. Checked against three independent readings at one moment, the
+    single-pair forward came to 8142.9 against 8144.85 from the socket's 21
+    pairs, 8143.0 from the September future itself, and 8142.35 from NSE's own
+    chain - inside 2.5 rupees, while the front future printed on screen said
+    8204.0.
+
+    `fallback` (the next-month future) covers the case where not even the ATM is
+    two-way, so a thin morning cannot leave the whole chain without IV.
+
+    Returns (forward, strikes that voted, how far apart the votes were).
+    """
+    try:
+        days = (date.fromisoformat(str(expiry)[:10].replace("/", "-")) - date.today()).days
+    except (ValueError, TypeError):
+        return None, 0, None
+    if days <= 0:
+        return None, 0, None
+    T = days / iv_calc.DAYS_YEAR
+
+    def mid(leg):
+        if not leg:
+            return None
+        b, a = leg.get("bid"), leg.get("ask")
+        return round((b + a) / 2, 4) if (b and a) else None
+
+    pairs, votes = [], []
+    for r in rows:
+        c, pu = mid(r.get("ce")), mid(r.get("pe"))
+        if c and pu:
+            pairs.append((r["strike"], c, pu))
+            votes.append(r["strike"] + c - pu)
+    fwd = iv_calc.forward_from_parity(pairs) or fallback
+    if not fwd:
+        return None, 0, None
+
+    for r in rows:
+        for side, call in (("ce", True), ("pe", False)):
+            leg = r.get(side)
+            if not leg:
+                continue
+            # Keep what the vendor said, so the two can be compared rather than
+            # the disagreement being hidden by overwriting it.
+            leg["iv_vendor"] = leg.get("iv")
+            b, a = leg.get("bid"), leg.get("ask")
+            px = mid(leg)
+            # A one-sided quote gets nothing. Learned the hard way on the NSE
+            # board: a lone 2,950 ask solved to 329.97% and lone 0.8 bids to
+            # 15-20% beside a 52% smile. `wide` cannot catch those - measuring a
+            # spread needs two sides.
+            if not (b and a and px):
+                leg["iv"] = None
+                leg.update({"delta": None, "theta": None, "gamma": None, "vega": None})
+                leg["iv_bid"] = leg["iv_ask"] = None
+                continue
+            leg["iv"] = iv_calc.implied_vol(px, fwd, r["strike"], T, call)
+            leg["iv_bid"] = iv_calc.implied_vol(b, fwd, r["strike"], T, call)
+            leg["iv_ask"] = iv_calc.implied_vol(a, fwd, r["strike"], T, call)
+            if leg["iv"]:
+                # Greeks off OUR volatility. Dhan's were computed against the
+                # same wrong underlying, so delta and theta were off with the IV.
+                leg.update(iv_calc.greeks(fwd, r["strike"], T, leg["iv"] / 100.0,
+                                          call))
+            else:
+                leg.update({"delta": None, "theta": None, "gamma": None, "vega": None})
+    return fwd, len(pairs), iv_calc.spread(votes)
+
+
 def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     st = _state[key]
     sid = st["underlying_id"]
@@ -214,8 +309,17 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
         rows.append({"strike": strike, "ce": ce, "pe": pe})
     rows.sort(key=lambda x: x["strike"])
 
-    atm = min((r["strike"] for r in rows), key=lambda s: abs(s - spot)) if (rows and spot) else None
+    # The next-month future is the fallback, never the first choice: it is the
+    # right CONTRACT but it can be thin or stale, while parity across the ATM
+    # cannot lie about where the forward is.
+    fwd, n_votes, vote_spread = _reprice(rows, st["expiry"], st.get("next_price"))
+    # ATM against the FORWARD when we have one. The strike nearest the front
+    # future is a different strike from the one nearest the September forward
+    # when the two are 60 apart, and this chain is September is.
+    ref = fwd or spot
+    atm = min((r["strike"] for r in rows), key=lambda s: abs(s - ref)) if (rows and ref) else None
     st.update({"future_price": spot, "rows": rows, "atm": atm,
+               "forward": fwd, "fwd_strikes": n_votes, "fwd_spread": vote_spread,
                "ts": time.time(), "ok": True, "error": None})
 
     # Extra chains for whichever expiries a caller asked for, ONE per round.
@@ -234,6 +338,9 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
                        data=json.dumps({**body, "Expiry": pick}), timeout=25)
         r2.raise_for_status()
         rows2, _ = _chain_rows(r2.json())
+        # Same treatment - an alternate expiry has its OWN forward, and using the
+        # front chain's would recreate the bug one month over.
+        _reprice(rows2, want, st.get("next_price"))
         if rows2:
             st["chains"][pick] = {"rows": rows2, "ts": time.time()}
 
@@ -336,6 +443,13 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
     return {
         "expiry": expiry,
         "expiries": st.get("expiries") or [],
+        # The forward the option prices imply, which is what the IV was solved
+        # against - NOT `future_price`, which is the front month. On crude they
+        # sit 60 apart and that gap is a five point IV error.
+        "forward": st.get("forward"),
+        "fwd_strikes": st.get("fwd_strikes"),
+        "fwd_spread": st.get("fwd_spread"),
+        "iv_source": "computed (Black-76, forward from put-call parity)",
         "future_price": st["next_price"] if nxt else st["future_price"],
         "future_bid": st["next_bid"] if nxt else st["future_bid"],
         "future_ask": st["next_ask"] if nxt else st["future_ask"],

@@ -175,9 +175,26 @@ export default function CrudeOil() {
             {gap == null ? "—" : (gap >= 0 ? "+" : "−") + fmtNum(Math.abs(gap), 2) + "%"}
           </div>
         </div>
+        {/* The forward, not the future. They are different contracts and the
+            distinction is the whole reason the IV on this screen used to be
+            wrong: the printed future is the front month, the chain is the month
+            after, and on crude they sit ~60 apart. The front month is still
+            shown underneath, because it is what he trades - it is just not what
+            prices this chain. */}
         <div className="intl-stat">
-          <div className="intl-stat-label">MCX future<em>₹</em></div>
-          <div className="intl-stat-value">{num(mcx.future_price, 0)}</div>
+          <div className="intl-stat-label">
+            MCX forward<em>{mcx.fwd_strikes ? `parity · ${mcx.fwd_strikes} strike${mcx.fwd_strikes === 1 ? "" : "s"}` : "₹"}</em>
+          </div>
+          <div className="intl-stat-value" title="What the option prices themselves imply, and what the IV beside them was solved against.">
+            {num(mcx.forward ?? mcx.future_price, 0)}
+            {mcx.forward != null && mcx.future_price != null
+              && Math.abs(mcx.future_price - mcx.forward) > 5 && (
+              <em className="cru-fwd-gap" title={"The front-month future is " + num(mcx.future_price, 0)
+                  + ", which belongs to a different contract. Using it would shift every IV here by several points."}>
+                front {num(mcx.future_price, 0)}
+              </em>
+            )}
+          </div>
         </div>
         <div className="intl-stat">
           <div className="intl-stat-label">US future<em>$</em></div>
