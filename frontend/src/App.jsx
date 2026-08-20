@@ -93,7 +93,11 @@ function Dashboard() {
   // MARKET feed instead: the thing the paper trades actually price off.
   useEffect(() => {
     if (getRole() !== "trader" || !feedStatus) return;
-    setWsState(feedStatus.ws_connected === false ? "connecting" : "live");
+    // `mode` is the feed's own state machine ("live", "starting", ...) - checked
+    // against the real payload; the first guess (`ws_connected`) is not in it,
+    // and a key that is never there would have pinned the pill on LIVE for ever,
+    // dead feed included.
+    setWsState(feedStatus.mode === "live" ? "live" : "connecting");
   }, [feedStatus]);
 
   // Slow-cadence fetch for feed status (the only thing WS doesn't push).
