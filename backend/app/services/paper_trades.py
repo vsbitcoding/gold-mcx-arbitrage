@@ -12,9 +12,9 @@ The rules, exactly as agreed:
 * Signals FLIP: buy closes a short and opens a long in the same breath; sell
   does the reverse. First signal of either side opens from flat.
 * Entry and exit are the exchange LTP **at the moment the webhook arrived**,
-  read from the socket's in-memory store - never fetched, never the client's
-  `temp_price`. The temp price is saved only so the difference against our LTP
-  can be shown afterwards; it prices nothing.
+  read from the socket's in-memory store - never fetched. (`temp_price` was
+  briefly stored for comparison and retired on 20-Aug; alerts still sending it
+  are not errors, the field is simply ignored.)
 * Symbols are DYNAMIC. Nothing is hard-coded: the first webhook naming a symbol
   resolves it against the Dhan scrip master (active front month + lot units)
   and puts it on the live feed. Gold and silver are pre-seeded so their first
@@ -247,18 +247,19 @@ def _rest_ltp(rec: dict) -> float | None:
 # --------------------------------------------------------------------------- #
 # The state machine
 # --------------------------------------------------------------------------- #
-def _close(trade: PaperTrade, ltp: float, temp: float | None, now: datetime) -> None:
-    """Fill in the exit half and every derived number. Pure arithmetic."""
+def _close(trade: PaperTrade, ltp: float, now: datetime) -> None:
+    """Fill in the exit half and every derived number. Pure arithmetic.
+
+    The temp_* columns still exist in the table and stay empty: dropping a
+    column in SQLite rebuilds the whole table, and the client has live open
+    positions - dormant columns cost nothing, a rebuild risks everything.
+    """
     trade.exit_time = now
     trade.exit_ltp = ltp
-    trade.exit_temp = temp
     sign = 1 if trade.side == "long" else -1
     trade.points = round(sign * (ltp - trade.entry_ltp), 4)
     if trade.lot_units:
         trade.pnl = round(trade.points * (trade.lots or 1) * trade.lot_units, 2)
-    trade.entry_diff = (round(trade.entry_temp - trade.entry_ltp, 4)
-                        if trade.entry_temp is not None else None)
-    trade.exit_diff = round(temp - ltp, 4) if temp is not None else None
     trade.duration_s = max(0, int((now - trade.entry_time).total_seconds()))
     trade.status = "closed"
 
@@ -282,11 +283,8 @@ def process_signal(payload: dict, raw_body: str) -> dict:
     except (TypeError, ValueError):
         lots = 1.0
     timeframe = str(payload.get("timeframe") or payload.get("tf") or "").strip() or None
-    try:
-        temp = float(payload.get("temp_price") if payload.get("temp_price")
-                     is not None else payload.get("price"))
-    except (TypeError, ValueError):
-        temp = None
+    # temp_price retired (client, 20-Aug): alerts may still send it - it is
+    # simply ignored, never an error. It survives only inside raw_json.
 
     def _log(action: str, reason: str | None = None, ltp: float | None = None,
              trade_id: int | None = None) -> dict:
@@ -295,7 +293,7 @@ def process_signal(payload: dict, raw_body: str) -> dict:
             db.add(PaperSignal(
                 received_at=now, symbol_raw=str(symbol_raw or "")[:64] or None,
                 symbol=symbol, side=side or side_raw or None, lots=lots,
-                timeframe=timeframe, temp_price=temp, action=action,
+                timeframe=timeframe, action=action,
                 reason=reason, ltp=ltp, trade_id=trade_id,
                 latency_ms=int((time.perf_counter() - t0) * 1000),
                 raw_json=raw_body[:2000] if raw_body else None))
@@ -349,12 +347,11 @@ def process_signal(payload: dict, raw_body: str) -> dict:
             else:
                 closed_id = None
                 if open_trade:
-                    _close(open_trade, ltp, temp, now)
+                    _close(open_trade, ltp, now)
                     closed_id = open_trade.id
                 new = PaperTrade(symbol=symbol, side=want, lots=lots,
                                  lot_units=rec.get("lot_units"), timeframe=timeframe,
-                                 entry_time=now, entry_ltp=ltp, entry_temp=temp,
-                                 status="open")
+                                 entry_time=now, entry_ltp=ltp, status="open")
                 db.add(new)
                 db.commit()
                 res = _log("flipped" if closed_id else "opened",
@@ -397,9 +394,7 @@ def positions() -> list[dict]:
                 "id": r.id, "symbol": r.symbol, "side": r.side, "lots": r.lots,
                 "timeframe": r.timeframe, "lot_units": r.lot_units,
                 "entry_time": r.entry_time.isoformat(sep=" ", timespec="seconds"),
-                "entry_ltp": r.entry_ltp, "entry_temp": r.entry_temp,
-                "entry_diff": (round(r.entry_temp - r.entry_ltp, 4)
-                               if r.entry_temp is not None else None),
+                "entry_ltp": r.entry_ltp,
                 "ltp": ltp, "ltp_age": round(age, 1) if age is not None else None,
                 "points": pts,
                 "pnl": (round(pts * (r.lots or 1) * r.lot_units, 2)
@@ -440,12 +435,11 @@ def trades(symbol: str | None = None, side: str | None = None,
                 "id": r.id, "symbol": r.symbol, "side": r.side, "lots": r.lots,
                 "timeframe": r.timeframe, "lot_units": r.lot_units,
                 "entry_time": r.entry_time.isoformat(sep=" ", timespec="seconds"),
-                "entry_ltp": r.entry_ltp, "entry_temp": r.entry_temp,
+                "entry_ltp": r.entry_ltp,
                 "exit_time": (r.exit_time.isoformat(sep=" ", timespec="seconds")
                               if r.exit_time else None),
-                "exit_ltp": r.exit_ltp, "exit_temp": r.exit_temp,
+                "exit_ltp": r.exit_ltp,
                 "points": r.points, "pnl": r.pnl,
-                "entry_diff": r.entry_diff, "exit_diff": r.exit_diff,
                 "duration_s": r.duration_s,
             } for r in rows],
             "total": total, "page": page, "page_size": page_size,
@@ -479,7 +473,7 @@ def signals(symbol: str | None = None, side: str | None = None,
                 "id": r.id,
                 "received_at": r.received_at.isoformat(sep=" ", timespec="seconds"),
                 "symbol": r.symbol or r.symbol_raw, "side": r.side, "lots": r.lots,
-                "timeframe": r.timeframe, "temp_price": r.temp_price,
+                "timeframe": r.timeframe,
                 "action": r.action, "reason": r.reason, "ltp": r.ltp,
                 "trade_id": r.trade_id, "latency_ms": r.latency_ms,
             } for r in rows],

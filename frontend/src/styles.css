@@ -5635,31 +5635,70 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 /* ------------------------------------------------ Auto Trades (paper) ----- */
 .pt-page { padding: 0 0 18px; }
-/* the three views sit centred between the title and the filters, the layout
-   the client drew: tabs middle, two filters top right */
 .pt-tabs { margin: 0 auto; }
 .pt-filters { display: flex; gap: 8px; }
 
-.pt-tiles {
+/* One quiet strip instead of four billboard tiles: five numbers, one line
+   each, the live ones first. */
+.pt-strip {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px; margin-bottom: 12px;
+  gap: 10px; margin-bottom: 14px;
 }
+.pt-stat {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px;
+}
+.pt-stat em {
+  display: block; font-style: normal; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary);
+}
+.pt-stat b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pt-stat i { font-style: normal; font-size: 10.5px; color: var(--text-secondary); margin-left: 7px; }
 
-.pt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.pt-card { padding: 0; }
-.pt-card-head {
-  display: flex; align-items: center; gap: 9px;
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
+/* Position cards. The side owns the card's left edge, the running P/L owns the
+   card - it is the one number the client opens this page for, so it gets the
+   display size and everything else supports it. */
+.pt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.pt-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; position: relative;
+  border-left: 4px solid var(--neg, #c62828);
 }
-.pt-card-head b { font-size: 15px; font-weight: 800; letter-spacing: .02em; }
-.pt-card-head em { font-style: normal; font-size: 11.5px; color: var(--text-secondary); margin-left: auto; }
-.pt-card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 14px; }
-.pt-card-grid em {
-  display: block; font-style: normal; font-size: 10px; font-weight: 800;
-  letter-spacing: .05em; color: var(--text-secondary); text-transform: uppercase;
+.pt-card.long { border-left-color: var(--pos, #1a7f37); }
+.pt-card-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 16px 0;
 }
-.pt-card-grid b { display: block; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.pt-card-grid i { display: block; font-style: normal; font-size: 10.5px; color: var(--text-secondary); }
+.pt-card-id { display: flex; align-items: center; gap: 9px; }
+.pt-card-id b { font-size: 16px; font-weight: 800; letter-spacing: .02em; }
+.pt-card-meta { font-size: 11.5px; color: var(--text-secondary); cursor: help; }
+
+.pt-card-pnl { padding: 8px 16px 2px; display: flex; align-items: baseline; gap: 10px; }
+.pt-card-pnl b { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.pt-card-pnl em { font-style: normal; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.pt-card-px {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px 13px; margin-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.pt-card-px > div { flex: 1; }
+.pt-card-px em {
+  display: flex; align-items: center; gap: 6px; font-style: normal;
+  font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-secondary);
+}
+.pt-card-px b { display: block; font-size: 16.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pt-card-px i { display: block; font-style: normal; font-size: 10.5px; color: var(--text-secondary); }
+.pt-arrow { font-size: 17px; font-weight: 800; }
+
+/* live pulse beside "LTP" - green breathing = ticking, amber still = stale */
+.pt-dot {
+  width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+  background: var(--pos, #1a7f37); animation: ptpulse 1.6s ease-in-out infinite;
+}
+.pt-dot.stale { background: #c9a227; animation: none; }
+@keyframes ptpulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 
 .pt-side {
   font-size: 10px; font-weight: 800; letter-spacing: .06em;
@@ -5668,19 +5707,31 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pt-side.buy { background: rgba(26,127,55,.14); color: var(--pos, #1a7f37); }
 .pt-side.sell { background: rgba(198,40,40,.12); color: var(--neg, #c62828); }
 
+/* tables */
 .pt-tablewrap { overflow-x: auto; }
 .pt-table { width: 100%; }
-.pt-table th, .pt-table td { padding: 7px 10px; text-align: right; white-space: nowrap; }
+.pt-table th, .pt-table td { padding: 8px 11px; text-align: right; white-space: nowrap; }
 .pt-table th:nth-child(-n+5), .pt-table td:nth-child(-n+5) { text-align: left; }
+.pt-table thead th {
+  font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border);
+}
+.pt-table tbody tr:nth-child(even) td { background: rgba(127,127,127,.04); }
 .pt-table td.pt-time { font-size: 11.5px; color: var(--text-secondary); }
 .pt-sym { font-weight: 800; }
 .pt-pnl { font-weight: 800; }
-.pt-diff { color: var(--text-secondary); font-size: 11.5px; }
-.pt-action { font-weight: 700; text-transform: uppercase; font-size: 10.5px; letter-spacing: .05em; }
-.pt-reason { text-align: left !important; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
-/* a rejected webhook should catch the eye in the log; ignored is routine */
-.pt-act-rejected td { background: rgba(198,40,40,.06); }
-.pt-act-ignored td.pt-action { color: var(--text-secondary); }
+.pt-reason { text-align: left !important; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+
+/* the Log's action, said with colour once and readable without it */
+.pt-act {
+  font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 9px; border-radius: 999px; background: rgba(127,127,127,.12);
+}
+.pt-act-opened { background: rgba(26,127,55,.14); color: var(--pos, #1a7f37); }
+.pt-act-flipped { background: rgba(201,162,39,.16); color: #8a6d1a; }
+.pt-act-rejected { background: rgba(198,40,40,.13); color: var(--neg, #c62828); }
+.pt-act-ignored { color: var(--text-secondary); }
+.pt-act-rejected td { background: none; }
 
 .pt-pager {
   display: flex; align-items: center; gap: 12px; justify-content: flex-end;

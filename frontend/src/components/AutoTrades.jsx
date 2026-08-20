@@ -38,6 +38,16 @@ function dur(s) {
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
+// "2h 05m" since entry, ticking - a position card that shows its age reads as
+// alive; a frozen timestamp reads as a report.
+function liveDur(iso, nowMs) {
+  if (!iso) return "";
+  const t = new Date(String(iso).replace(" ", "T")).getTime();
+  if (!Number.isFinite(t)) return "";
+  const s = Math.max(0, Math.floor((nowMs - t) / 1000));
+  return dur(s);
+}
+
 function SideTag({ side }) {
   const buyish = side === "long" || side === "buy";
   return <span className={`pt-side ${buyish ? "buy" : "sell"}`}>{(side || "").toUpperCase()}</span>;
@@ -126,6 +136,29 @@ export default function AutoTrades() {
     return p;
   }, [live, symbol, side]);
 
+  const runningPnl = useMemo(
+    () => positions.reduce((a, x) => a + (x.pnl || 0), 0), [positions]);
+
+  // The Live strip shows booked totals too, so the summary must exist before
+  // anyone visits History - one light fetch, refreshed when a position closes
+  // (the open-position count dropping is the only way one ever does).
+  useEffect(() => {
+    let alive = true;
+    api.paperTrades({ symbol, side, page: 1, page_size: 5 })
+      .then((r) => { if (alive) setHist((h) => (view === "history" ? h : r)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [symbol, side, live?.positions?.length]);
+
+  // One clock for every card's "since entry" - ticking once a second beats
+  // 3-second jumps, and one interval beats one per card.
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    if (view !== "live") return undefined;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [view]);
+
   const sum = hist?.summary;
 
   return (
@@ -166,18 +199,31 @@ export default function AutoTrades() {
 
       {view === "live" && (
         <>
-          {sum && (
-            <div className="pt-tiles">
-              <div className="intl-stat"><div className="intl-stat-label">CLOSED TRADES</div>
-                <div className="intl-stat-value">{sum.trades}</div></div>
-              <div className="intl-stat"><div className="intl-stat-label">NET P/L<em>₹</em></div>
-                <div className={`intl-stat-value ${sum.pnl >= 0 ? "pos" : "neg"}`}>{signed(sum.pnl)}</div></div>
-              <div className="intl-stat"><div className="intl-stat-label">WINS / LOSSES</div>
-                <div className="intl-stat-value">{sum.wins} / {sum.losses}</div></div>
-              <div className="intl-stat"><div className="intl-stat-label">WIN RATE</div>
-                <div className="intl-stat-value">{sum.win_rate == null ? "—" : `${sum.win_rate}%`}</div></div>
+          <div className="pt-strip">
+            <div className="pt-stat">
+              <em>Open positions</em>
+              <b>{positions.length}</b>
             </div>
-          )}
+            <div className="pt-stat">
+              <em>Running P/L ₹</em>
+              <b className={runningPnl >= 0 ? "pos" : "neg"}>
+                {positions.length ? signed(runningPnl) : "—"}
+              </b>
+            </div>
+            <div className="pt-stat">
+              <em>Closed trades</em>
+              <b>{sum ? sum.trades : "—"}</b>
+            </div>
+            <div className="pt-stat">
+              <em>Booked P/L ₹</em>
+              <b className={sum && sum.pnl < 0 ? "neg" : "pos"}>{sum ? signed(sum.pnl) : "—"}</b>
+            </div>
+            <div className="pt-stat">
+              <em>Win rate</em>
+              <b>{sum && sum.win_rate != null ? `${sum.win_rate}%` : "—"}</b>
+              <i>{sum ? `${sum.wins}W / ${sum.losses}L` : ""}</i>
+            </div>
+          </div>
 
           {positions.length === 0 ? (
             <div className="nmg-empty">
@@ -189,26 +235,50 @@ export default function AutoTrades() {
             </div>
           ) : (
             <div className="pt-cards">
-              {positions.map((p) => (
-                <section className="nmg-card pt-card" key={p.id}>
-                  <div className="pt-card-head">
-                    <b>{p.symbol}</b>
-                    <SideTag side={p.side} />
-                    <em title={p.contract || ""}>{p.lots} lot{p.lots === 1 ? "" : "s"}
-                      {p.timeframe ? ` · ${p.timeframe}` : ""}</em>
-                  </div>
-                  <div className="pt-card-grid">
-                    <div><em>Entry</em><b>{num(p.entry_ltp)}</b><i>{when(p.entry_time)}</i></div>
-                    <div><em>LTP now</em><b>{num(p.ltp)}</b>
-                      <i>{p.ltp_age != null && p.ltp_age > 120 ? "stale" : "live"}</i></div>
-                    <div><em>Points</em><b className={p.points >= 0 ? "pos" : "neg"}>{signed(p.points)}</b>
-                      <i>&nbsp;</i></div>
-                    <div><em>Running P/L ₹</em>
-                      <b className={p.pnl >= 0 ? "pos" : "neg"}>{signed(p.pnl)}</b>
-                      <i>{p.entry_diff != null ? `temp diff ${signed(p.entry_diff)}` : ""}</i></div>
-                  </div>
-                </section>
-              ))}
+              {positions.map((p) => {
+                const up = (p.pnl ?? 0) >= 0;
+                return (
+                  <section className={`pt-card ${p.side}`} key={p.id}>
+                    <div className="pt-card-top">
+                      <div className="pt-card-id">
+                        <b>{p.symbol}</b>
+                        <SideTag side={p.side} />
+                      </div>
+                      <span className="pt-card-meta" title={p.contract || ""}>
+                        {num(p.lots, 0)} lot{p.lots === 1 ? "" : "s"}
+                        {p.timeframe ? ` · ${p.timeframe}` : ""}
+                      </span>
+                    </div>
+
+                    <div className="pt-card-pnl">
+                      <b className={up ? "pos" : "neg"}>{signed(p.pnl)}</b>
+                      <em className={up ? "pos" : "neg"}>
+                        {signed(p.points)} pts
+                        {p.lot_units ? ` × ${num(p.lot_units, 0)}` : ""}
+                      </em>
+                    </div>
+
+                    <div className="pt-card-px">
+                      <div>
+                        <em>Entry</em>
+                        <b>{num(p.entry_ltp)}</b>
+                        <i>{when(p.entry_time)}</i>
+                      </div>
+                      <span className={`pt-arrow ${up ? "pos" : "neg"}`}>→</span>
+                      <div>
+                        <em>LTP
+                          <u className={`pt-dot ${p.ltp_age != null && p.ltp_age > 120 ? "stale" : ""}`}
+                            title={p.ltp_age != null && p.ltp_age > 120
+                              ? `price ${Math.round(p.ltp_age)}s old`
+                              : "live from the exchange feed"} />
+                        </em>
+                        <b>{num(p.ltp)}</b>
+                        <i>open {liveDur(p.entry_time, nowMs)}</i>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           )}
         </>
@@ -222,9 +292,7 @@ export default function AutoTrades() {
                 <tr>
                   <th>#</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
                   <th>Entry</th><th>Entry ₹</th><th>Exit</th><th>Exit ₹</th>
-                  <th>Points</th><th>P/L ₹</th>
-                  <th title="client's temp price minus our LTP, at entry / at exit">Temp diff E/X</th>
-                  <th>Duration</th>
+                  <th>Points</th><th>P/L ₹</th><th>Duration</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,7 +309,6 @@ export default function AutoTrades() {
                     <td>{num(r.exit_ltp)}</td>
                     <td className={r.points >= 0 ? "pos" : "neg"}>{signed(r.points)}</td>
                     <td className={`pt-pnl ${r.pnl >= 0 ? "pos" : "neg"}`}>{signed(r.pnl)}</td>
-                    <td className="pt-diff">{signed(r.entry_diff)} / {signed(r.exit_diff)}</td>
                     <td>{dur(r.duration_s)}</td>
                   </tr>
                 ))}
@@ -264,7 +331,7 @@ export default function AutoTrades() {
               <thead>
                 <tr>
                   <th>Received</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
-                  <th>Temp price</th><th>LTP used</th><th>Action</th><th>Reason</th><th>ms</th>
+                  <th>LTP used</th><th>Action</th><th>Reason</th><th>ms</th>
                 </tr>
               </thead>
               <tbody>
@@ -275,9 +342,8 @@ export default function AutoTrades() {
                     <td><SideTag side={r.side} /></td>
                     <td>{num(r.lots, 0)}</td>
                     <td>{r.timeframe || "—"}</td>
-                    <td>{num(r.temp_price)}</td>
                     <td>{num(r.ltp)}</td>
-                    <td className="pt-action">{r.action}</td>
+                    <td><span className={`pt-act pt-act-${r.action}`}>{r.action}</span></td>
                     <td className="pt-reason">{r.reason || "—"}</td>
                     <td>{r.latency_ms ?? "—"}</td>
                   </tr>
