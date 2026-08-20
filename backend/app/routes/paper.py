@@ -16,7 +16,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.config import settings
-from app.security import get_current_user
+from app.security import get_current_user_flex
 from app.services import paper_trades
 
 log = logging.getLogger("paper_routes")
@@ -64,7 +64,7 @@ async def webhook_trade(request: Request, key: str | None = Query(None)):
 
 
 @router.get("/paper/positions")
-def paper_positions(_user: str = Depends(get_current_user)):
+def paper_positions(_user: str = Depends(get_current_user_flex)):
     """Open dummy positions with the live LTP and running P/L."""
     return {"positions": paper_trades.positions(),
             "symbols": paper_trades.known_symbols()}
@@ -76,7 +76,7 @@ def paper_trades_view(
     side: str | None = Query(None, pattern="^(long|short)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
-    _user: str = Depends(get_current_user),
+    _user: str = Depends(get_current_user_flex),
 ):
     """Closed trades, newest first, paginated, with the summary for the tiles."""
     return paper_trades.trades(symbol=symbol, side=side, page=page, page_size=page_size)
@@ -88,7 +88,7 @@ def paper_signals_view(
     side: str | None = Query(None, pattern="^(buy|sell)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
-    _user: str = Depends(get_current_user),
+    _user: str = Depends(get_current_user_flex),
 ):
     """Every webhook received, including the ignored and rejected ones - the
     reason column is the debugging surface for the client's alerts."""
