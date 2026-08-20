@@ -87,6 +87,15 @@ function Dashboard() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // The header pill tracks the browser-to-server rates socket, which a trader
+  // deliberately never opens (the server refuses it for that role) - so for a
+  // trader it stayed "CONNECTING" for ever. For that login the pill follows the
+  // MARKET feed instead: the thing the paper trades actually price off.
+  useEffect(() => {
+    if (getRole() !== "trader" || !feedStatus) return;
+    setWsState(feedStatus.ws_connected === false ? "connecting" : "live");
+  }, [feedStatus]);
+
   // Slow-cadence fetch for feed status (the only thing WS doesn't push).
   const refreshSlow = useCallback(async () => {
     try {
