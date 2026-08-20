@@ -49,9 +49,18 @@ async def webhook_trade(request: Request, key: str | None = Query(None)):
         # can hit a public URL, and junk must not fill the client's Log tab.
         raise HTTPException(status_code=403, detail="bad key")
 
+    # Inputs may ride the URL as well as the body (client, 20-Aug):
+    #   .../webhook/trade?key=...&type=buy&symbol=GOLDM&lot=1&timeframe=5m
+    # The body wins wherever both name a field, because TradingView's URL is
+    # static while its message carries live values like {{close}}. Still POST
+    # only, never GET - WhatsApp and browsers prefetch GET links to build
+    # previews, and a pasted link must not be able to fire a trade.
+    qp = {k: v for k, v in request.query_params.items() if k != "key"}
+    payload = {**qp, **payload}
+
     if not payload:
-        return {"status": "rejected", "reason": "body must be JSON"}
-    return paper_trades.process_signal(payload, raw)
+        return {"status": "rejected", "reason": "send fields in the JSON body or the URL"}
+    return paper_trades.process_signal(payload, raw or json.dumps(qp))
 
 
 @router.get("/paper/positions")
