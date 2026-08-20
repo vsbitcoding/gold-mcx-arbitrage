@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { key: "nsemcx", label: "NSE vs MCX" },
   { key: "ivcalc", label: "IV Calculator" },
   { key: "intl", label: "International" },
+  { key: "autotrades", label: "Auto Trades" },
 ];
 
 // Clean monochrome line icons (match the app's drawer look).
@@ -38,6 +39,7 @@ function NavIcon({ name }) {
     case "goldopt": return <svg {...c}><circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" /></svg>;
     case "making": return <svg {...c}><path d="M20.6 13.4 12 22l-9-9V4h9z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>;
     case "premium": return <svg {...c}><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></svg>;
+    case "autotrades": return <svg {...c}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>;
     default: return null;
   }
 }
@@ -54,7 +56,13 @@ export default function Header({
   page,
   onNavigate,
   counts = {},
+  role = "admin",
 }) {
+  // The trader login exists for exactly one page; everything else is hidden,
+  // not merely de-emphasised.
+  const NAV = role === "trader"
+    ? NAV_ITEMS.filter((i) => i.key === "autotrades")
+    : NAV_ITEMS;
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -74,7 +82,7 @@ export default function Header({
     function measure() {
       if (!widthsRef.current) {
         const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
-        if (btns.length !== NAV_ITEMS.length) return;      // still hidden, retry next resize
+        if (btns.length !== NAV.length) return;      // still hidden, retry next resize
         widthsRef.current = btns.map((b) => b.getBoundingClientRect().width);
       }
       const widths = widthsRef.current;
@@ -192,8 +200,8 @@ export default function Header({
 
   // Whatever fits stays on the bar; the rest goes behind More. The current page
   // is always pulled onto the bar so you can see where you are.
-  let shownItems = NAV_ITEMS.slice(0, visibleCount);
-  let overflowItems = NAV_ITEMS.slice(visibleCount);
+  let shownItems = NAV.slice(0, visibleCount);
+  let overflowItems = NAV.slice(visibleCount);
   if (overflowItems.length && !shownItems.some((i) => i.key === page)) {
     const cur = overflowItems.find((i) => i.key === page);
     if (cur && shownItems.length) {
@@ -306,7 +314,7 @@ export default function Header({
               <button className="nav-drawer-x" onClick={() => setMenuOpen(false)} aria-label="Close">×</button>
             </div>
             <div className="nav-drawer-list">
-              {NAV_ITEMS.map((it) => (
+              {NAV.map((it) => (
                 <button
                   key={it.key}
                   className={`nav-drawer-item ${page === it.key ? "active" : ""}`}

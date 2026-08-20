@@ -52,6 +52,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./arbi.db"
 
+    # Secret for the TradingView paper-trade webhook. Empty = webhook disabled.
+    # Value lives only in the server .env, never in git.
+    WEBHOOK_TRADE_KEY: str = ""
+
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     ALLOWED_ORIGINS: str = "http://localhost:5173"

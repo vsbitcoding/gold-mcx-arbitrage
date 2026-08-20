@@ -295,6 +295,18 @@ def _run_real_feed_thread() -> None:
             for sid, m in mcx_opt_stream.get_subscription_meta().items():
                 subs[sid] = m
 
+            # Webhook paper-trade symbols (Auto Trades page). Dynamic: whatever
+            # the client's webhooks have named, plus the pre-seeded bullion set.
+            # MCX FUTCOM → the default MCX-Full path below, ticks land in
+            # quote_store like everything else.
+            try:
+                from app.services import paper_trades
+                paper_trades.refresh()
+                for sid, m in paper_trades.get_subscription_meta().items():
+                    subs.setdefault(sid, m)
+            except Exception as e:
+                log.warning("paper_trades.refresh() failed: %s", e)
+
             # 'Price' tab — gold/silver active contracts (already subscribed by the
             # pair feed, so just resolve them; no extra subscription needed).
             try:

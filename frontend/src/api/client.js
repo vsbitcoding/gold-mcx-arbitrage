@@ -8,6 +8,14 @@ export function setToken(t) {
 }
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem("arbi_role");
+  localStorage.removeItem("arbi_user");
+}
+
+// 'admin' sees the whole dashboard; 'trader' (the webhook client) sees only the
+// Auto Trades page. The server told us at login; this is display-gating.
+export function getRole() {
+  return localStorage.getItem("arbi_role") || "admin";
 }
 
 async function _doRequest(path, opts) {
@@ -81,6 +89,8 @@ export async function login(username, password) {
   }
   const data = await res.json();
   setToken(data.access_token);
+  if (data.role) localStorage.setItem("arbi_role", data.role);
+  if (data.username) localStorage.setItem("arbi_user", data.username);
   return data;
 }
 
@@ -187,6 +197,21 @@ export const api = {
   bullionStockStatus: () => request("/api/bullion-stock/status"),
   bullionPdf: (download = false) => requestBlob(`/api/bullion-stock/pdf${download ? "?download=1" : ""}`),
   bullionRefresh: () => request("/api/bullion-stock/refresh", { method: "POST" }),
+  // Auto Trades (webhook paper trades). Positions poll; trades/signals are
+  // fetched on a control change - they only grow when a webhook lands.
+  paperPositions: () => request("/api/paper/positions"),
+  paperTrades: ({ symbol, side, page = 1, page_size = 20 } = {}) => {
+    const q = new URLSearchParams({ page, page_size });
+    if (symbol) q.set("symbol", symbol);
+    if (side) q.set("side", side);
+    return request(`/api/paper/trades?${q.toString()}`);
+  },
+  paperSignals: ({ symbol, side, page = 1, page_size = 20 } = {}) => {
+    const q = new URLSearchParams({ page, page_size });
+    if (symbol) q.set("symbol", symbol);
+    if (side) q.set("side", side);
+    return request(`/api/paper/signals?${q.toString()}`);
+  },
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();

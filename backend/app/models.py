@@ -88,6 +88,82 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
+    # 'admin' sees the whole dashboard; 'trader' sees only the Auto Trades page.
+    role = Column(String(16), nullable=False, default="admin")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperSymbol(Base):
+    """An MCX symbol the webhook trader has used, resolved once and kept.
+
+    Nothing is hard-coded on our side (client, 20-Aug): the first webhook that
+    names a symbol resolves it against the Dhan scrip master - active front
+    month, security id, lot units - and the row keeps it on the live feed across
+    restarts. Gold and silver are pre-seeded so their very first signal is
+    instant instead of paying the one-time resolve.
+    """
+    __tablename__ = "paper_symbols"
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(32), unique=True, nullable=False)      # GOLDM, SILVERM...
+    security_id = Column(String(16), nullable=False)
+    trading_symbol = Column(String(64), nullable=True)            # GOLDM-05DEC2026-FUT
+    lot_units = Column(Float, nullable=True)                      # rupees per point per lot
+    expiry = Column(String(10), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperTrade(Base):
+    """A DUMMY trade fired by the TradingView webhook - never a real order.
+
+    Entry and exit are the exchange LTP at the moment each signal arrived, read
+    from the live socket's in-memory store; `temp_*` is whatever price the
+    client's alert happened to carry, saved only so the difference can be shown.
+    One open position per symbol, flipped by the opposite signal.
+    """
+    __tablename__ = "paper_trades"
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(32), nullable=False, index=True)
+    side = Column(String(5), nullable=False)                      # long | short
+    lots = Column(Float, nullable=False, default=1)
+    lot_units = Column(Float, nullable=True)                      # frozen at entry
+    timeframe = Column(String(8), nullable=True)
+    status = Column(String(6), nullable=False, default="open", index=True)
+    entry_time = Column(DateTime, nullable=False)                 # IST naive
+    entry_ltp = Column(Float, nullable=False)
+    entry_temp = Column(Float, nullable=True)
+    exit_time = Column(DateTime, nullable=True)
+    exit_ltp = Column(Float, nullable=True)
+    exit_temp = Column(Float, nullable=True)
+    points = Column(Float, nullable=True)                         # signed, side-aware
+    pnl = Column(Float, nullable=True)                            # points x lots x lot_units
+    entry_diff = Column(Float, nullable=True)                     # entry_temp - entry_ltp
+    exit_diff = Column(Float, nullable=True)
+    duration_s = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperSignal(Base):
+    """Every webhook that arrived, verbatim, with what was done about it.
+
+    The ignored and rejected ones matter most - "મેં મોકલ્યું, કેમ ના થયું?" is
+    answered here, with the reason, instead of by silence.
+    """
+    __tablename__ = "paper_signals"
+    id = Column(Integer, primary_key=True)
+    received_at = Column(DateTime, nullable=False, index=True)    # IST naive
+    symbol_raw = Column(String(64), nullable=True)
+    symbol = Column(String(32), nullable=True, index=True)
+    side = Column(String(8), nullable=True)                       # buy | sell
+    lots = Column(Float, nullable=True)
+    timeframe = Column(String(8), nullable=True)
+    temp_price = Column(Float, nullable=True)
+    action = Column(String(12), nullable=False)                   # opened|flipped|ignored|rejected
+    reason = Column(String(160), nullable=True)
+    ltp = Column(Float, nullable=True)                            # the price the action used
+    trade_id = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    raw_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

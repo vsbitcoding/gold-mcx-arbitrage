@@ -56,6 +56,11 @@ _REQUIRED_COLUMNS = {
         ("decrease_pct", "FLOAT"),
         ("increase_pct", "FLOAT"),
     ],
+    # Existing installs predate roles; every user already in the table is the
+    # admin, so the backfill default must be 'admin', not the model's default.
+    "users": [
+        ("role", "VARCHAR(16) DEFAULT 'admin'"),
+    ],
 }
 
 

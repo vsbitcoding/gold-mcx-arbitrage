@@ -12,14 +12,15 @@ import CrudeOil from "./components/CrudeOil.jsx";
 import NseMcxCrude from "./components/NseMcxCrude.jsx";
 import IvCalculator from "./components/IvCalculator.jsx";
 import International from "./components/International.jsx";
+import AutoTrades from "./components/AutoTrades.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
-import { api, getToken, clearToken } from "./api/client.js";
+import { api, getToken, clearToken, getRole } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "crudeinr", "nsemcx", "ivcalc", "intl"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "crudeinr", "nsemcx", "ivcalc", "intl", "autotrades"];
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -28,6 +29,8 @@ function getStoredDensity() {
   return localStorage.getItem("arbi_density") || "comfortable";
 }
 function getStoredPage() {
+  // A trader login has exactly one page; everything else in storage is stale.
+  if (getRole() === "trader") return "autotrades";
   const p = localStorage.getItem("arbi_page");
   return VALID_PAGES.includes(p) ? p : "cross";
 }
@@ -211,6 +214,7 @@ function Dashboard() {
   return (
     <div className="app">
       <Header
+        role={getRole()}
         user={user}
         onLogout={logout}
         theme={theme}
@@ -243,6 +247,7 @@ function Dashboard() {
       {page === "nsemcx" && <NseMcxCrude />}
       {page === "ivcalc" && <IvCalculator />}
       {page === "intl" && <International />}
+      {page === "autotrades" && <AutoTrades />}
         {page === "options" && <OptionsSpread />}
         {page === "goldopt" && <GoldOptions />}
         {page === "stock" && <BullionStock />}

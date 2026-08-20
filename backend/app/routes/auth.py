@@ -14,4 +14,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     user = db.query(User).filter(User.username == form.username).first()
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    return {"access_token": create_access_token(user.username), "token_type": "bearer"}
+    return {"access_token": create_access_token(user.username), "token_type": "bearer",
+            # The frontend hides every tab but Auto Trades for a 'trader'. The
+            # trades data itself still sits behind the same login token.
+            "role": user.role or "admin", "username": user.username}

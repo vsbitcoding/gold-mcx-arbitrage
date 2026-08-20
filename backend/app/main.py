@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, premium as premium_route, price as price_route, public_v1, scrip_master as scrip_master_route, signals as signals_route, ws as ws_route
+from app.routes import auth, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, paper as paper_route, premium as premium_route, price as price_route, public_v1, scrip_master as scrip_master_route, signals as signals_route, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
@@ -54,6 +54,7 @@ app.include_router(international_route.router)
 app.include_router(crude_iv_route.router)
 app.include_router(nse_mcx_route.router)
 app.include_router(iv_calc_route.router)
+app.include_router(paper_route.router)
 
 
 @app.exception_handler(Exception)
