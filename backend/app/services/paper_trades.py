@@ -53,6 +53,32 @@ PRESEED = ("GOLD", "GOLDM", "GOLDTEN", "GOLDGUINEA", "SILVER", "SILVERM", "SILVE
 # screens use.
 _FRESH_SECONDS = 120.0
 
+# Rupees of P/L per one-point move, per lot - the exchange's contract spec.
+# The scrip master's SEM_LOT_UNITS reads 1 for every MCX future (checked live:
+# GOLD, GOLDM, GOLDTEN all came back 1.0), so trusting it would understate
+# GOLD's P/L by a factor of a hundred. These are exchange facts, stable for
+# years, and they do NOT make symbols any less dynamic: an unlisted symbol
+# still trades, its P/L is just quoted per point (multiplier 1) until its spec
+# is added here.
+_MULTIPLIERS = {
+    "GOLD": 100, "GOLDM": 10, "GOLDTEN": 1, "GOLDGUINEA": 1, "GOLDPETAL": 1,
+    "SILVER": 30, "SILVERM": 5, "SILVERMIC": 1,
+    "CRUDEOIL": 100, "CRUDEOILM": 10, "NATURALGAS": 1250, "NATGASMINI": 250,
+    "COPPER": 2500, "ZINC": 5000, "ZINCMINI": 1000, "LEAD": 5000,
+    "LEADMINI": 1000, "ALUMINIUM": 5000, "ALUMINI": 1000, "NICKEL": 1500,
+}
+
+
+def _lot_units(symbol: str, master_value) -> float:
+    """The master's figure when it is believable, the exchange spec otherwise."""
+    try:
+        mv = float(master_value or 0)
+    except (TypeError, ValueError):
+        mv = 0.0
+    if mv > 1:
+        return mv
+    return float(_MULTIPLIERS.get(symbol, mv or 1))
+
 _BASE = "https://api.dhan.co/v2"
 
 # One lock for the whole state machine. Webhooks arrive one at a time from one
@@ -115,7 +141,7 @@ def ensure_symbol(symbol: str) -> tuple[dict | None, bool, str | None]:
     rec = {
         "security_id": str(found["security_id"]),
         "trading_symbol": found.get("trading_symbol"),
-        "lot_units": float(found.get("lot_units") or 0) or None,
+        "lot_units": _lot_units(symbol, found.get("lot_units")),
         "expiry": found["expiry"].strftime("%Y-%m-%d") if found.get("expiry") else None,
     }
     db = SessionLocal()
@@ -150,7 +176,7 @@ def refresh() -> None:
         rec = {
             "security_id": str(found["security_id"]),
             "trading_symbol": found.get("trading_symbol"),
-            "lot_units": float(found.get("lot_units") or 0) or None,
+            "lot_units": _lot_units(sym, found.get("lot_units")),
             "expiry": found["expiry"].strftime("%Y-%m-%d") if found.get("expiry") else None,
         }
         if rec != _symbols.get(sym):
