@@ -30,6 +30,11 @@ def _verify(token: str) -> str | None:
 @router.websocket("/ws/live")
 async def ws_live(websocket: WebSocket, token: str = Query(...)):
     user = _verify(token)
+    # The socket streams the arbitrage board - not part of the trader surface.
+    if user:
+        from app.security import role_of
+        if role_of(user) == "trader":
+            user = None
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

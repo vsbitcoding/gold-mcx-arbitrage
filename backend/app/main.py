@@ -72,6 +72,34 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.middleware("http")
+async def _confine_traders(request, call_next):
+    """A 'trader' Bearer token reaches only the Auto Trades surface.
+
+    No token, or a token that does not decode, passes straight through - the
+    route's own auth rejects those exactly as before, and the public key-based
+    v1 routes never carry a Bearer at all. Only a VALID token whose user is a
+    trader gets confined, so the admin path is byte-for-byte what it was.
+    """
+    path = request.url.path
+    if path.startswith("/api"):
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            from app import security as sec
+            import jwt as _jwt
+            try:
+                payload = _jwt.decode(auth[7:], settings.APP_SECRET_KEY,
+                                      algorithms=[sec.ALGORITHM])
+                username = payload.get("sub") or ""
+            except _jwt.PyJWTError:
+                username = ""
+            if username and sec.role_of(username) == "trader" and not sec.trader_may(path):
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={
+                    "detail": "This login is limited to the Auto Trades page."})
+    return await call_next(request)
+
+
 @app.on_event("startup")
 async def startup() -> None:
     Base.metadata.create_all(bind=engine)

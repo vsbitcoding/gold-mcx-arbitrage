@@ -45,7 +45,9 @@ function Dashboard() {
   const [wsState, setWsState] = useState("connecting");
   const [theme, setTheme] = useState(getStoredTheme());
   const [density, setDensity] = useState(getStoredDensity());
-  const [user] = useState("Vivek_Bitcoding");
+  // Who is actually signed in - was hardcoded "Vivek_Bitcoding", which the
+  // trader login then displayed too and reasonably read as a security hole.
+  const [user] = useState(() => localStorage.getItem("arbi_user") || "User");
   const [page, setPage] = useState(getStoredPage());
   const fallbackRef = useRef(null);
 
@@ -106,7 +108,8 @@ function Dashboard() {
 
   useEffect(() => {
     refreshSlow();
-    refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
+    const trader = getRole() === "trader";
+    if (!trader) refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
 
     // Slow REST cadence: feed status every 10s. Paused while the tab is hidden.
     let slowTimer = setInterval(refreshSlow, 10000);
@@ -121,6 +124,17 @@ function Dashboard() {
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
+
+    // A trader login has no board - the server answers 403 for it now, so the
+    // pair socket would only manufacture errors. The status timer above still
+    // runs (the LIVE pill is on the trader's allowed list) and still needs the
+    // same teardown.
+    if (trader) {
+      return () => {
+        if (slowTimer) clearInterval(slowTimer);
+        document.removeEventListener("visibilitychange", onVisibility);
+      };
+    }
 
     const sock = createLiveSocket({
       onSnapshot: (data) => setPairs(data),
@@ -159,6 +173,7 @@ function Dashboard() {
         if (p) setPriceData(p);
       } catch { /* keep last */ }
     }
+    if (getRole() === "trader") return undefined;   // no nav badges to feed
     function start() { if (!timer) timer = setInterval(load, 2000); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     function onVis() { if (document.hidden) stop(); else { load(); start(); } }
