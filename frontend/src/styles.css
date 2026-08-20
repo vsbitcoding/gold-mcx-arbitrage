@@ -5624,3 +5624,11 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
    app uses for "this number is arithmetic, not a price". */
 .cru-shaky { background: rgba(201,162,39,.10); }
 .cru-shaky::after { content: ""; }
+
+/* The front-month future beside the forward that actually prices the chain.
+   Secondary on purpose - confusing the two is what put a 140-rupee gap between
+   the header and the ATM row. */
+.cru-fut-front {
+  display: block; font-style: normal; font-size: 10px; font-weight: 700;
+  color: var(--text-secondary); margin-top: 1px; cursor: help;
+}

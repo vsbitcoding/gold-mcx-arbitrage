@@ -189,6 +189,32 @@ _FWD_VOTERS = 9
 _WIDE_LEG = 0.25
 
 
+def _sticky_atm(strikes, ref: float | None, prev: float | None) -> float | None:
+    """The strike nearest the money, but it will not flip on a wobble.
+
+    Plain "nearest" is unstable exactly where it is watched most. Crude's ladder
+    steps 50, so the boundary between 8100 and 8150 is 8125 - and the forward
+    moves 0.4 in a minute on a quiet market. Sitting near that line, the ATM row
+    jumps between two strikes every few seconds, which is what the client
+    reported as "ATM change some time" (20-Aug).
+
+    So a move only counts once the reference is **0.6 of a step** from the strike
+    already showing: a 10% dead band either side of the midpoint, five rupees on
+    crude. Small enough that the ATM is never meaningfully wrong, large enough
+    that noise cannot move it.
+    """
+    ks = sorted({s for s in strikes if s})
+    if not ks or ref is None:
+        return None
+    nearest = min(ks, key=lambda s: abs(s - ref))
+    if prev is None or prev not in ks or nearest == prev:
+        return nearest
+    step = min((round(b - a, 6) for a, b in zip(ks, ks[1:]) if b > a), default=0)
+    if not step:
+        return nearest
+    return nearest if abs(ref - prev) > step * 0.6 else prev
+
+
 def _reprice(rows: list, expiry: str,
              fallback: float | None = None) -> tuple[float | None, int, float | None]:
     """Replace the vendor's IV and greeks with our own, in place.
@@ -357,7 +383,7 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
     # future is a different strike from the one nearest the September forward
     # when the two are 60 apart, and this chain is September is.
     ref = fwd or spot
-    atm = min((r["strike"] for r in rows), key=lambda s: abs(s - ref)) if (rows and ref) else None
+    atm = _sticky_atm([r["strike"] for r in rows], ref, st.get("atm"))
     st.update({"future_price": spot, "rows": rows, "atm": atm,
                "forward": fwd, "fwd_strikes": n_votes, "fwd_spread": vote_spread,
                "ts": time.time(), "ok": True, "error": None})
@@ -385,8 +411,8 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
         # and prices it against the wrong contract.
         fwd2, n2, sp2 = _reprice(rows2, pick, st.get("next_price"))
         if rows2:
-            atm2 = (min((r["strike"] for r in rows2), key=lambda s: abs(s - fwd2))
-                    if fwd2 else None)
+            atm2 = _sticky_atm([r["strike"] for r in rows2], fwd2,
+                               (st["chains"].get(pick) or {}).get("atm"))
             st["chains"][pick] = {"rows": rows2, "ts": time.time(), "forward": fwd2,
                                   "fwd_strikes": n2, "fwd_spread": sp2, "atm": atm2}
 

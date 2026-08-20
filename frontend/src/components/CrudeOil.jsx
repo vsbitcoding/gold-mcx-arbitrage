@@ -21,9 +21,30 @@ function Chain({ title, sub, badge, data, priceDecimals, strikeDecimals, showOi 
           <span className="cru-chain-title">{title}</span>
           <span className="cru-chain-sub">{sub}</span>
         </div>
+        {/* The FORWARD, when the chain has one, because that is what the ATM
+            row and every IV beside it were solved against. Printing the front
+            future here is what the client saw as "ATM and future price not
+            same": on 19-Aug the header read 8,290.5 while the ATM sat on 8,150,
+            140 apart on a 50-step ladder. They are different contracts - the
+            front future expired that day and this chain is September. The front
+            month still shows, underneath, because it is the one he trades. */}
         <span className="cru-fut">
-          {data?.future_price != null ? num(data.future_price, priceDecimals) : "—"}
-          <em>future</em>
+          {data?.forward != null
+            ? num(data.forward, priceDecimals)
+            : (data?.future_price != null ? num(data.future_price, priceDecimals) : "—")}
+          <em>{data?.forward != null ? "forward" : "future"}</em>
+          {data?.forward != null && data?.future_price != null
+            /* Relative, not absolute: a fixed rupee figure is either noise on
+               crude at 8,100 or the whole spread on gas at 267. Three parts in a
+               thousand is about half a strike step on both ladders, so the line
+               appears when the two are genuinely different contracts and stays
+               away when they are the same one a rupee apart. */
+            && Math.abs(data.future_price - data.forward) / data.forward > 0.003 && (
+            <i className="cru-fut-front"
+              title="The front-month future. This chain belongs to a later month, so it is priced off the forward above, not off this.">
+              front {num(data.future_price, priceDecimals)}
+            </i>
+          )}
         </span>
       </div>
 
