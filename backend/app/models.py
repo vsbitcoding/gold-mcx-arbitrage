@@ -137,10 +137,28 @@ class PaperTrade(Base):
     exit_temp = Column(Float, nullable=True)
     points = Column(Float, nullable=True)                         # signed, side-aware
     pnl = Column(Float, nullable=True)                            # points x lots x lot_units
+    # 'signal' = the opposite webhook flipped it; 'stop' = the client pressed
+    # Stop and everything open was booked at that moment's price.
+    exit_reason = Column(String(12), nullable=True)
     entry_diff = Column(Float, nullable=True)                     # entry_temp - entry_ltp
     exit_diff = Column(Float, nullable=True)
     duration_s = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperState(Base):
+    """One row: is the paper-trade system accepting signals?
+
+    Stop books every open trade at that moment's price and then refuses new
+    webhooks (still logged, so missed signals stay visible); Start resumes.
+    Lives in the database so a server restart cannot silently re-arm a system
+    the client stopped on purpose.
+    """
+    __tablename__ = "paper_state"
+    id = Column(Integer, primary_key=True)                        # always 1
+    enabled = Column(Boolean, nullable=False, default=True)
+    changed_at = Column(DateTime, nullable=True)
+    changed_by = Column(String(64), nullable=True)
 
 
 class PaperSignal(Base):

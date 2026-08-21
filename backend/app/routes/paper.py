@@ -65,31 +65,55 @@ async def webhook_trade(request: Request, key: str | None = Query(None)):
 
 @router.get("/paper/positions")
 def paper_positions(_user: str = Depends(get_current_user_flex)):
-    """Open dummy positions with the live LTP and running P/L."""
+    """Open dummy positions with the live LTP and running P/L, plus everything
+    the page's controls need in the same poll: the dropdown lists and whether
+    the system is running."""
     return {"positions": paper_trades.positions(),
-            "symbols": paper_trades.known_symbols()}
+            "symbols": paper_trades.known_symbols(),
+            "timeframes": paper_trades.known_timeframes(),
+            "state": paper_trades.state()}
+
+
+@router.get("/paper/state")
+def paper_state(_user: str = Depends(get_current_user_flex)):
+    return paper_trades.state()
+
+
+@router.post("/paper/state")
+def paper_set_state(body: dict, user: str = Depends(get_current_user_flex)):
+    """Start or stop the whole paper system.
+
+    Stop books every open trade at that moment's price with exit_reason='stop',
+    then refuses webhooks (still logged) until Start. Recorded with who did it.
+    """
+    on = bool(body.get("enabled"))
+    return paper_trades.set_enabled(on, user)
 
 
 @router.get("/paper/trades")
 def paper_trades_view(
     symbol: str | None = Query(None),
     side: str | None = Query(None, pattern="^(long|short)$"),
+    timeframe: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
     _user: str = Depends(get_current_user_flex),
 ):
     """Closed trades, newest first, paginated, with the summary for the tiles."""
-    return paper_trades.trades(symbol=symbol, side=side, page=page, page_size=page_size)
+    return paper_trades.trades(symbol=symbol, side=side, timeframe=timeframe,
+                               page=page, page_size=page_size)
 
 
 @router.get("/paper/signals")
 def paper_signals_view(
     symbol: str | None = Query(None),
     side: str | None = Query(None, pattern="^(buy|sell)$"),
+    timeframe: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
     _user: str = Depends(get_current_user_flex),
 ):
     """Every webhook received, including the ignored and rejected ones - the
     reason column is the debugging surface for the client's alerts."""
-    return paper_trades.signals(symbol=symbol, side=side, page=page, page_size=page_size)
+    return paper_trades.signals(symbol=symbol, side=side, timeframe=timeframe,
+                                page=page, page_size=page_size)

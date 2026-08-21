@@ -61,6 +61,9 @@ _REQUIRED_COLUMNS = {
     "users": [
         ("role", "VARCHAR(16) DEFAULT 'admin'"),
     ],
+    "paper_trades": [
+        ("exit_reason", "VARCHAR(12)"),
+    ],
 }
 
 

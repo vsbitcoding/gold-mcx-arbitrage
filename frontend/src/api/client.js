@@ -200,18 +200,26 @@ export const api = {
   // Auto Trades (webhook paper trades). Positions poll; trades/signals are
   // fetched on a control change - they only grow when a webhook lands.
   paperPositions: () => request("/api/paper/positions"),
-  paperTrades: ({ symbol, side, page = 1, page_size = 20 } = {}) => {
+  paperTrades: ({ symbol, side, timeframe, page = 1, page_size = 20 } = {}) => {
     const q = new URLSearchParams({ page, page_size });
     if (symbol) q.set("symbol", symbol);
     if (side) q.set("side", side);
+    if (timeframe) q.set("timeframe", timeframe);
     return request(`/api/paper/trades?${q.toString()}`);
   },
-  paperSignals: ({ symbol, side, page = 1, page_size = 20 } = {}) => {
+  paperSignals: ({ symbol, side, timeframe, page = 1, page_size = 20 } = {}) => {
     const q = new URLSearchParams({ page, page_size });
     if (symbol) q.set("symbol", symbol);
     if (side) q.set("side", side);
+    if (timeframe) q.set("timeframe", timeframe);
     return request(`/api/paper/signals?${q.toString()}`);
   },
+  // Start/Stop the whole paper system. Stop books every open trade first.
+  paperSetState: (enabled) => request("/api/paper/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  }),
   // Activity log
   activity: (params = {}) => {
     const q = new URLSearchParams();

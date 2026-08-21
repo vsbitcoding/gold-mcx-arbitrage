@@ -6,9 +6,11 @@ into a paper trade for monitoring only. **No real order is ever placed.**
 
 The rules, exactly as agreed:
 
-* One position per SYMBOL, each symbol its own ledger. GOLDM long and SILVERM
-  short at the same time is normal; two GOLDM buys in a row is a duplicate and
-  the second is ignored (logged, with the reason).
+* One position per SYMBOL + TIMEFRAME pair, each pair its own ledger (client,
+  21-Aug: his 5m and 15m strategies run side by side). GOLDM-5m long and
+  GOLDM-15m short at the same time is normal; a second GOLDM-5m buy is a
+  duplicate and is ignored, logged with the reason. No timeframe in the alert
+  is its own bucket, so mixed setups still work.
 * Signals FLIP: buy closes a short and opens a long in the same breath; sell
   does the reverse. First signal of either side opens from flat.
 * Entry and exit are the exchange LTP **at the moment the webhook arrived**,
@@ -38,7 +40,7 @@ import requests
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import PaperSignal, PaperSymbol, PaperTrade
+from app.models import PaperSignal, PaperState, PaperSymbol, PaperTrade
 from app.services import dhan_auth
 from app.services.extra_instruments import _resolve_front_month
 from app.services.market_data import quote_store
@@ -80,6 +82,86 @@ def _lot_units(symbol: str, master_value) -> float:
     return float(_MULTIPLIERS.get(symbol, mv or 1))
 
 _BASE = "https://api.dhan.co/v2"
+
+# --------------------------------------------------------------------------- #
+# Start / Stop (client, 21-Aug)
+# --------------------------------------------------------------------------- #
+_enabled_cache: bool | None = None
+
+
+def is_enabled() -> bool:
+    global _enabled_cache
+    if _enabled_cache is None:
+        db = SessionLocal()
+        try:
+            row = db.get(PaperState, 1)
+            _enabled_cache = bool(row.enabled) if row else True
+        except Exception:  # noqa: BLE001 - never let a DB blip halt trading state
+            _enabled_cache = True
+        finally:
+            db.close()
+    return _enabled_cache
+
+
+def set_enabled(on: bool, username: str) -> dict:
+    """Start or stop the whole system.
+
+    Stop first books EVERY open trade at that moment's price - the client's
+    words: close, calculate, store, then stop. Each closes with
+    exit_reason='stop' so History says which endings were his hand and which
+    were the strategy's. While stopped, webhooks are logged but fire nothing.
+    """
+    global _enabled_cache
+    closed = []
+    with _lock:
+        db = SessionLocal()
+        try:
+            if not on:
+                now = datetime.now()
+                for tr in (db.query(PaperTrade)
+                           .filter(PaperTrade.status == "open").all()):
+                    rec = _symbols.get(tr.symbol) or {}
+                    ltp, _age = _ltp(rec) if rec else (None, None)
+                    # The books must balance even on a dead feed: no price at
+                    # all closes flat at entry rather than not closing, because
+                    # "stop" means stop.
+                    _close(tr, ltp or tr.entry_ltp, now, reason="stop")
+                    closed.append({"id": tr.id, "symbol": tr.symbol,
+                                   "timeframe": tr.timeframe, "pnl": tr.pnl})
+            row = db.get(PaperState, 1)
+            if not row:
+                row = PaperState(id=1)
+                db.add(row)
+            row.enabled = bool(on)
+            row.changed_at = datetime.now()
+            row.changed_by = username
+            db.add(PaperSignal(
+                received_at=datetime.now(), action="started" if on else "stopped",
+                reason=(f"by {username}" if on else
+                        f"by {username} - closed {len(closed)} open trade(s)")))
+            db.commit()
+            _enabled_cache = bool(on)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            raise
+        finally:
+            db.close()
+    log.info("paper: system %s by %s (%d closed)",
+             "started" if on else "STOPPED", username, len(closed))
+    return {"enabled": bool(on), "closed": closed}
+
+
+def state() -> dict:
+    db = SessionLocal()
+    try:
+        row = db.get(PaperState, 1)
+        return {"enabled": bool(row.enabled) if row else True,
+                "changed_at": (row.changed_at.isoformat(sep=" ", timespec="seconds")
+                               if row and row.changed_at else None),
+                "changed_by": row.changed_by if row else None}
+    finally:
+        db.close()
+
 
 # One lock for the whole state machine. Webhooks arrive one at a time from one
 # client; correctness beats concurrency here, and the hold time is milliseconds.
@@ -247,7 +329,8 @@ def _rest_ltp(rec: dict) -> float | None:
 # --------------------------------------------------------------------------- #
 # The state machine
 # --------------------------------------------------------------------------- #
-def _close(trade: PaperTrade, ltp: float, now: datetime) -> None:
+def _close(trade: PaperTrade, ltp: float, now: datetime,
+           reason: str = "signal") -> None:
     """Fill in the exit half and every derived number. Pure arithmetic.
 
     The temp_* columns still exist in the table and stay empty: dropping a
@@ -261,6 +344,7 @@ def _close(trade: PaperTrade, ltp: float, now: datetime) -> None:
     if trade.lot_units:
         trade.pnl = round(trade.points * (trade.lots or 1) * trade.lot_units, 2)
     trade.duration_s = max(0, int((now - trade.entry_time).total_seconds()))
+    trade.exit_reason = reason
     trade.status = "closed"
 
 
@@ -282,7 +366,8 @@ def process_signal(payload: dict, raw_body: str) -> dict:
                      or payload.get("lot_size") or 1) or 1
     except (TypeError, ValueError):
         lots = 1.0
-    timeframe = str(payload.get("timeframe") or payload.get("tf") or "").strip() or None
+    timeframe = (str(payload.get("timeframe") or payload.get("tf") or "")
+                 .strip().lower() or None)
     # temp_price retired (client, 20-Aug): alerts may still send it - it is
     # simply ignored, never an error. It survives only inside raw_json.
 
@@ -313,6 +398,10 @@ def process_signal(payload: dict, raw_body: str) -> dict:
         return _log("rejected", f"type must be buy or sell, got {side_raw!r}")
     if not symbol:
         return _log("rejected", "symbol missing")
+    # The Stop button outranks everything: the signal is still LOGGED - missed
+    # entries must stay visible - but nothing fires until Start.
+    if not is_enabled():
+        return _log("rejected", "system stopped - press Start on the dashboard to resume")
 
     from app.services import dhan_feed
     if not dhan_feed.is_market_open():
@@ -335,14 +424,21 @@ def process_signal(payload: dict, raw_body: str) -> dict:
 
         db = SessionLocal()
         try:
+            # The ledger key is symbol + timeframe (client, 21-Aug): his 5m and
+            # 15m strategies trade the same symbol independently, so only an
+            # exact repeat - same symbol, same timeframe, same side - is a
+            # duplicate. `== None` compiles to IS NULL, so alerts without a
+            # timeframe form their own bucket rather than colliding.
             open_trade = (db.query(PaperTrade)
                           .filter(PaperTrade.symbol == symbol,
+                                  PaperTrade.timeframe == timeframe,
                                   PaperTrade.status == "open")
                           .first())
             want = "long" if side == "buy" else "short"
 
             if open_trade and open_trade.side == want:
-                res = _log("ignored", f"already {want} {symbol} "
+                res = _log("ignored", f"already {want} {symbol}"
+                                      f"{' ' + timeframe if timeframe else ''} "
                                       f"(trade #{open_trade.id}) - duplicate {side}")
             else:
                 closed_id = None
@@ -406,7 +502,19 @@ def positions() -> list[dict]:
         db.close()
 
 
+def known_timeframes() -> list[str]:
+    """Every timeframe that has actually appeared, for the dropdown."""
+    db = SessionLocal()
+    try:
+        seen = {r[0] for r in db.query(PaperTrade.timeframe).distinct()}
+        seen |= {r[0] for r in db.query(PaperSignal.timeframe).distinct()}
+        return sorted(s for s in seen if s)
+    finally:
+        db.close()
+
+
 def trades(symbol: str | None = None, side: str | None = None,
+           timeframe: str | None = None,
            page: int = 1, page_size: int = 20) -> dict:
     """Closed trades, newest first, with an all-pages summary for the tiles."""
     from sqlalchemy import func
@@ -418,6 +526,8 @@ def trades(symbol: str | None = None, side: str | None = None,
             q = q.filter(PaperTrade.symbol == symbol.upper())
         if side in ("long", "short"):
             q = q.filter(PaperTrade.side == side)
+        if timeframe:
+            q = q.filter(PaperTrade.timeframe == timeframe.lower())
         total = q.count()
         agg = (db.query(func.sum(PaperTrade.pnl),
                         func.sum(func.iif(PaperTrade.pnl > 0, 1, 0)),
@@ -427,6 +537,8 @@ def trades(symbol: str | None = None, side: str | None = None,
             agg = agg.filter(PaperTrade.symbol == symbol.upper())
         if side in ("long", "short"):
             agg = agg.filter(PaperTrade.side == side)
+        if timeframe:
+            agg = agg.filter(PaperTrade.timeframe == timeframe.lower())
         pnl_sum, wins, losses = agg.first() or (None, 0, 0)
         rows = (q.order_by(PaperTrade.exit_time.desc())
                 .offset((page - 1) * page_size).limit(page_size).all())
@@ -440,6 +552,8 @@ def trades(symbol: str | None = None, side: str | None = None,
                               if r.exit_time else None),
                 "exit_ltp": r.exit_ltp,
                 "points": r.points, "pnl": r.pnl,
+                # 'signal' = the opposite webhook; 'stop' = the Stop button.
+                "exit_reason": r.exit_reason or "signal",
                 "duration_s": r.duration_s,
             } for r in rows],
             "total": total, "page": page, "page_size": page_size,
@@ -456,6 +570,7 @@ def trades(symbol: str | None = None, side: str | None = None,
 
 
 def signals(symbol: str | None = None, side: str | None = None,
+            timeframe: str | None = None,
             page: int = 1, page_size: int = 20) -> dict:
     page, page_size = max(1, int(page)), min(100, max(5, int(page_size)))
     db = SessionLocal()
@@ -465,6 +580,8 @@ def signals(symbol: str | None = None, side: str | None = None,
             q = q.filter(PaperSignal.symbol == symbol.upper())
         if side in ("buy", "sell"):
             q = q.filter(PaperSignal.side == side)
+        if timeframe:
+            q = q.filter(PaperSignal.timeframe == timeframe.lower())
         total = q.count()
         rows = (q.order_by(PaperSignal.received_at.desc(), PaperSignal.id.desc())
                 .offset((page - 1) * page_size).limit(page_size).all())

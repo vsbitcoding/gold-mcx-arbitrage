@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client.js";
+import { useConfirm } from "./ConfirmDialog.jsx";
 import { fmtNum } from "../utils/format.js";
 
 // Webhook paper trades (client, 20-Aug). TradingView fires buy/sell webhooks;
@@ -77,9 +78,13 @@ export default function AutoTrades() {
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("arbi_pt_view") || "live"; } catch { return "live"; }
   });
+  const confirm = useConfirm();
   const [symbol, setSymbol] = useState("");
   const [side, setSide] = useState("");
+  const [tf, setTf] = useState("");
   const [symbols, setSymbols] = useState([]);
+  const [tfs, setTfs] = useState([]);
+  const [busyState, setBusyState] = useState(false);
 
   const [live, setLive] = useState(null);
   const [hist, setHist] = useState(null);
@@ -91,7 +96,7 @@ export default function AutoTrades() {
 
   useEffect(() => { try { localStorage.setItem("arbi_pt_view", view); } catch {} }, [view]);
   // Filters reset their pagination - page 3 of a different filter is nonsense.
-  useEffect(() => { setHistPage(1); setLogPage(1); }, [symbol, side]);
+  useEffect(() => { setHistPage(1); setLogPage(1); }, [symbol, side, tf]);
 
   // Live polls; the other two tabs are event-shaped data and fetch on demand.
   useEffect(() => {
@@ -100,7 +105,10 @@ export default function AutoTrades() {
       if (document.hidden) return;
       try {
         const r = await api.paperPositions();
-        if (alive) { setLive(r); setSymbols(r.symbols || []); setErr(null); }
+        if (alive) {
+          setLive(r); setSymbols(r.symbols || []);
+          setTfs(r.timeframes || []); setErr(null);
+        }
       } catch (e) { if (alive) setErr(e.message); }
     }
     load();
@@ -111,11 +119,11 @@ export default function AutoTrades() {
   useEffect(() => {
     if (view !== "history") return undefined;
     let alive = true;
-    api.paperTrades({ symbol, side, page: histPage })
+    api.paperTrades({ symbol, side, timeframe: tf, page: histPage })
       .then((r) => { if (alive) { setHist(r); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [view, symbol, side, histPage]);
+  }, [view, symbol, side, tf, histPage]);
 
   useEffect(() => {
     if (view !== "log") return undefined;
@@ -123,18 +131,19 @@ export default function AutoTrades() {
     // History filters speak long/short; the log speaks buy/sell. One dropdown
     // serves both, translated here.
     const logSide = side === "long" ? "buy" : side === "short" ? "sell" : "";
-    api.paperSignals({ symbol, side: logSide, page: logPage })
+    api.paperSignals({ symbol, side: logSide, timeframe: tf, page: logPage })
       .then((r) => { if (alive) { setLogs(r); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [view, symbol, side, logPage]);
+  }, [view, symbol, side, tf, logPage]);
 
   const positions = useMemo(() => {
     let p = live?.positions || [];
     if (symbol) p = p.filter((x) => x.symbol === symbol);
     if (side) p = p.filter((x) => x.side === side);
+    if (tf) p = p.filter((x) => (x.timeframe || "") === tf);
     return p;
-  }, [live, symbol, side]);
+  }, [live, symbol, side, tf]);
 
   const runningPnl = useMemo(
     () => positions.reduce((a, x) => a + (x.pnl || 0), 0), [positions]);
@@ -144,11 +153,11 @@ export default function AutoTrades() {
   // (the open-position count dropping is the only way one ever does).
   useEffect(() => {
     let alive = true;
-    api.paperTrades({ symbol, side, page: 1, page_size: 5 })
+    api.paperTrades({ symbol, side, timeframe: tf, page: 1, page_size: 5 })
       .then((r) => { if (alive) setHist((h) => (view === "history" ? h : r)); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [symbol, side, live?.positions?.length]);
+  }, [symbol, side, tf, live?.positions?.length]);
 
   // One clock for every card's "since entry" - ticking once a second beats
   // 3-second jumps, and one interval beats one per card.
@@ -160,6 +169,30 @@ export default function AutoTrades() {
   }, [view]);
 
   const sum = hist?.summary;
+  const sysOn = live?.state ? !!live.state.enabled : true;
+
+  async function toggleSystem() {
+    if (busyState) return;
+    if (sysOn) {
+      const openCount = (live?.positions || []).length;
+      const ok = await confirm({
+        title: "Stop the system?",
+        message: openCount
+          ? `All ${openCount} open trade${openCount === 1 ? "" : "s"} will be closed at the current price and booked to History. Webhooks will be logged but no trades will fire until you press Start.`
+          : "Webhooks will be logged but no trades will fire until you press Start.",
+        confirmText: "Stop and close all",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setBusyState(true);
+    try {
+      await api.paperSetState(!sysOn);
+      const r = await api.paperPositions();
+      setLive(r); setSymbols(r.symbols || []); setTfs(r.timeframes || []);
+    } catch (e) { setErr(e.message); }
+    finally { setBusyState(false); }
+  }
 
   return (
     <div className="pt-page">
@@ -169,6 +202,14 @@ export default function AutoTrades() {
           <span className="intl-status on" title="Dummy trades fired by webhook, monitored on the live MCX feed. No real orders anywhere.">
             ● Paper only
           </span>
+          <button type="button" disabled={busyState}
+            className={`pt-power ${sysOn ? "running" : "stopped"}`}
+            title={sysOn
+              ? "Stop: closes every open trade at the current price, then webhooks fire nothing until Start."
+              : "Start: webhooks fire trades again from now on."}
+            onClick={toggleSystem}>
+            {busyState ? "…" : sysOn ? "■ Stop" : "▶ Start"}
+          </button>
         </div>
 
         {/* centred, same level - the layout the client drew */}
@@ -186,6 +227,11 @@ export default function AutoTrades() {
             <option value="">All symbols</option>
             {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
+          <select className="oh-weeks" value={tf} onChange={(e) => setTf(e.target.value)}
+            aria-label="Timeframe filter">
+            <option value="">All timeframes</option>
+            {tfs.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
           <select className="oh-weeks" value={side} onChange={(e) => setSide(e.target.value)}
             aria-label="Side filter">
             <option value="">Buy + Sell</option>
@@ -196,6 +242,16 @@ export default function AutoTrades() {
       </div>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
+
+      {!sysOn && (
+        <div className="pt-stopped">
+          <b>System stopped</b>
+          {live?.state?.changed_by ? ` by ${live.state.changed_by}` : ""}
+          {live?.state?.changed_at ? ` · ${when(live.state.changed_at)}` : ""}.
+          Incoming webhooks are being logged with the reason, but no trade will
+          open or close until Start is pressed.
+        </div>
+      )}
 
       {view === "live" && (
         <>
@@ -292,7 +348,7 @@ export default function AutoTrades() {
                 <tr>
                   <th>#</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
                   <th>Entry</th><th>Entry ₹</th><th>Exit</th><th>Exit ₹</th>
-                  <th>Points</th><th>P/L ₹</th><th>Duration</th>
+                  <th>Points</th><th>P/L ₹</th><th>Closed by</th><th>Duration</th>
                 </tr>
               </thead>
               <tbody>
@@ -309,6 +365,14 @@ export default function AutoTrades() {
                     <td>{num(r.exit_ltp)}</td>
                     <td className={r.points >= 0 ? "pos" : "neg"}>{signed(r.points)}</td>
                     <td className={`pt-pnl ${r.pnl >= 0 ? "pos" : "neg"}`}>{signed(r.pnl)}</td>
+                    <td>
+                      <span className={`pt-act ${r.exit_reason === "stop" ? "pt-act-flipped" : "pt-act-ignored"}`}
+                        title={r.exit_reason === "stop"
+                          ? "Closed by the Stop button, at that moment's price."
+                          : "Closed by the opposite webhook signal."}>
+                        {r.exit_reason === "stop" ? "stop" : "webhook"}
+                      </span>
+                    </td>
                     <td>{dur(r.duration_s)}</td>
                   </tr>
                 ))}
