@@ -214,6 +214,9 @@ export const api = {
     if (timeframe) q.set("timeframe", timeframe);
     return request(`/api/paper/signals?${q.toString()}`);
   },
+  // Manually close ONE open paper trade at the current price. The page
+  // double-confirms before calling.
+  paperCloseTrade: (id) => request(`/api/paper/close/${id}`, { method: "POST" }),
   // Start/Stop the whole paper system. Stop books every open trade first.
   paperSetState: (enabled) => request("/api/paper/state", {
     method: "POST",

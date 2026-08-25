@@ -151,6 +151,48 @@ def set_enabled(on: bool, username: str) -> dict:
     return {"enabled": bool(on), "closed": closed}
 
 
+def close_trade(trade_id: int, username: str) -> dict:
+    """Close ONE open trade by hand, at this moment's price (client, 24-Aug).
+
+    Same booking as a webhook flip, but exit_reason='manual' so History shows
+    whose decision the exit was. Confirmed twice in the UI before this is ever
+    called; here we only verify the trade is real and still open.
+    """
+    with _lock:
+        db = SessionLocal()
+        try:
+            tr = db.get(PaperTrade, int(trade_id))
+            if not tr:
+                return {"ok": False, "reason": "trade not found"}
+            if tr.status != "open":
+                return {"ok": False, "reason": f"trade #{trade_id} is already closed"}
+            if not _loaded:
+                _load_symbols()
+            rec = _symbols.get(tr.symbol) or {}
+            ltp, _age = _ltp(rec) if rec else (None, None)
+            # Same rule as Stop: the book must balance even on a dead feed -
+            # no price at all books flat at entry rather than refusing.
+            _close(tr, ltp or tr.entry_ltp, datetime.now(), reason="manual")
+            db.add(PaperSignal(
+                received_at=datetime.now(), symbol=tr.symbol, side=None,
+                timeframe=tr.timeframe, action="closed",
+                reason=f"manual close by {username}", ltp=tr.exit_ltp,
+                trade_id=tr.id))
+            db.commit()
+            out = {"ok": True, "id": tr.id, "symbol": tr.symbol,
+                   "exit_ltp": tr.exit_ltp, "points": tr.points, "pnl": tr.pnl}
+        except Exception as e:  # noqa: BLE001
+            db.rollback()
+            log.exception("paper: manual close failed")
+            out = {"ok": False, "reason": str(e)}
+        finally:
+            db.close()
+    if out.get("ok"):
+        log.info("paper: trade #%s closed manually by %s (pnl %s)",
+                 out["id"], username, out["pnl"])
+    return out
+
+
 def state() -> dict:
     db = SessionLocal()
     try:

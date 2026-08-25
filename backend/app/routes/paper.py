@@ -90,6 +90,17 @@ def paper_set_state(body: dict, user: str = Depends(get_current_user_flex)):
     return paper_trades.set_enabled(on, user)
 
 
+@router.post("/paper/close/{trade_id}")
+def paper_close_trade(trade_id: int, user: str = Depends(get_current_user_flex)):
+    """Manually close one open trade at the current price (exit_reason='manual').
+    The UI double-confirms before calling; a wrong id or an already-closed
+    trade answers 409 rather than pretending."""
+    res = paper_trades.close_trade(trade_id, user)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason", "cannot close"))
+    return res
+
+
 @router.get("/paper/trades")
 def paper_trades_view(
     symbol: str | None = Query(None),

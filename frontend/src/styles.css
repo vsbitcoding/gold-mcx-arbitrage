@@ -5760,3 +5760,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   font-size: 12.5px;
 }
 .pt-stopped b { font-weight: 800; margin-right: 2px; }
+
+/* Manual close on a position card - quiet until hovered; the confirm dialog
+   is the guard, the button just should not shout. */
+.pt-close {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+  padding: 3px 10px; margin-left: 10px; border-radius: 999px; cursor: pointer;
+  background: none; border: 1px solid var(--border); color: var(--text-secondary);
+}
+.pt-close:hover { border-color: var(--neg, #c62828); color: var(--neg, #c62828); }
+.pt-act-manual { background: rgba(37,99,235,.12); color: var(--series-2, #2563eb); }

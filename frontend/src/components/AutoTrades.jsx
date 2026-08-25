@@ -171,6 +171,25 @@ export default function AutoTrades() {
   const sum = hist?.summary;
   const sysOn = live?.state ? !!live.state.enabled : true;
 
+  // Manual close of one card. Same double-confirm ritual the app uses for
+  // every destructive act - Stop, logout - because a booked exit cannot be
+  // un-booked (client, 24-Aug: "same like generally aapde delete par karta").
+  async function closeTrade(p) {
+    const up = (p.pnl ?? 0) >= 0;
+    const ok = await confirm({
+      title: `Close ${p.symbol}${p.timeframe ? " " + p.timeframe : ""}?`,
+      message: `This books the ${p.side} position at the current price - running P/L ${up ? "+" : "−"}₹${fmtNum(Math.abs(p.pnl ?? 0), 2)} becomes final and goes to History. This cannot be undone.`,
+      confirmText: "Close trade",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.paperCloseTrade(p.id);
+      const r = await api.paperPositions();
+      setLive(r); setSymbols(r.symbols || []); setTfs(r.timeframes || []);
+    } catch (e) { setErr(e.message); }
+  }
+
   async function toggleSystem() {
     if (busyState) return;
     if (sysOn) {
@@ -304,6 +323,9 @@ export default function AutoTrades() {
                         {num(p.lots, 0)} lot{p.lots === 1 ? "" : "s"}
                         {p.timeframe ? ` · ${p.timeframe}` : ""}
                       </span>
+                      <button type="button" className="pt-close"
+                        title="Close this trade now at the current price (asks first)"
+                        onClick={() => closeTrade(p)}>Close</button>
                     </div>
 
                     <div className="pt-card-pnl">
@@ -366,11 +388,17 @@ export default function AutoTrades() {
                     <td className={r.points >= 0 ? "pos" : "neg"}>{signed(r.points)}</td>
                     <td className={`pt-pnl ${r.pnl >= 0 ? "pos" : "neg"}`}>{signed(r.pnl)}</td>
                     <td>
-                      <span className={`pt-act ${r.exit_reason === "stop" ? "pt-act-flipped" : "pt-act-ignored"}`}
+                      <span className={`pt-act ${
+                          r.exit_reason === "stop" ? "pt-act-flipped"
+                          : r.exit_reason === "manual" ? "pt-act-manual"
+                          : "pt-act-ignored"}`}
                         title={r.exit_reason === "stop"
                           ? "Closed by the Stop button, at that moment's price."
-                          : "Closed by the opposite webhook signal."}>
-                        {r.exit_reason === "stop" ? "stop" : "webhook"}
+                          : r.exit_reason === "manual"
+                            ? "Closed by hand from the position card."
+                            : "Closed by the opposite webhook signal."}>
+                        {r.exit_reason === "stop" ? "stop"
+                          : r.exit_reason === "manual" ? "manual" : "webhook"}
                       </span>
                     </td>
                     <td>{dur(r.duration_s)}</td>
