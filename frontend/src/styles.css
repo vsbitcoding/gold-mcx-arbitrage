@@ -5770,3 +5770,89 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 }
 .pt-close:hover { border-color: var(--neg, #c62828); color: var(--neg, #c62828); }
 .pt-act-manual { background: rgba(37,99,235,.12); color: var(--series-2, #2563eb); }
+
+/* ------------------------------------------ paper accounts management ----- */
+.pt-overlay {
+  position: fixed; inset: 0; z-index: 90; display: flex;
+  align-items: flex-start; justify-content: center; padding: 8vh 16px 16px;
+  background: rgba(10, 14, 26, .55);
+}
+.pt-modal {
+  width: min(560px, 100%); max-height: 80vh; overflow-y: auto;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+.pt-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 18px; border-bottom: 1px solid var(--border);
+}
+.pt-modal-head b { font-size: 15px; font-weight: 800; }
+.pt-modal-x {
+  background: none; border: none; font-size: 22px; line-height: 1;
+  color: var(--text-secondary); cursor: pointer;
+}
+.pt-form { padding: 16px 18px; display: grid; gap: 13px; }
+.pt-form label { display: grid; gap: 4px; }
+.pt-form label > span {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-secondary);
+}
+.pt-form label > span em {
+  font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 600;
+  margin-left: 6px; opacity: .8;
+}
+.pt-form input {
+  padding: 8px 11px; font-size: 14px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-page, var(--bg-surface)); color: var(--text-primary);
+}
+.pt-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.pt-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pt-form-syms > span {
+  display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-secondary); margin-bottom: 7px;
+}
+.pt-symgrid { display: flex; flex-wrap: wrap; gap: 8px; }
+.pt-symtick {
+  display: inline-flex !important; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); font-size: 12px; font-weight: 700;
+}
+.pt-symtick.on { border-color: var(--accent); background: rgba(201,162,78,.12); }
+.pt-form-foot { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
+
+.pt-symadd { display: flex; gap: 9px; }
+.pt-symadd input { flex: 1; }
+.pt-symlist { display: grid; gap: 7px; }
+.pt-symrow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 11px; border: 1px solid var(--border); border-radius: 9px;
+}
+.pt-symrow b { margin-right: auto; font-weight: 800; letter-spacing: .02em; }
+.pt-symrow input { flex: 1; }
+.pt-danger:hover { border-color: var(--neg, #c62828); color: var(--neg, #c62828); }
+
+.pt-accbtns { display: flex; gap: 9px; }
+.pt-acclist { display: grid; gap: 10px; padding: 13px 15px 15px; }
+.pt-accrow {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: 11px; padding: 11px 14px;
+}
+.pt-accmain { display: flex; align-items: center; gap: 11px; flex: 1; flex-wrap: wrap; }
+.pt-accmain > b { font-size: 14.5px; font-weight: 800; }
+.pt-accsyms { display: flex; gap: 6px; flex-wrap: wrap; }
+.pt-accsyms i {
+  font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: .03em;
+  padding: 2px 9px; border-radius: 999px;
+  background: rgba(201,162,78,.13); color: var(--accent);
+}
+.pt-accsyms em { font-style: normal; font-size: 11.5px; color: var(--neg, #c62828); }
+.pt-accmeta { display: flex; gap: 9px; font-size: 11px; color: var(--text-secondary); }
+.pt-accact { display: flex; gap: 8px; }
+
+.pt-acct {
+  font-size: 10px; font-weight: 800; letter-spacing: .04em;
+  padding: 2px 9px; border-radius: 999px;
+  background: rgba(127,127,127,.12); color: var(--text-secondary);
+}
+.pt-acct-cell { font-weight: 700; }

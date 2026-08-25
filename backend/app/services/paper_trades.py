@@ -40,7 +40,8 @@ import requests
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import PaperSignal, PaperState, PaperSymbol, PaperTrade
+from app.models import (PaperAccount, PaperSignal, PaperState, PaperSymbol,
+                        PaperTrade)
 from app.services import dhan_auth
 from app.services.extra_instruments import _resolve_front_month
 from app.services.market_data import quote_store
@@ -284,6 +285,85 @@ def ensure_symbol(symbol: str) -> tuple[dict | None, bool, str | None]:
     return rec, True, None
 
 
+def symbol_add(raw: str) -> dict:
+    """Manage Symbols popup: add. Resolves against the Dhan master right here,
+    so a typo is refused with a reason instead of stored broken."""
+    sym = normalise_symbol(raw)
+    if not sym:
+        return {"ok": False, "reason": "symbol name required"}
+    rec, is_new, err = ensure_symbol(sym)
+    if err:
+        return {"ok": False, "reason": err}
+    if is_new:
+        from app.services import dhan_feed
+        threading.Thread(target=lambda: dhan_feed.request_resubscribe(
+            f"paper symbol {sym} added"), daemon=True).start()
+    return {"ok": True, "symbol": sym, "contract": rec.get("trading_symbol"),
+            "lot_units": rec.get("lot_units"), "existed": not is_new}
+
+
+def symbol_delete(raw: str) -> dict:
+    """Remove from the master list and from every account. Open trades block
+    it - a live position must never point at a symbol the system forgot."""
+    sym = normalise_symbol(raw)
+    if not _loaded:
+        _load_symbols()
+    if sym not in _symbols:
+        return {"ok": False, "reason": f"{sym} is not in the list"}
+    db = SessionLocal()
+    try:
+        open_n = (db.query(PaperTrade)
+                  .filter(PaperTrade.symbol == sym,
+                          PaperTrade.status == "open").count())
+        if open_n:
+            return {"ok": False,
+                    "reason": f"{sym} has {open_n} open trade(s) - close them first"}
+        db.query(PaperSymbol).filter(PaperSymbol.symbol == sym).delete()
+        for a in db.query(PaperAccount).all():
+            try:
+                syms = json.loads(a.symbols_json or "[]")
+            except ValueError:
+                syms = []
+            if sym in syms:
+                a.symbols_json = json.dumps([s for s in syms if s != sym])
+        db.commit()
+        _symbols.pop(sym, None)
+        return {"ok": True}
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        return {"ok": False, "reason": str(e)}
+    finally:
+        db.close()
+
+
+def symbol_rename(old_raw: str, new_raw: str) -> dict:
+    """Edit = resolve the new name first, move every account over, drop the
+    old. Refused while the old one has open trades."""
+    new_res = symbol_add(new_raw)
+    if not new_res.get("ok"):
+        return new_res
+    old_sym, new_sym = normalise_symbol(old_raw), new_res["symbol"]
+    if old_sym == new_sym:
+        return {"ok": True, "symbol": new_sym}
+    db = SessionLocal()
+    try:
+        for a in db.query(PaperAccount).all():
+            try:
+                syms = json.loads(a.symbols_json or "[]")
+            except ValueError:
+                syms = []
+            if old_sym in syms:
+                a.symbols_json = json.dumps(
+                    sorted({new_sym if s == old_sym else s for s in syms}))
+        db.commit()
+    finally:
+        db.close()
+    out = symbol_delete(old_sym)
+    if not out.get("ok"):
+        return {"ok": False, "reason": f"added {new_sym}, but: {out['reason']}"}
+    return {"ok": True, "symbol": new_sym}
+
+
 def refresh() -> None:
     """Called by the Dhan feed on every (re)connect: re-resolve each symbol so a
     rolled contract is replaced, exactly like every other subscription list."""
@@ -331,6 +411,112 @@ def get_subscription_meta() -> dict[str, dict]:
                                  "trading_symbol": rec["trading_symbol"],
                                  "kind": "paper"}
             for sym, rec in _symbols.items() if rec.get("security_id")}
+
+
+# --------------------------------------------------------------------------- #
+# Accounts (client, 24-Aug): the webhook fans out to every account whose
+# symbol list contains the signalled symbol. All still paper - the Angel
+# fields are stored placeholders for a future "real" switch, nothing reads
+# them today and nothing ever logs them.
+# --------------------------------------------------------------------------- #
+def accounts_list(mask: bool = True) -> list[dict]:
+    db = SessionLocal()
+    try:
+        out = []
+        for a in db.query(PaperAccount).order_by(PaperAccount.name).all():
+            try:
+                syms = json.loads(a.symbols_json or "[]")
+            except ValueError:
+                syms = []
+            out.append({
+                "id": a.id, "name": a.name, "symbols": sorted(syms),
+                # masked: the UI shows that a value exists, never the value
+                "angel_client_id": a.angel_client_id or "",
+                "angel_mpin": ("•••" if a.angel_mpin else "") if mask else (a.angel_mpin or ""),
+                "angel_totp": ("•••" if a.angel_totp else "") if mask else (a.angel_totp or ""),
+            })
+        return out
+    finally:
+        db.close()
+
+
+def _valid_symbols(symbols) -> tuple[list[str], str | None]:
+    """Only symbols that exist in the master list may be attached."""
+    if not _loaded:
+        _load_symbols()
+    clean = []
+    for s in symbols or []:
+        s = str(s).strip().upper()
+        if not s:
+            continue
+        if s not in _symbols:
+            return [], f"unknown symbol {s} - add it in Manage Symbols first"
+        if s not in clean:
+            clean.append(s)
+    return clean, None
+
+
+def account_save(data: dict, account_id: int | None = None) -> dict:
+    """Create or update an account. Empty Angel fields stay as they were on
+    update, so editing the symbol list cannot silently wipe stored creds."""
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "reason": "account name required"}
+    syms, err = _valid_symbols(data.get("symbols"))
+    if err:
+        return {"ok": False, "reason": err}
+    db = SessionLocal()
+    try:
+        dup = (db.query(PaperAccount)
+               .filter(PaperAccount.name == name, PaperAccount.id != (account_id or 0))
+               .first())
+        if dup:
+            return {"ok": False, "reason": f"account '{name}' already exists"}
+        row = db.get(PaperAccount, account_id) if account_id else None
+        if account_id and not row:
+            return {"ok": False, "reason": "account not found"}
+        if not row:
+            row = PaperAccount(name=name)
+            db.add(row)
+        row.name = name
+        row.symbols_json = json.dumps(syms)
+        for field in ("angel_client_id", "angel_mpin", "angel_totp"):
+            v = data.get(field)
+            if v is not None and str(v).strip() != "":
+                setattr(row, field, str(v).strip())
+        db.commit()
+        return {"ok": True, "id": row.id, "name": row.name, "symbols": syms}
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        return {"ok": False, "reason": str(e)}
+    finally:
+        db.close()
+
+
+def account_delete(account_id: int) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.get(PaperAccount, account_id)
+        if not row:
+            return {"ok": False, "reason": "account not found"}
+        open_n = (db.query(PaperTrade)
+                  .filter(PaperTrade.account_id == account_id,
+                          PaperTrade.status == "open").count())
+        if open_n:
+            return {"ok": False,
+                    "reason": f"{row.name} has {open_n} open trade(s) - close them first"}
+        db.delete(row)
+        db.commit()
+        return {"ok": True}
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        return {"ok": False, "reason": str(e)}
+    finally:
+        db.close()
+
+
+def _accounts_for(symbol: str) -> list[dict]:
+    return [a for a in accounts_list() if symbol in a["symbols"]]
 
 
 # --------------------------------------------------------------------------- #
@@ -414,13 +600,13 @@ def process_signal(payload: dict, raw_body: str) -> dict:
     # simply ignored, never an error. It survives only inside raw_json.
 
     def _log(action: str, reason: str | None = None, ltp: float | None = None,
-             trade_id: int | None = None) -> dict:
+             trade_id: int | None = None, account: str | None = None) -> dict:
         db = SessionLocal()
         try:
             db.add(PaperSignal(
                 received_at=now, symbol_raw=str(symbol_raw or "")[:64] or None,
                 symbol=symbol, side=side or side_raw or None, lots=lots,
-                timeframe=timeframe, action=action,
+                timeframe=timeframe, action=action, account=account,
                 reason=reason, ltp=ltp, trade_id=trade_id,
                 latency_ms=int((time.perf_counter() - t0) * 1000),
                 raw_json=raw_body[:2000] if raw_body else None))
@@ -429,7 +615,8 @@ def process_signal(payload: dict, raw_body: str) -> dict:
             db.rollback()
         finally:
             db.close()
-        out = {"status": action, "symbol": symbol, "side": side, "ltp": ltp}
+        out = {"status": action, "symbol": symbol, "side": side, "ltp": ltp,
+               "account": account}
         if reason:
             out["reason"] = reason
         if trade_id:
@@ -464,44 +651,59 @@ def process_signal(payload: dict, raw_body: str) -> dict:
         if age is not None and age > _FRESH_SECONDS:
             return _log("rejected", f"price is {int(age)}s old - feed stale, refusing to trade on it")
 
+        # The webhook fans out to every account whose list carries the symbol
+        # (client, 24-Aug), one LTP read shared by all so every ledger books the
+        # same instant. The ledger key is account + symbol + timeframe; only an
+        # exact repeat within ONE account is a duplicate there - the other
+        # accounts still act. `== None` compiles to IS NULL, so alerts without
+        # a timeframe form their own bucket rather than colliding.
+        targets = _accounts_for(symbol)
+        if not targets:
+            return _log("rejected",
+                        f"no account has {symbol} in its symbol list - "
+                        "add it under Accounts")
+        want = "long" if side == "buy" else "short"
+        results = []
         db = SessionLocal()
         try:
-            # The ledger key is symbol + timeframe (client, 21-Aug): his 5m and
-            # 15m strategies trade the same symbol independently, so only an
-            # exact repeat - same symbol, same timeframe, same side - is a
-            # duplicate. `== None` compiles to IS NULL, so alerts without a
-            # timeframe form their own bucket rather than colliding.
-            open_trade = (db.query(PaperTrade)
-                          .filter(PaperTrade.symbol == symbol,
-                                  PaperTrade.timeframe == timeframe,
-                                  PaperTrade.status == "open")
-                          .first())
-            want = "long" if side == "buy" else "short"
-
-            if open_trade and open_trade.side == want:
-                res = _log("ignored", f"already {want} {symbol}"
-                                      f"{' ' + timeframe if timeframe else ''} "
-                                      f"(trade #{open_trade.id}) - duplicate {side}")
-            else:
+            for acc in targets:
+                open_trade = (db.query(PaperTrade)
+                              .filter(PaperTrade.account_id == acc["id"],
+                                      PaperTrade.symbol == symbol,
+                                      PaperTrade.timeframe == timeframe,
+                                      PaperTrade.status == "open")
+                              .first())
+                if open_trade and open_trade.side == want:
+                    results.append(_log(
+                        "ignored", f"already {want} {symbol}"
+                                   f"{' ' + timeframe if timeframe else ''} "
+                                   f"(trade #{open_trade.id}) - duplicate {side}",
+                        account=acc["name"]))
+                    continue
                 closed_id = None
                 if open_trade:
                     _close(open_trade, ltp, now)
                     closed_id = open_trade.id
                 new = PaperTrade(symbol=symbol, side=want, lots=lots,
                                  lot_units=rec.get("lot_units"), timeframe=timeframe,
-                                 entry_time=now, entry_ltp=ltp, status="open")
+                                 entry_time=now, entry_ltp=ltp, status="open",
+                                 account_id=acc["id"])
                 db.add(new)
                 db.commit()
-                res = _log("flipped" if closed_id else "opened",
-                           (f"closed #{closed_id}, opened {want}" if closed_id
-                            else f"opened {want}"),
-                           ltp=ltp, trade_id=new.id)
+                results.append(_log(
+                    "flipped" if closed_id else "opened",
+                    (f"closed #{closed_id}, opened {want}" if closed_id
+                     else f"opened {want}"),
+                    ltp=ltp, trade_id=new.id, account=acc["name"]))
         except Exception as e:  # noqa: BLE001
             db.rollback()
             log.exception("paper: signal store failed")
-            res = _log("rejected", f"store error: {e}")
+            results.append(_log("rejected", f"store error: {e}"))
         finally:
             db.close()
+        res = {"status": "processed", "symbol": symbol, "side": side, "ltp": ltp,
+               "accounts": [{"account": r.get("account"), "status": r["status"],
+                             "trade_id": r.get("trade_id")} for r in results]}
 
     if is_new:
         # The feed learns the new contract in the background; the trade above
@@ -514,14 +716,25 @@ def process_signal(payload: dict, raw_body: str) -> dict:
 # --------------------------------------------------------------------------- #
 # Reads for the page
 # --------------------------------------------------------------------------- #
-def positions() -> list[dict]:
+def _account_names() -> dict[int, str]:
+    db = SessionLocal()
+    try:
+        return {a.id: a.name for a in db.query(PaperAccount).all()}
+    finally:
+        db.close()
+
+
+def positions(account_id: int | None = None) -> list[dict]:
     """Open trades with the live LTP and running P/L - all from memory."""
     if not _loaded:
         _load_symbols()
+    names = _account_names()
     db = SessionLocal()
     try:
-        rows = (db.query(PaperTrade).filter(PaperTrade.status == "open")
-                .order_by(PaperTrade.entry_time.desc()).all())
+        q = db.query(PaperTrade).filter(PaperTrade.status == "open")
+        if account_id:
+            q = q.filter(PaperTrade.account_id == account_id)
+        rows = q.order_by(PaperTrade.entry_time.desc()).all()
         out = []
         for r in rows:
             rec = _symbols.get(r.symbol) or {}
@@ -530,6 +743,7 @@ def positions() -> list[dict]:
             pts = round(sign * (ltp - r.entry_ltp), 4) if ltp else None
             out.append({
                 "id": r.id, "symbol": r.symbol, "side": r.side, "lots": r.lots,
+                "account": names.get(r.account_id) or "—",
                 "timeframe": r.timeframe, "lot_units": r.lot_units,
                 "entry_time": r.entry_time.isoformat(sep=" ", timespec="seconds"),
                 "entry_ltp": r.entry_ltp,
@@ -556,7 +770,7 @@ def known_timeframes() -> list[str]:
 
 
 def trades(symbol: str | None = None, side: str | None = None,
-           timeframe: str | None = None,
+           timeframe: str | None = None, account_id: int | None = None,
            page: int = 1, page_size: int = 20) -> dict:
     """Closed trades, newest first, with an all-pages summary for the tiles."""
     from sqlalchemy import func
@@ -570,6 +784,8 @@ def trades(symbol: str | None = None, side: str | None = None,
             q = q.filter(PaperTrade.side == side)
         if timeframe:
             q = q.filter(PaperTrade.timeframe == timeframe.lower())
+        if account_id:
+            q = q.filter(PaperTrade.account_id == account_id)
         total = q.count()
         agg = (db.query(func.sum(PaperTrade.pnl),
                         func.sum(func.iif(PaperTrade.pnl > 0, 1, 0)),
@@ -581,12 +797,16 @@ def trades(symbol: str | None = None, side: str | None = None,
             agg = agg.filter(PaperTrade.side == side)
         if timeframe:
             agg = agg.filter(PaperTrade.timeframe == timeframe.lower())
+        if account_id:
+            agg = agg.filter(PaperTrade.account_id == account_id)
         pnl_sum, wins, losses = agg.first() or (None, 0, 0)
         rows = (q.order_by(PaperTrade.exit_time.desc())
                 .offset((page - 1) * page_size).limit(page_size).all())
+        names = _account_names()
         return {
             "rows": [{
                 "id": r.id, "symbol": r.symbol, "side": r.side, "lots": r.lots,
+                "account": names.get(r.account_id) or "—",
                 "timeframe": r.timeframe, "lot_units": r.lot_units,
                 "entry_time": r.entry_time.isoformat(sep=" ", timespec="seconds"),
                 "entry_ltp": r.entry_ltp,
@@ -612,7 +832,7 @@ def trades(symbol: str | None = None, side: str | None = None,
 
 
 def signals(symbol: str | None = None, side: str | None = None,
-            timeframe: str | None = None,
+            timeframe: str | None = None, account: str | None = None,
             page: int = 1, page_size: int = 20) -> dict:
     page, page_size = max(1, int(page)), min(100, max(5, int(page_size)))
     db = SessionLocal()
@@ -624,6 +844,8 @@ def signals(symbol: str | None = None, side: str | None = None,
             q = q.filter(PaperSignal.side == side)
         if timeframe:
             q = q.filter(PaperSignal.timeframe == timeframe.lower())
+        if account:
+            q = q.filter(PaperSignal.account == account)
         total = q.count()
         rows = (q.order_by(PaperSignal.received_at.desc(), PaperSignal.id.desc())
                 .offset((page - 1) * page_size).limit(page_size).all())
@@ -632,6 +854,7 @@ def signals(symbol: str | None = None, side: str | None = None,
                 "id": r.id,
                 "received_at": r.received_at.isoformat(sep=" ", timespec="seconds"),
                 "symbol": r.symbol or r.symbol_raw, "side": r.side, "lots": r.lots,
+                "account": r.account,
                 "timeframe": r.timeframe,
                 "action": r.action, "reason": r.reason, "ltp": r.ltp,
                 "trade_id": r.trade_id, "latency_ms": r.latency_ms,

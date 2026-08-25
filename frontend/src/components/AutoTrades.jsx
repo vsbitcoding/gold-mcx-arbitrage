@@ -72,7 +72,126 @@ const VIEWS = [
   { key: "live", label: "Live" },
   { key: "history", label: "History" },
   { key: "log", label: "Log" },
+  { key: "accounts", label: "Accounts" },
 ];
+
+// A small overlay for the two editors. The app has no modal primitive beyond
+// the confirm dialog, and these forms are too big for it.
+function Overlay({ title, onClose, children }) {
+  return (
+    <div className="pt-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pt-modal" role="dialog" aria-label={title}>
+        <div className="pt-modal-head">
+          <b>{title}</b>
+          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// The account form. Angel fields are stored-only placeholders today (client,
+// 24-Aug: fake details now, real accounts someday) - so they are optional,
+// masked on read, and an empty field on save means "keep what is stored".
+function AccountEditor({ initial, symbols, onSave, onClose }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [cid, setCid] = useState(initial?.angel_client_id || "");
+  const [mpin, setMpin] = useState("");
+  const [totp, setTotp] = useState("");
+  const [picked, setPicked] = useState(() => new Set(initial?.symbols || []));
+  const toggle = (s) => setPicked((old) => {
+    const n = new Set(old);
+    if (n.has(s)) n.delete(s); else n.add(s);
+    return n;
+  });
+  return (
+    <Overlay title={initial?.id ? `Edit account · ${initial.name}` : "Add account"} onClose={onClose}>
+      <div className="pt-form">
+        <label><span>Account name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="bhavesh" /></label>
+        <label><span>Angel One client ID <em>optional, stored only</em></span>
+          <input value={cid} onChange={(e) => setCid(e.target.value)} placeholder="A123456" /></label>
+        <div className="pt-form-row">
+          <label><span>MPIN <em>optional</em></span>
+            <input value={mpin} onChange={(e) => setMpin(e.target.value)}
+              placeholder={initial?.angel_mpin ? "saved - leave blank to keep" : ""} /></label>
+          <label><span>TOTP secret <em>optional</em></span>
+            <input value={totp} onChange={(e) => setTotp(e.target.value)}
+              placeholder={initial?.angel_totp ? "saved - leave blank to keep" : ""} /></label>
+        </div>
+        <div className="pt-form-syms">
+          <span>Symbols this account trades</span>
+          <div className="pt-symgrid">
+            {symbols.map((s) => (
+              <label key={s} className={`pt-symtick ${picked.has(s) ? "on" : ""}`}>
+                <input type="checkbox" checked={picked.has(s)} onChange={() => toggle(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+          {symbols.length === 0 && <i>No symbols yet - add them in Manage Symbols first.</i>}
+        </div>
+        <div className="pt-form-foot">
+          <button type="button" className="oh-chip" onClick={onClose}>Cancel</button>
+          <button type="button" className="oh-chip on" disabled={!name.trim()}
+            onClick={() => onSave({ name: name.trim(), angel_client_id: cid.trim(),
+                                    angel_mpin: mpin.trim(), angel_totp: totp.trim(),
+                                    symbols: [...picked] })}>
+            {initial?.id ? "Save changes" : "Add account"}
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+// Master symbol list: add (resolved against the exchange master, typos are
+// refused with the reason), rename, delete. Deletes confirm upstream.
+function SymbolManager({ symbols, onAdd, onRename, onDelete, onClose, error }) {
+  const [draft, setDraft] = useState("");
+  const [renaming, setRenaming] = useState(null);   // symbol being renamed
+  const [renameTo, setRenameTo] = useState("");
+  return (
+    <Overlay title="Manage symbols" onClose={onClose}>
+      <div className="pt-form">
+        <div className="pt-symadd">
+          <input value={draft} placeholder="Official MCX name, e.g. CRUDEOIL"
+            onChange={(e) => setDraft(e.target.value.toUpperCase())}
+            onKeyDown={(e) => { if (e.key === "Enter" && draft.trim()) { onAdd(draft.trim()); setDraft(""); } }} />
+          <button type="button" className="oh-chip on" disabled={!draft.trim()}
+            onClick={() => { onAdd(draft.trim()); setDraft(""); }}>Add</button>
+        </div>
+        {error && <div className="settings-banner danger">⚠ {error}</div>}
+        <div className="pt-symlist">
+          {symbols.map((s) => (
+            <div className="pt-symrow" key={s}>
+              {renaming === s ? (
+                <>
+                  <input autoFocus value={renameTo}
+                    onChange={(e) => setRenameTo(e.target.value.toUpperCase())} />
+                  <button type="button" className="oh-chip on" disabled={!renameTo.trim()}
+                    onClick={() => { onRename(s, renameTo.trim()); setRenaming(null); }}>Save</button>
+                  <button type="button" className="oh-chip"
+                    onClick={() => setRenaming(null)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <b>{s}</b>
+                  <button type="button" className="oh-chip"
+                    onClick={() => { setRenaming(s); setRenameTo(s); }}>Edit</button>
+                  <button type="button" className="oh-chip pt-danger"
+                    onClick={() => onDelete(s)}>Delete</button>
+                </>
+              )}
+            </div>
+          ))}
+          {symbols.length === 0 && <i>Empty - add the first symbol above.</i>}
+        </div>
+      </div>
+    </Overlay>
+  );
+}
 
 export default function AutoTrades() {
   const [view, setView] = useState(() => {
@@ -86,6 +205,9 @@ export default function AutoTrades() {
   const [tfs, setTfs] = useState([]);
   const [busyState, setBusyState] = useState(false);
 
+  const [account, setAccount] = useState("");      // filter: account name
+  const [editAcc, setEditAcc] = useState(null);    // null | {} (new) | account obj
+  const [symModal, setSymModal] = useState(false);
   const [live, setLive] = useState(null);
   const [hist, setHist] = useState(null);
   const [logs, setLogs] = useState(null);
@@ -96,7 +218,7 @@ export default function AutoTrades() {
 
   useEffect(() => { try { localStorage.setItem("arbi_pt_view", view); } catch {} }, [view]);
   // Filters reset their pagination - page 3 of a different filter is nonsense.
-  useEffect(() => { setHistPage(1); setLogPage(1); }, [symbol, side, tf]);
+  useEffect(() => { setHistPage(1); setLogPage(1); }, [symbol, side, tf, account]);
 
   // Live polls; the other two tabs are event-shaped data and fetch on demand.
   useEffect(() => {
@@ -119,11 +241,11 @@ export default function AutoTrades() {
   useEffect(() => {
     if (view !== "history") return undefined;
     let alive = true;
-    api.paperTrades({ symbol, side, timeframe: tf, page: histPage })
+    api.paperTrades({ symbol, side, timeframe: tf, account_id: accId, page: histPage })
       .then((r) => { if (alive) { setHist(r); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [view, symbol, side, tf, histPage]);
+  }, [view, symbol, side, tf, account, histPage]);
 
   useEffect(() => {
     if (view !== "log") return undefined;
@@ -131,19 +253,20 @@ export default function AutoTrades() {
     // History filters speak long/short; the log speaks buy/sell. One dropdown
     // serves both, translated here.
     const logSide = side === "long" ? "buy" : side === "short" ? "sell" : "";
-    api.paperSignals({ symbol, side: logSide, timeframe: tf, page: logPage })
+    api.paperSignals({ symbol, side: logSide, timeframe: tf, account, page: logPage })
       .then((r) => { if (alive) { setLogs(r); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [view, symbol, side, tf, logPage]);
+  }, [view, symbol, side, tf, account, logPage]);
 
   const positions = useMemo(() => {
     let p = live?.positions || [];
     if (symbol) p = p.filter((x) => x.symbol === symbol);
     if (side) p = p.filter((x) => x.side === side);
     if (tf) p = p.filter((x) => (x.timeframe || "") === tf);
+    if (account) p = p.filter((x) => x.account === account);
     return p;
-  }, [live, symbol, side, tf]);
+  }, [live, symbol, side, tf, account]);
 
   const runningPnl = useMemo(
     () => positions.reduce((a, x) => a + (x.pnl || 0), 0), [positions]);
@@ -153,11 +276,11 @@ export default function AutoTrades() {
   // (the open-position count dropping is the only way one ever does).
   useEffect(() => {
     let alive = true;
-    api.paperTrades({ symbol, side, timeframe: tf, page: 1, page_size: 5 })
+    api.paperTrades({ symbol, side, timeframe: tf, account_id: accId, page: 1, page_size: 5 })
       .then((r) => { if (alive) setHist((h) => (view === "history" ? h : r)); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [symbol, side, tf, live?.positions?.length]);
+  }, [symbol, side, tf, account, live?.positions?.length]);
 
   // One clock for every card's "since entry" - ticking once a second beats
   // 3-second jumps, and one interval beats one per card.
@@ -170,6 +293,8 @@ export default function AutoTrades() {
 
   const sum = hist?.summary;
   const sysOn = live?.state ? !!live.state.enabled : true;
+  const accounts = live?.accounts || [];
+  const accId = (accounts.find((a) => a.name === account) || {}).id || null;
 
   // Manual close of one card. Same double-confirm ritual the app uses for
   // every destructive act - Stop, logout - because a booked exit cannot be
@@ -188,6 +313,45 @@ export default function AutoTrades() {
       const r = await api.paperPositions();
       setLive(r); setSymbols(r.symbols || []); setTfs(r.timeframes || []);
     } catch (e) { setErr(e.message); }
+  }
+
+  async function refreshLive() {
+    try {
+      const r = await api.paperPositions();
+      setLive(r); setSymbols(r.symbols || []); setTfs(r.timeframes || []);
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function saveAccount(form) {
+    try {
+      await api.paperAccountSave(form, editAcc?.id);
+      setEditAcc(null);
+      await refreshLive();
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function deleteAccount(a) {
+    const ok = await confirm({
+      title: `Delete account ${a.name}?`,
+      message: "Its closed history stays, but no future webhook will trade for this account. Open trades block the delete.",
+      confirmText: "Delete account",
+      danger: true,
+    });
+    if (!ok) return;
+    try { await api.paperAccountDelete(a.id); await refreshLive(); }
+    catch (e) { setErr(e.message); }
+  }
+
+  async function deleteSymbol(s) {
+    const ok = await confirm({
+      title: `Remove symbol ${s}?`,
+      message: "It leaves the master list and every account that ticked it. Open trades on it block the remove.",
+      confirmText: "Remove symbol",
+      danger: true,
+    });
+    if (!ok) return;
+    try { await api.paperSymbolDelete(s); await refreshLive(); }
+    catch (e) { setErr(e.message); }
   }
 
   async function toggleSystem() {
@@ -245,6 +409,11 @@ export default function AutoTrades() {
             aria-label="Symbol filter">
             <option value="">All symbols</option>
             {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="oh-weeks" value={account} onChange={(e) => setAccount(e.target.value)}
+            aria-label="Account filter">
+            <option value="">All accounts</option>
+            {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
           </select>
           <select className="oh-weeks" value={tf} onChange={(e) => setTf(e.target.value)}
             aria-label="Timeframe filter">
@@ -318,6 +487,7 @@ export default function AutoTrades() {
                       <div className="pt-card-id">
                         <b>{p.symbol}</b>
                         <SideTag side={p.side} />
+                        <span className="pt-acct">{p.account}</span>
                       </div>
                       <span className="pt-card-meta" title={p.contract || ""}>
                         {num(p.lots, 0)} lot{p.lots === 1 ? "" : "s"}
@@ -368,7 +538,7 @@ export default function AutoTrades() {
             <table className="cru-table pt-table">
               <thead>
                 <tr>
-                  <th>#</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
+                  <th>#</th><th>Account</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
                   <th>Entry</th><th>Entry ₹</th><th>Exit</th><th>Exit ₹</th>
                   <th>Points</th><th>P/L ₹</th><th>Closed by</th><th>Duration</th>
                 </tr>
@@ -377,6 +547,7 @@ export default function AutoTrades() {
                 {(hist?.rows || []).map((r) => (
                   <tr key={r.id}>
                     <td>{r.id}</td>
+                    <td className="pt-acct-cell">{r.account}</td>
                     <td className="pt-sym">{r.symbol}</td>
                     <td><SideTag side={r.side} /></td>
                     <td>{num(r.lots, 0)}</td>
@@ -422,7 +593,7 @@ export default function AutoTrades() {
             <table className="cru-table pt-table">
               <thead>
                 <tr>
-                  <th>Received</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
+                  <th>Received</th><th>Account</th><th>Symbol</th><th>Side</th><th>Lots</th><th>TF</th>
                   <th>LTP used</th><th>Action</th><th>Reason</th><th>ms</th>
                 </tr>
               </thead>
@@ -430,6 +601,7 @@ export default function AutoTrades() {
                 {(logs?.rows || []).map((r) => (
                   <tr key={r.id} className={`pt-act-${r.action}`}>
                     <td className="pt-time">{when(r.received_at)}</td>
+                    <td className="pt-acct-cell">{r.account || "—"}</td>
                     <td className="pt-sym">{r.symbol || "—"}</td>
                     <td><SideTag side={r.side} /></td>
                     <td>{num(r.lots, 0)}</td>
@@ -451,6 +623,65 @@ export default function AutoTrades() {
           <Pager page={logs?.page || 1} pages={logs?.pages || 1} total={logs?.total || 0}
             onPage={setLogPage} />
         </section>
+      )}
+
+      {view === "accounts" && (
+        <section className="nmg-card pt-accpanel">
+          <div className="nmg-rhd">
+            <b>ACCOUNTS</b>
+            <span className="pt-accbtns">
+              <button type="button" className="oh-chip" onClick={() => setSymModal(true)}>
+                Manage symbols
+              </button>
+              <button type="button" className="oh-chip on" onClick={() => setEditAcc({})}>
+                + Add account
+              </button>
+            </span>
+          </div>
+          {accounts.length === 0 ? (
+            <div className="nmg-empty">
+              <b>No accounts yet</b>
+              <span>A webhook only trades in accounts whose symbol list carries its
+                symbol - add the first account to route signals.</span>
+            </div>
+          ) : (
+            <div className="pt-acclist">
+              {accounts.map((a) => (
+                <div className="pt-accrow" key={a.id}>
+                  <div className="pt-accmain">
+                    <b>{a.name}</b>
+                    <span className="pt-accsyms">
+                      {a.symbols.length
+                        ? a.symbols.map((s) => <i key={s}>{s}</i>)
+                        : <em>no symbols - webhooks will not trade here</em>}
+                    </span>
+                  </div>
+                  <div className="pt-accmeta">
+                    {a.angel_client_id ? <span title="Angel One client id">{a.angel_client_id}</span> : null}
+                    {a.angel_mpin ? <span title="MPIN stored">MPIN ✓</span> : null}
+                    {a.angel_totp ? <span title="TOTP stored">TOTP ✓</span> : null}
+                  </div>
+                  <div className="pt-accact">
+                    <button type="button" className="oh-chip" onClick={() => setEditAcc(a)}>Edit</button>
+                    <button type="button" className="oh-chip pt-danger" onClick={() => deleteAccount(a)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {editAcc !== null && (
+        <AccountEditor initial={editAcc.id ? editAcc : null} symbols={symbols}
+          onSave={saveAccount} onClose={() => setEditAcc(null)} />
+      )}
+      {symModal && (
+        <SymbolManager symbols={symbols} error={err}
+          onAdd={async (s) => { try { await api.paperSymbolAdd(s); setErr(null); await refreshLive(); } catch (e) { setErr(e.message); } }}
+          onRename={async (o, n) => { try { await api.paperSymbolAdd(n, o); setErr(null); await refreshLive(); } catch (e) { setErr(e.message); } }}
+          onDelete={deleteSymbol}
+          onClose={() => { setSymModal(false); setErr(null); }} />
       )}
     </div>
   );

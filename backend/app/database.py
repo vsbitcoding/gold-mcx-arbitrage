@@ -63,6 +63,10 @@ _REQUIRED_COLUMNS = {
     ],
     "paper_trades": [
         ("exit_reason", "VARCHAR(12)"),
+        ("account_id", "INTEGER"),
+    ],
+    "paper_signals": [
+        ("account", "VARCHAR(64)"),
     ],
 }
 

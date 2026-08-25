@@ -200,20 +200,38 @@ export const api = {
   // Auto Trades (webhook paper trades). Positions poll; trades/signals are
   // fetched on a control change - they only grow when a webhook lands.
   paperPositions: () => request("/api/paper/positions"),
-  paperTrades: ({ symbol, side, timeframe, page = 1, page_size = 20 } = {}) => {
+  paperTrades: ({ symbol, side, timeframe, account_id, page = 1, page_size = 20 } = {}) => {
     const q = new URLSearchParams({ page, page_size });
     if (symbol) q.set("symbol", symbol);
     if (side) q.set("side", side);
     if (timeframe) q.set("timeframe", timeframe);
+    if (account_id) q.set("account_id", account_id);
     return request(`/api/paper/trades?${q.toString()}`);
   },
-  paperSignals: ({ symbol, side, timeframe, page = 1, page_size = 20 } = {}) => {
+  paperSignals: ({ symbol, side, timeframe, account, page = 1, page_size = 20 } = {}) => {
     const q = new URLSearchParams({ page, page_size });
     if (symbol) q.set("symbol", symbol);
     if (side) q.set("side", side);
     if (timeframe) q.set("timeframe", timeframe);
+    if (account) q.set("account", account);
     return request(`/api/paper/signals?${q.toString()}`);
   },
+  // Accounts the webhook fans out to, and the master symbol list they pick
+  // from. Angel fields come back masked; sending them empty on update keeps
+  // whatever is stored.
+  paperAccounts: () => request("/api/paper/accounts"),
+  paperAccountSave: (body, id) => request(id ? `/api/paper/accounts/${id}` : "/api/paper/accounts", {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
+  paperAccountDelete: (id) => request(`/api/paper/accounts/${id}`, { method: "DELETE" }),
+  paperSymbolAdd: (symbol, old) => request("/api/paper/symbols", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(old ? { symbol, old } : { symbol }),
+  }),
+  paperSymbolDelete: (symbol) => request(`/api/paper/symbols/${encodeURIComponent(symbol)}`, { method: "DELETE" }),
   // Manually close ONE open paper trade at the current price. The page
   // double-confirms before calling.
   paperCloseTrade: (id) => request(`/api/paper/close/${id}`, { method: "POST" }),

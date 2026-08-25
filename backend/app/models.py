@@ -140,9 +140,31 @@ class PaperTrade(Base):
     # 'signal' = the opposite webhook flipped it; 'stop' = the client pressed
     # Stop and everything open was booked at that moment's price.
     exit_reason = Column(String(12), nullable=True)
+    # Which account this trade belongs to (paper_accounts.id). The ledger key
+    # is account + symbol + timeframe since 24-Aug.
+    account_id = Column(Integer, nullable=True, index=True)
     entry_diff = Column(Float, nullable=True)                     # entry_temp - entry_ltp
     exit_diff = Column(Float, nullable=True)
     duration_s = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperAccount(Base):
+    """A trading account the webhook fans out to (client, 24-Aug).
+
+    One webhook, one symbol -> a separate paper trade in EVERY account whose
+    symbol list contains it. The Angel One fields are stored-only for now -
+    the client supplies placeholders and trades stay paper; when he one day
+    says "real", the plumbing gets built against these same fields. They are
+    never logged and never sent to any UI unmasked.
+    """
+    __tablename__ = "paper_accounts"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64), unique=True, nullable=False)
+    angel_client_id = Column(String(64), nullable=True)
+    angel_mpin = Column(String(64), nullable=True)
+    angel_totp = Column(String(128), nullable=True)
+    symbols_json = Column(Text, nullable=False, default="[]")   # ["GOLDM", ...]
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -177,6 +199,7 @@ class PaperSignal(Base):
     timeframe = Column(String(8), nullable=True)
     temp_price = Column(Float, nullable=True)
     action = Column(String(12), nullable=False)                   # opened|flipped|ignored|rejected
+    account = Column(String(64), nullable=True, index=True)       # which account this row is about
     reason = Column(String(160), nullable=True)
     ltp = Column(Float, nullable=True)                            # the price the action used
     trade_id = Column(Integer, nullable=True)

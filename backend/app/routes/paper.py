@@ -71,6 +71,7 @@ def paper_positions(_user: str = Depends(get_current_user_flex)):
     return {"positions": paper_trades.positions(),
             "symbols": paper_trades.known_symbols(),
             "timeframes": paper_trades.known_timeframes(),
+            "accounts": paper_trades.accounts_list(),
             "state": paper_trades.state()}
 
 
@@ -101,18 +102,71 @@ def paper_close_trade(trade_id: int, user: str = Depends(get_current_user_flex))
     return res
 
 
+@router.get("/paper/accounts")
+def paper_accounts(_user: str = Depends(get_current_user_flex)):
+    """Accounts with their symbol lists. Angel fields come back masked."""
+    return {"accounts": paper_trades.accounts_list()}
+
+
+@router.post("/paper/accounts")
+def paper_account_create(body: dict, _user: str = Depends(get_current_user_flex)):
+    res = paper_trades.account_save(body)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason"))
+    return res
+
+
+@router.put("/paper/accounts/{account_id}")
+def paper_account_update(account_id: int, body: dict,
+                         _user: str = Depends(get_current_user_flex)):
+    res = paper_trades.account_save(body, account_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason"))
+    return res
+
+
+@router.delete("/paper/accounts/{account_id}")
+def paper_account_delete(account_id: int, _user: str = Depends(get_current_user_flex)):
+    res = paper_trades.account_delete(account_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason"))
+    return res
+
+
+@router.post("/paper/symbols")
+def paper_symbol_add(body: dict, _user: str = Depends(get_current_user_flex)):
+    """Manage Symbols: add (resolves against the scrip master, typos refused)
+    or rename when `old` is supplied."""
+    if body.get("old"):
+        res = paper_trades.symbol_rename(body["old"], body.get("symbol"))
+    else:
+        res = paper_trades.symbol_add(body.get("symbol"))
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason"))
+    return res
+
+
+@router.delete("/paper/symbols/{symbol}")
+def paper_symbol_delete(symbol: str, _user: str = Depends(get_current_user_flex)):
+    res = paper_trades.symbol_delete(symbol)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("reason"))
+    return res
+
+
 @router.get("/paper/trades")
 def paper_trades_view(
     symbol: str | None = Query(None),
     side: str | None = Query(None, pattern="^(long|short)$"),
     timeframe: str | None = Query(None),
+    account_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
     _user: str = Depends(get_current_user_flex),
 ):
     """Closed trades, newest first, paginated, with the summary for the tiles."""
     return paper_trades.trades(symbol=symbol, side=side, timeframe=timeframe,
-                               page=page, page_size=page_size)
+                               account_id=account_id, page=page, page_size=page_size)
 
 
 @router.get("/paper/signals")
@@ -120,6 +174,7 @@ def paper_signals_view(
     symbol: str | None = Query(None),
     side: str | None = Query(None, pattern="^(buy|sell)$"),
     timeframe: str | None = Query(None),
+    account: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=5, le=100),
     _user: str = Depends(get_current_user_flex),
@@ -127,4 +182,4 @@ def paper_signals_view(
     """Every webhook received, including the ignored and rejected ones - the
     reason column is the debugging surface for the client's alerts."""
     return paper_trades.signals(symbol=symbol, side=side, timeframe=timeframe,
-                                page=page, page_size=page_size)
+                                account=account, page=page, page_size=page_size)
