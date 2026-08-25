@@ -576,7 +576,7 @@ def _close(trade: PaperTrade, ltp: float, now: datetime,
     trade.status = "closed"
 
 
-def process_signal(payload: dict, raw_body: str) -> dict:
+def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict:
     """One webhook in, one decision out. Instant: memory reads + tiny inserts.
 
     Returns the dict the webhook answers with; every path also writes a
@@ -601,6 +601,10 @@ def process_signal(payload: dict, raw_body: str) -> dict:
 
     def _log(action: str, reason: str | None = None, ltp: float | None = None,
              trade_id: int | None = None, account: str | None = None) -> dict:
+        # A hand-sent signal must never masquerade as TradingView's in the Log -
+        # "who fired this?" is the first question when a book looks odd.
+        if via:
+            reason = f"{reason} - {via}" if reason else via
         db = SessionLocal()
         try:
             db.add(PaperSignal(

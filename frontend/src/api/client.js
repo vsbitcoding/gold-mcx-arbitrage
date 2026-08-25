@@ -232,6 +232,13 @@ export const api = {
     body: JSON.stringify(old ? { symbol, old } : { symbol }),
   }),
   paperSymbolDelete: (symbol) => request(`/api/paper/symbols/${encodeURIComponent(symbol)}`, { method: "DELETE" }),
+  // The Manual Signal button - the webhook's exact path, fired from the page
+  // when TradingView drops a delivery. The page confirms before calling.
+  paperManualSignal: (body) => request("/api/paper/manual-signal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
   // Manually close ONE open paper trade at the current price. The page
   // double-confirms before calling.
   paperCloseTrade: (id) => request(`/api/paper/close/${id}`, { method: "POST" }),

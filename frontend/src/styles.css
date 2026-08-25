@@ -5856,3 +5856,14 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   background: rgba(127,127,127,.12); color: var(--text-secondary);
 }
 .pt-acct-cell { font-weight: 700; }
+
+/* Manual Signal - the missed-webhook repair kit */
+.pt-manualsig { font-weight: 800; }
+.pt-form-hint { margin: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+.pt-form-select { width: 100%; }
+.pt-sent {
+  display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px;
+  background: rgba(26,127,55,.1); border: 1px solid rgba(26,127,55,.3);
+  border-radius: 9px; padding: 9px 12px;
+}
+.pt-sent b { font-weight: 800; }

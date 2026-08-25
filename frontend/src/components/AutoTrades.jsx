@@ -91,6 +91,94 @@ function Overlay({ title, onClose, children }) {
   );
 }
 
+// The Manual Signal form: for the day TradingView shows "delivery failed" and
+// the book has drifted from the strategy. It fires the webhook's exact path -
+// same flip rules, same account fan-out, same live price - and the client
+// asked for a confirm before the final send.
+function ManualSignal({ symbols, tfs, onClose, onSent, confirm }) {
+  const [sym, setSym] = useState(symbols[0] || "");
+  const [side, setSide] = useState("buy");
+  const [lot, setLot] = useState("1");
+  const [tf, setTf] = useState(tfs[0] || "5m");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [fail, setFail] = useState(null);
+
+  async function send() {
+    const ok = await confirm({
+      title: `Send ${side.toUpperCase()} ${sym}${tf ? " " + tf : ""}?`,
+      message: `This fires a ${side} signal for ${lot || 1} lot at the current market price - exactly as if TradingView sent it. Every account holding ${sym} will act on it.`,
+      confirmText: `Send ${side}`,
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true); setFail(null);
+    try {
+      const r = await api.paperManualSignal({
+        type: side, symbol: sym, lot: Number(lot) || 1,
+        timeframe: (tf || "").trim() || undefined,
+      });
+      setResult(r);
+      if (r.status === "rejected") setFail(r.reason || "rejected");
+      else onSent();
+    } catch (e) { setFail(e.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Overlay title="Manual signal" onClose={onClose}>
+      <div className="pt-form">
+        <p className="pt-form-hint">
+          For a missed webhook: fires the same signal TradingView would have,
+          at the current live price. It follows every normal rule - flip,
+          duplicate-ignore, account routing - and the Log will say it was manual.
+        </p>
+        <div className="pt-form-row">
+          <label><span>Symbol</span>
+            <select className="oh-weeks pt-form-select" value={sym}
+              onChange={(e) => setSym(e.target.value)}>
+              {symbols.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select></label>
+          <label><span>Type</span>
+            <div className="oh-group">
+              {["buy", "sell"].map((s) => (
+                <button key={s} type="button"
+                  className={`oh-chip ${side === s ? "on" : ""}`}
+                  onClick={() => setSide(s)}>{s.toUpperCase()}</button>
+              ))}
+            </div></label>
+        </div>
+        <div className="pt-form-row">
+          <label><span>Lot</span>
+            <input type="number" min="0.5" step="0.5" value={lot}
+              onChange={(e) => setLot(e.target.value)} /></label>
+          <label><span>Timeframe</span>
+            <input value={tf} list="pt-tf-list" placeholder="5m"
+              onChange={(e) => setTf(e.target.value.toLowerCase())} />
+            <datalist id="pt-tf-list">
+              {tfs.map((x) => <option key={x} value={x} />)}
+            </datalist></label>
+        </div>
+        {fail && <div className="settings-banner danger">⚠ {fail}</div>}
+        {result && result.status !== "rejected" && (
+          <div className="pt-sent">
+            {(result.accounts || []).map((a) => (
+              <span key={a.account}><b>{a.account}</b>: {a.status}</span>
+            ))}
+          </div>
+        )}
+        <div className="pt-form-foot">
+          <button type="button" className="oh-chip" onClick={onClose}>
+            {result && result.status !== "rejected" ? "Done" : "Cancel"}
+          </button>
+          <button type="button" className="oh-chip on" disabled={busy || !sym}
+            onClick={send}>{busy ? "…" : "Send signal"}</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
 // The account form. Angel fields are stored-only placeholders today (client,
 // 24-Aug: fake details now, real accounts someday) - so they are optional,
 // masked on read, and an empty field on save means "keep what is stored".
@@ -208,6 +296,7 @@ export default function AutoTrades() {
   const [account, setAccount] = useState("");      // filter: account name
   const [editAcc, setEditAcc] = useState(null);    // null | {} (new) | account obj
   const [symModal, setSymModal] = useState(false);
+  const [sigModal, setSigModal] = useState(false);
   const [live, setLive] = useState(null);
   const [hist, setHist] = useState(null);
   const [logs, setLogs] = useState(null);
@@ -385,6 +474,9 @@ export default function AutoTrades() {
           <span className="intl-status on" title="Dummy trades fired by webhook, monitored on the live MCX feed. No real orders anywhere.">
             ● Paper only
           </span>
+          <button type="button" className="oh-chip pt-manualsig"
+            title="Fire a signal by hand - for when TradingView shows delivery failed"
+            onClick={() => setSigModal(true)}>+ Manual Signal</button>
           <button type="button" disabled={busyState}
             className={`pt-power ${sysOn ? "running" : "stopped"}`}
             title={sysOn
@@ -675,6 +767,10 @@ export default function AutoTrades() {
       {editAcc !== null && (
         <AccountEditor initial={editAcc.id ? editAcc : null} symbols={symbols}
           onSave={saveAccount} onClose={() => setEditAcc(null)} />
+      )}
+      {sigModal && (
+        <ManualSignal symbols={symbols} tfs={tfs} confirm={confirm}
+          onClose={() => setSigModal(false)} onSent={refreshLive} />
       )}
       {symModal && (
         <SymbolManager symbols={symbols} error={err}

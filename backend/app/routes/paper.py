@@ -63,6 +63,18 @@ async def webhook_trade(request: Request, key: str | None = Query(None)):
     return paper_trades.process_signal(payload, raw or json.dumps(qp))
 
 
+@router.post("/paper/manual-signal")
+def paper_manual_signal(body: dict, user: str = Depends(get_current_user_flex)):
+    """The Manual Signal button: exactly the webhook's path - same flip rules,
+    same account fan-out, same live price - fired from the page when
+    TradingView drops a delivery. The UI confirms before calling; the Log rows
+    carry "manual signal by <user>" so a hand-sent one never masquerades.
+    Everything the webhook would refuse (market closed, system stopped, unknown
+    symbol), this refuses identically."""
+    return paper_trades.process_signal(body, json.dumps(body),
+                                       via=f"manual signal by {user}")
+
+
 @router.get("/paper/positions")
 def paper_positions(_user: str = Depends(get_current_user_flex)):
     """Open dummy positions with the live LTP and running P/L, plus everything
