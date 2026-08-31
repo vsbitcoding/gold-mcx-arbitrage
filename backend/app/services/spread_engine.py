@@ -18,12 +18,20 @@ def _rate(price: float, instrument: str) -> float:
 
 
 def _bid(q):
-    b, _a = clean_sides(q)          # crossed ghost -> no bid; fall to last trade
+    # Client re-check (31-Aug): a DEAD book - no bid AND no ask - shows a dash,
+    # full stop. Its stale last-trade made Feb-Apr gold print a 6,515 spread
+    # next to real 1,600s. LTP may stand in only for the missing HALF of a
+    # one-sided but living book.
+    b, a = clean_sides(q)
+    if not b and not a:
+        return None
     return b or q.ltp
 
 
 def _ask(q):
-    _b, a = clean_sides(q)
+    b, a = clean_sides(q)
+    if not b and not a:
+        return None
     return a or q.ltp
 
 

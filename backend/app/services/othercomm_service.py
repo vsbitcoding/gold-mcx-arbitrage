@@ -98,7 +98,10 @@ def get_subscription_meta() -> dict[str, dict]:
 
 
 def _bid(q):
-    b, _a = clean_sides(q)          # crossed ghost -> no bid; fall to last trade
+    # Dead book (no bid, no ask) -> dash; LTP only fills a one-sided book's gap.
+    b, a = clean_sides(q)
+    if not b and not a:
+        return None
     return b or q.ltp
 
 
