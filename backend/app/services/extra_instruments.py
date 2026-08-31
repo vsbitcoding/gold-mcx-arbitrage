@@ -31,19 +31,23 @@ _state: dict = {
     "silver_full": None,
 }
 
-# Per client spec: roll the contract one week BEFORE expiry. Anything closer
-# than 7 days to expiry is skipped and the next month is picked instead.
-ROLLOVER_DAYS_BEFORE_EXPIRY = 7
+# The old spec rolled one week early; the client replaced it on 31-Aug-2026
+# after it put SILVERM on November while August still traded: a contract now
+# stays current until 23:00 of its own expiry day. One rule for the whole
+# system, defined once in instrument_resolver.live_cutoff.
 
 
-def _resolve_front_month(symbol: str, min_days_ahead: int = ROLLOVER_DAYS_BEFORE_EXPIRY) -> Optional[dict]:
-    """Find the nearest active MCX FUTCOM contract whose base symbol matches.
+def _resolve_front_month(symbol: str, min_days_ahead: int | None = None) -> Optional[dict]:
+    """Find the CURRENT MCX FUTCOM contract for the base symbol.
 
-    `min_days_ahead` is the rollover buffer — contracts with less than this many
-    days to expiry are skipped so we move to the next month early.
+    Default: the expiry-day rule (current until 23:00 of expiry day). Passing
+    an explicit `min_days_ahead` keeps the old buffer semantics for any caller
+    that needs them.
     """
+    from app.services.instrument_resolver import live_cutoff
     csv_text = _download_csv()
-    cutoff = datetime.now() + timedelta(days=min_days_ahead)
+    cutoff = (live_cutoff() if min_days_ahead is None
+              else datetime.now() + timedelta(days=min_days_ahead))
     candidates: list[dict] = []
     reader = csv.DictReader(io.StringIO(csv_text))
     for row in reader:

@@ -654,14 +654,18 @@ export default function AutoTrades() {
                       <span className={`pt-act ${
                           r.exit_reason === "stop" ? "pt-act-flipped"
                           : r.exit_reason === "manual" ? "pt-act-manual"
+                          : r.exit_reason === "roll" ? "pt-act-flipped"
                           : "pt-act-ignored"}`}
                         title={r.exit_reason === "stop"
                           ? "Closed by the Stop button, at that moment's price."
                           : r.exit_reason === "manual"
                             ? "Closed by hand from the position card."
-                            : "Closed by the opposite webhook signal."}>
+                            : r.exit_reason === "roll"
+                              ? "Contract changed (expiry roll) - booked at the old contract's last price."
+                              : "Closed by the opposite webhook signal."}>
                         {r.exit_reason === "stop" ? "stop"
-                          : r.exit_reason === "manual" ? "manual" : "webhook"}
+                          : r.exit_reason === "manual" ? "manual"
+                          : r.exit_reason === "roll" ? "roll" : "webhook"}
                       </span>
                     </td>
                     <td>{dur(r.duration_s)}</td>

@@ -69,10 +69,31 @@ def _parse_expiry(s: str) -> Optional[datetime]:
             return None
 
 
+ROLL_HOUR = 23  # expiry-day roll time, client (Dharmesh Bhai), 31-Aug-2026
+
+
+def live_cutoff(now: datetime | None = None) -> datetime:
+    """The oldest expiry still counted as CURRENT.
+
+    Client rule (31-Aug): a contract stays current until 23:00 of its own
+    expiry day, then the next month takes over - it replaced both the old
+    7-day-early roll on the extra legs and the day-early roll here. Before
+    23:00 the cutoff is midnight today (today's expiries still live); from
+    23:00 it is midnight tomorrow (they are gone).
+    """
+    now = now or datetime.now()
+    day = now.date() if now.hour < ROLL_HOUR else now.date() + timedelta(days=1)
+    return datetime(day.year, day.month, day.day)
+
+
 def _all_candidates_by_symbol(min_days_ahead: int) -> dict[str, list]:
-    """Return all valid future contracts grouped by symbol, sorted by expiry."""
+    """Return all valid future contracts grouped by symbol, sorted by expiry.
+
+    `min_days_ahead` is ignored since the expiry-day rule (see live_cutoff);
+    kept so the callers' signatures stay untouched.
+    """
     csv_text = _download_csv()
-    cutoff = datetime.now() + timedelta(days=min_days_ahead)
+    cutoff = live_cutoff()
     out: dict[str, list] = {sym: [] for sym in SYMBOL_MAP.values()}
     reader = csv.DictReader(io.StringIO(csv_text))
     for row in reader:

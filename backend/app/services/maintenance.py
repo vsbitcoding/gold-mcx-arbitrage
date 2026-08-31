@@ -127,6 +127,7 @@ def _loop() -> None:
     last_rollover_check: str | None = None
     last_span_refresh: str | None = None
     last_roll: str | None = None
+    last_expiry_roll: str | None = None
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
@@ -238,6 +239,19 @@ def _loop() -> None:
             # up serves an expired contract until something knocks it over.
             # This is one reconnect a day at a quiet hour, which is nothing
             # like the six-in-45-minutes that once cooled us down for 15 min.
+            # Expiry-day roll (client, 31-Aug-2026): contracts stay current
+            # until 23:00 of their own expiry day, so on a day when something
+            # on the socket expires, one resubscribe at 23:00 walks the whole
+            # board onto the next month. Other days: no resubscribe, no cost.
+            if last_expiry_roll != today_str and (now.hour, now.minute) >= (23, 0):
+                last_expiry_roll = today_str
+                try:
+                    if dhan_feed.has_expiring_today():
+                        log.info("maintenance: 23:00 expiry-day roll -> resubscribe")
+                        dhan_feed.request_resubscribe("expiry-day 23:00 roll")
+                except Exception as e:  # noqa: BLE001
+                    log.warning("maintenance: expiry roll failed: %s", e)
+
             if last_roll != today_str and (now.hour, now.minute) >= (8, 40):
                 try:
                     log.info("Daily contract roll: %s",

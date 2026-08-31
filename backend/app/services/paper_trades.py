@@ -383,7 +383,38 @@ def refresh() -> None:
             "lot_units": _lot_units(sym, found.get("lot_units")),
             "expiry": found["expiry"].strftime("%Y-%m-%d") if found.get("expiry") else None,
         }
-        if rec != _symbols.get(sym):
+        prev = _symbols.get(sym)
+        if rec != prev:
+            # Contract CHANGED under this symbol (expiry-day roll, or a rule
+            # change). An open trade was entered on the OLD contract; letting
+            # its LTP source silently become the new one would jump the P/L by
+            # the whole calendar spread. Book it first at the old contract's
+            # last known price - staleness accepted, it is that contract's
+            # final truth - with exit_reason='roll' so History says why.
+            if prev and prev.get("security_id") != rec.get("security_id"):
+                with _lock:
+                    db = SessionLocal()
+                    try:
+                        q = quote_store.get(str(prev.get("security_id")))
+                        last_px = (q.ltp if q and q.ltp else None)
+                        now = datetime.now()
+                        for tr in (db.query(PaperTrade)
+                                   .filter(PaperTrade.symbol == sym,
+                                           PaperTrade.status == "open").all()):
+                            _close(tr, last_px or tr.entry_ltp, now, reason="roll")
+                            db.add(PaperSignal(
+                                received_at=now, symbol=sym, timeframe=tr.timeframe,
+                                action="closed", trade_id=tr.id, ltp=tr.exit_ltp,
+                                reason=(f"contract rolled {prev.get('trading_symbol')} -> "
+                                        f"{rec.get('trading_symbol')} - closed at last price")))
+                            log.info("paper: %s rolled, trade #%s closed at %s (pnl %s)",
+                                     sym, tr.id, tr.exit_ltp, tr.pnl)
+                        db.commit()
+                    except Exception:  # noqa: BLE001
+                        db.rollback()
+                        log.exception("paper: roll-close failed for %s", sym)
+                    finally:
+                        db.close()
             _symbols[sym] = rec
             db = SessionLocal()
             try:

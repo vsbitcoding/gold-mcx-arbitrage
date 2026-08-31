@@ -135,6 +135,18 @@ def _trigger_reconnect(reason: str) -> None:
     _safe_close_active()
 
 
+def has_expiring_today() -> bool:
+    """True when any subscribed contract's expiry date is today - the day the
+    23:00 expiry-roll in maintenance must fire (client rule, 31-Aug)."""
+    today = datetime.now().date().isoformat()
+    try:
+        subs = _state.get("instruments") or {}
+        return any(str((m or {}).get("expiry") or "")[:10] == today
+                   for m in subs.values())
+    except Exception:  # noqa: BLE001 - a state hiccup must not break the loop
+        return False
+
+
 def request_resubscribe(reason: str) -> str:
     """Rebuild the instrument list without touching the token.
 
