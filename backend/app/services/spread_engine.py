@@ -9,7 +9,7 @@ For calendar pairs both legs use the SAME instrument multiplier.
 from __future__ import annotations
 
 from app.config import MULTIPLIERS
-from app.services.market_data import quote_store
+from app.services.market_data import clean_sides, quote_store
 from app.services.pair_registry import get_pairs
 
 
@@ -17,8 +17,14 @@ def _rate(price: float, instrument: str) -> float:
     return price * MULTIPLIERS.get(instrument, 1.0)
 
 
-def _bid(q): return q.bid or q.ltp
-def _ask(q): return q.ask or q.ltp
+def _bid(q):
+    b, _a = clean_sides(q)          # crossed ghost -> no bid; fall to last trade
+    return b or q.ltp
+
+
+def _ask(q):
+    _b, a = clean_sides(q)
+    return a or q.ltp
 
 
 def compute_pair(pair: dict) -> dict:

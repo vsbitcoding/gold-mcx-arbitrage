@@ -23,7 +23,7 @@ from datetime import datetime
 
 from app.services.goldopt_service import _parse_all, _resolve_futures
 from app.services.instrument_resolver import _download_csv
-from app.services.market_data import quote_store
+from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("mcx_opt_stream")
 
@@ -70,7 +70,8 @@ def refresh() -> None:
         # middle of every strike ever listed.
         fut = futs.get(under) or {}
         q = quote_store.get(fut.get("security_id") or "")
-        centre = q.ltp or ((q.bid + q.ask) / 2 if (q.bid and q.ask) else None)
+        c_bid, c_ask = clean_sides(q)
+        centre = q.ltp or ((c_bid + c_ask) / 2 if (c_bid and c_ask) else None)
 
         out: dict = {}
         for exp in exps:
@@ -131,7 +132,8 @@ def get_chain(commodity: str, expiry: str | None) -> list[dict]:
         q = quote_store.get(sid)
         row = rows.setdefault(strike, {"strike": strike, "ce": None, "pe": None})
         row["ce" if side == "CE" else "pe"] = {
-            "bid": q.bid or None, "ask": q.ask or None, "ltp": q.ltp or None, "oi": None,
+            **dict(zip(("bid", "ask"), clean_sides(q))),
+            "ltp": q.ltp or None, "oi": None,
         }
     return [rows[s] for s in sorted(rows)]
 

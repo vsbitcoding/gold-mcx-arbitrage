@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 
 from app.services.instrument_resolver import _download_csv, _parse_expiry
-from app.services.market_data import quote_store
+from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("othercomm_service")
 
@@ -98,7 +98,8 @@ def get_subscription_meta() -> dict[str, dict]:
 
 
 def _bid(q):
-    return q.bid or q.ltp
+    b, _a = clean_sides(q)          # crossed ghost -> no bid; fall to last trade
+    return b or q.ltp
 
 
 def _ask(q):

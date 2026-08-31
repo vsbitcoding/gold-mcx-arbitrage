@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from app.services import instrument_resolver
-from app.services.market_data import quote_store
+from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("price_service")
 
@@ -47,11 +47,12 @@ def get_table() -> dict:
         rows = []
         for c in contracts:
             q = quote_store.get(c["security_id"])
+            buyer, seller = clean_sides(q)
             rows.append({
                 "contract": c["expiry"].strftime("%d %b %Y"),
                 "trading_symbol": c["trading_symbol"],
-                "buyer": (q.bid or None),    # bid
-                "seller": (q.ask or None),   # ask
+                "buyer": buyer,              # bid; None (dash) when absent or crossed
+                "seller": seller,            # ask
                 "ltp": (q.ltp or None),
             })
         groups.append({

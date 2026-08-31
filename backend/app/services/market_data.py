@@ -104,6 +104,7 @@ class QuoteStore:
             db.close()
 
     # ── reads ────────────────────────────────────────────────────────────
+    # (clean_sides lives at module level below)
     def get(self, security_id: str) -> Quote:
         with self._lock:
             return self._quotes.get(str(security_id), Quote())
@@ -134,3 +135,20 @@ class QuoteStore:
 
 
 quote_store = QuoteStore()
+
+
+def clean_sides(q) -> tuple:
+    """(buyer, seller) fit to show, or None where no real one exists.
+
+    Client rule (Dharmesh Bhai, 31-Aug-2026): where there is no buyer or
+    seller, show a dash - the far-month ghosts made that concrete when a
+    restored bid from one era met an ask from another and the May-2027 silver
+    printed buyer 253,682 over seller 251,846. A crossed book cannot exist on
+    an exchange, and there is no telling which side is the lie, so a crossed
+    pair blanks BOTH sides. Zeros were already dashes.
+    """
+    bid = q.bid or None
+    ask = q.ask or None
+    if bid and ask and bid > ask:
+        return None, None
+    return bid, ask

@@ -270,7 +270,7 @@ def _mcx(short: str) -> dict | None:
     """Near-month MCX future for a price_service instrument key ('gold' / 'silver')."""
     try:
         from app.services import price_service
-        from app.services.market_data import quote_store
+        from app.services.market_data import clean_sides, quote_store
         contracts = price_service._state.get("contracts", {}).get(short, [])
         if not contracts:
             return None
@@ -278,8 +278,9 @@ def _mcx(short: str) -> dict | None:
         q = quote_store.get(c["security_id"])
         if q is None:
             return None
+        bid, ask = clean_sides(q)
         return {
-            "ltp": (q.ltp or None), "bid": (q.bid or None), "ask": (q.ask or None),
+            "ltp": (q.ltp or None), "bid": bid, "ask": ask,
             "expiry": c["expiry"].strftime("%d %b %Y"),
             "symbol": c.get("trading_symbol"),
         }

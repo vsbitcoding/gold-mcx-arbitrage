@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.services.instrument_resolver import _download_csv, _parse_expiry
-from app.services.market_data import quote_store
+from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("optspread_service")
 
@@ -91,7 +91,8 @@ def _q(sid: Optional[str]):
     if not sid:
         return (None, None, None)
     q = quote_store.get(sid)
-    return (q.bid or None, q.ask or None, q.ltp or None)
+    bid, ask = clean_sides(q)       # client rule: absent or crossed -> dash
+    return (bid, ask, q.ltp or None)
 
 
 def _fut_price(sid: Optional[str]) -> Optional[float]:
