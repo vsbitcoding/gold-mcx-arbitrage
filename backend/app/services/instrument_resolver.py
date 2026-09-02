@@ -28,6 +28,9 @@ SYMBOL_MAP = {
     "silverm": "SILVERM",    # SILVER MINI (5 kg)
     "silvermic": "SILVERMIC",  # SILVER MIC (1 kg)
     "silver100": "SILVER100",  # SILVER 100 (100 g)
+    # Electricity monthly base load (client, 02-Sep-2026): calendar spreads +
+    # price group + daily history, exactly like the bullion instruments.
+    "elecmbl": "ELECDMBL",
 }
 
 

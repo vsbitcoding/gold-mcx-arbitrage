@@ -25,6 +25,7 @@ PRICE_SEQUENCE: list[tuple[str, str]] = [
     ("petal", "Gold Petal"),
     ("silvermic", "Silver Mic"),
     ("silver100", "Silver 100"),
+    ("elecmbl", "Electricity"),
 ]
 
 _state: dict = {"contracts": {}}  # {short: [contract dicts]}
