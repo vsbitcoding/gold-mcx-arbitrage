@@ -93,6 +93,23 @@ def _links(s: requests.Session, start: date, end: date) -> list[str]:
     return _LINK_RE.findall(r.text)
 
 
+def _links_resilient(s: requests.Session, start: date, end: date) -> list[str]:
+    """A month per request - except Samco answers HTTP 500 for whole months
+    between Oct-2025 and Mar-2026 (probed 02-Sep) while half-months and weeks
+    of the same span answer fine. So a failed window is split in two and
+    retried, down to single days, and the pieces are joined."""
+    try:
+        return _links(s, start, end)
+    except Exception as e:  # noqa: BLE001
+        if start == end:
+            log.warning("bhav links %s: %s", start, e)
+            return []
+        mid = start + (end - start) // 2
+        time.sleep(_PACE_SECONDS)
+        return (_links_resilient(s, start, mid)
+                + _links_resilient(s, mid + timedelta(days=1), end))
+
+
 def _parse_expiry(s: str) -> str | None:
     s = (s or "").strip()
     for fmt in ("%d %b %Y", "%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d"):
@@ -173,11 +190,7 @@ def backfill(start: date, end: date, skip_have: bool = True) -> dict:
             nxt = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
             m_end = min(nxt - timedelta(days=1), end)
             m_start = max(cur, start)
-            try:
-                links = _links(s, m_start, m_end)
-            except Exception as e:  # noqa: BLE001
-                log.warning("bhav links %s: %s", cur.strftime("%Y-%m"), e)
-                links = []
+            links = _links_resilient(s, m_start, m_end)
             for url in links:
                 m = re.search(r"(\d{8})_MCX", _decode_name(url))
                 day = f"{m.group(1)[:4]}-{m.group(1)[4:6]}-{m.group(1)[6:]}" if m else None
