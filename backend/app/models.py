@@ -444,6 +444,27 @@ class CrudeIvSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class McxDailyClose(Base):
+    """One row per contract per trading day: the exchange's official close,
+    from MCX's daily bhavcopy (via Samco's public archive, 2016 onward).
+
+    This is the ground truth the Spread History dialog computes from - both
+    calendar (same symbol, two months) and cross (two symbols, matched month)
+    spreads, month-wise and as one continuous rolled series across years
+    (client, 02-Sep: 2021-2025 for every symbol, cross pairs included).
+    """
+    __tablename__ = "mcx_daily_close"
+    id = Column(Integer, primary_key=True)
+    trade_date = Column(String(10), nullable=False, index=True)   # YYYY-MM-DD
+    symbol = Column(String(16), nullable=False, index=True)       # GOLDPETAL, GOLDM, ...
+    expiry = Column(String(10), nullable=False)                   # YYYY-MM-DD
+    close = Column(Float, nullable=True)
+    volume = Column(Float, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("trade_date", "symbol", "expiry", name="uq_close_day_contract"),
+    )
+
+
 class PairLeg(Base):
     """Which contracts a calendar pair was made of - remembered PAST expiry.
 

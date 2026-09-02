@@ -194,6 +194,13 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }),
+  // Multi-year close history from MCX bhavcopy (calendar + cross, month/continuous)
+  bhavOptions: () => request("/api/pairs/bhav/options"),
+  bhavSeries: (params) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== "") q.set(k, v); });
+    return request(`/api/pairs/bhav/series?${q.toString()}`);
+  },
   // Pairs the history dialog can show - live plus remembered expired ones
   historyPairs: () => request("/api/pairs/history-pairs"),
   // Daily spread history for one calendar/cross pair (History button)

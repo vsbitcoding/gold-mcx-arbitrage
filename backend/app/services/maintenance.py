@@ -129,6 +129,7 @@ def _loop() -> None:
     last_roll: str | None = None
     last_expiry_roll: str | None = None
     last_elec_hour: str | None = None
+    last_bhav: str | None = None
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
@@ -240,6 +241,17 @@ def _loop() -> None:
             # up serves an expired contract until something knocks it over.
             # This is one reconnect a day at a quiet hour, which is nothing
             # like the six-in-45-minutes that once cooled us down for 15 min.
+            # Yesterday's MCX bhavcopy closes for the multi-year Spread History
+            # (client, 02-Sep). Samco posts the file overnight; one pull at
+            # 07:15 covers it, idempotent over the last few days.
+            if last_bhav != today_str and (now.hour, now.minute) >= (7, 15):
+                last_bhav = today_str
+                try:
+                    from app.services import bhav_history
+                    threading.Thread(target=bhav_history.refresh_recent, daemon=True).start()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("maintenance: bhav refresh failed: %s", e)
+
             # NSE-vs-MCX electricity, one row per hour (client's note, 02-Sep).
             # Cheap: two in-memory reads and at most two inserts; the service
             # skips honestly when either side is not live.

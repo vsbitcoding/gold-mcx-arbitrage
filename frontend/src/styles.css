@@ -5934,3 +5934,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-table .sh-muted { color: var(--text-secondary); }
 @media (max-width: 640px) { .sh-stats { grid-template-columns: 1fr 1fr; } .sh-controls select { min-width: 100%; } }
 .sh-empty { text-align: left !important; white-space: normal !important; color: var(--text-secondary); padding: 14px 12px !important; line-height: 1.5; }
+.sh-contracts { font-size: 10.5px; white-space: nowrap; }
+.sh-controls .oh-group { flex-wrap: wrap; }

@@ -11,37 +11,61 @@ import { fmtNum } from "../utils/format.js";
 // Daily history of one pair's spread - ONE value per day from each leg's
 // closing price (client, 02-Sep: "increase-decrease karta single value aapi
 // de, based on closing price"). Computed from exchange daily closes on demand.
-function SpreadHistory({ pairs, onClose }) {
-  const [pair, setPair] = useState(pairs[0]?.name || "");
-  const [days, setDays] = useState(120);
+function SpreadHistory({ kind, onClose }) {
+  // kind: "calendar" | "cross" (follows the tab the button was pressed on).
+  // Data: MCX's daily bhavcopy closes, 2021 to yesterday - one value per day.
+  const [opts, setOpts] = useState(null);
+  const [mode, setMode] = useState("continuous");      // continuous | month
+  const [sym, setSym] = useState("");                  // calendar: symbol key
+  const [cross, setCross] = useState("");              // cross: "big|small"
+  const [rank, setRank] = useState(0);                 // calendar continuous: M1-M2, M2-M3...
+  const [nearExp, setNearExp] = useState("");          // month mode: chosen near/big expiry
+  const [yearFrom, setYearFrom] = useState(2021);
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [hover, setHover] = useState(null);      // index into chronological rows
-  // The board only knows LIVE pairs; the server also remembers expired ones
-  // (client, 03-Sep: expiry must not erase a pair's history).
-  const [allPairs, setAllPairs] = useState(pairs);
+  const [hover, setHover] = useState(null);
+
   useEffect(() => {
     let alive = true;
-    api.historyPairs()
+    api.bhavOptions()
       .then((r) => {
-        if (!alive || !r.pairs?.length) return;
-        setAllPairs(r.pairs.map((x) => ({
-          name: x.name,
-          title: x.expired ? `${x.title}  (expired)` : x.title,
-        })));
+        if (!alive) return;
+        setOpts(r);
+        if (!sym && r.symbols?.length) setSym(r.symbols[0].key);
+        if (!cross && r.cross?.length) setCross(`${r.cross[0].big}|${r.cross[0].small}`);
       })
-      .catch(() => {});
+      .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
   }, []);
+
+  const symObj = useMemo(() => opts?.symbols?.find((s) => s.key === sym), [opts, sym]);
+  const crossObj = useMemo(() => {
+    const [b, s] = cross.split("|");
+    return opts?.cross?.find((c) => c.big === b && c.small === s);
+  }, [opts, cross]);
+  const bigKey = kind === "calendar" ? sym : crossObj?.big;
+  const expList = useMemo(() => {
+    const k = kind === "calendar" ? sym : crossObj?.big;
+    return (opts?.symbols?.find((s) => s.key === k)?.expiries || []).slice().reverse();  // newest first
+  }, [opts, kind, sym, crossObj]);
+  useEffect(() => { if (expList.length && !expList.includes(nearExp)) setNearExp(expList[0]); }, [expList]);
+
   useEffect(() => {
-    if (!pair) return undefined;
+    if (!opts || !bigKey) return undefined;
+    if (mode === "month" && !nearExp) return undefined;
     let alive = true;
     setData(null); setHover(null);
-    api.spreadHistory(pair, days)
+    const params = {
+      kind, big: bigKey, small: kind === "cross" ? crossObj?.small : undefined,
+      mode, rank: kind === "calendar" ? rank : 0,
+      start: mode === "continuous" ? `${yearFrom}-01-01` : "2016-01-01",
+      big_exp: mode === "month" ? nearExp : undefined,
+    };
+    api.bhavSeries(params)
       .then((r) => { if (alive) { setData(r); setErr(null); } })
       .catch((e) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
-  }, [pair, days]);
+  }, [opts, kind, bigKey, crossObj, mode, rank, nearExp, yearFrom]);
 
   const n = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
   const sgn = (v, d = 2) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d));
@@ -50,9 +74,8 @@ function SpreadHistory({ pairs, onClose }) {
     const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][Number(m) - 1];
     return `${d} ${M} ${y.slice(2)}`;
   };
+  const expLabel = (iso) => (iso ? when(iso) : "—");
 
-  // Chronological series for the chart and the summary; the table stays
-  // newest-first, which is how a person reads a history.
   const series = useMemo(() => (data?.rows || []).slice().reverse(), [data]);
   const stats = useMemo(() => {
     const v = series.map((r) => r.diff).filter((x) => x != null);
@@ -61,8 +84,6 @@ function SpreadHistory({ pairs, onClose }) {
     return { latest: v[v.length - 1], avg, min: Math.min(...v), max: Math.max(...v), days: v.length };
   }, [series]);
 
-  // Sparkline: one series, 2px line, a 4px dot on the hovered day, direct
-  // labels only at the ends. Text stays in text tokens, the line in accent.
   const W = 760, H = 150, PX = 34, PY = 14;
   const chart = useMemo(() => {
     if (!stats || series.length < 2) return null;
@@ -82,32 +103,78 @@ function SpreadHistory({ pairs, onClose }) {
     setHover(best);
   };
   const hv = hover != null ? series[hover] : null;
+  const years = [];
+  for (let y = 2021; y <= new Date().getFullYear(); y += 1) years.push(y);
+  const isCal = kind === "calendar";
 
   return (
     <div className="pt-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="pt-modal sh-modal" role="dialog" aria-label="Spread history">
         <div className="pt-modal-head">
           <div>
-            <b>Spread history</b>
-            <span className="sh-sub">One value per day, from each leg's closing price · far month minus near month</span>
+            <b>Spread history · {isCal ? "Calendar" : "Cross pair"}</b>
+            <span className="sh-sub">
+              One value per day from MCX closing prices
+              {opts?.coverage?.from ? ` · data ${when(opts.coverage.from)} to ${when(opts.coverage.to)}` : ""}
+              {isCal ? " · far month minus near month" : " · big leg minus small leg, board multipliers"}
+            </span>
           </div>
           <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="sh-body">
           <div className="sh-controls">
-            <label><span>Pair</span>
-              <select className="oh-weeks pt-form-select" value={pair}
-                onChange={(e) => setPair(e.target.value)}>
-                {allPairs.map((x) => <option key={x.name} value={x.name}>{x.title}</option>)}
-              </select></label>
-            <label><span>Period</span>
+            <label><span>{isCal ? "Symbol" : "Pair"}</span>
+              {isCal ? (
+                <select className="oh-weeks pt-form-select" value={sym} onChange={(e) => setSym(e.target.value)}>
+                  {(opts?.symbols || []).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              ) : (
+                <select className="oh-weeks pt-form-select" value={cross} onChange={(e) => setCross(e.target.value)}>
+                  {(opts?.cross || []).map((c) => <option key={`${c.big}|${c.small}`} value={`${c.big}|${c.small}`}>{c.label}</option>)}
+                </select>
+              )}
+            </label>
+            <label><span>View</span>
               <div className="oh-group">
-                {[30, 60, 120, 365].map((d) => (
-                  <button key={d} type="button" className={`oh-chip ${days === d ? "on" : ""}`}
-                    onClick={() => setDays(d)}>{d === 365 ? "1 year" : `${d} days`}</button>
-                ))}
+                <button type="button" className={`oh-chip ${mode === "continuous" ? "on" : ""}`}
+                  onClick={() => setMode("continuous")}>Continuous</button>
+                <button type="button" className={`oh-chip ${mode === "month" ? "on" : ""}`}
+                  onClick={() => setMode("month")}>Month-wise</button>
               </div></label>
+            {mode === "continuous" ? (
+              <>
+                <label><span>From year</span>
+                  <div className="oh-group">
+                    {years.map((y) => (
+                      <button key={y} type="button" className={`oh-chip ${yearFrom === y ? "on" : ""}`}
+                        onClick={() => setYearFrom(y)}>{y}</button>
+                    ))}
+                  </div></label>
+                {isCal && (
+                  <label><span>Months</span>
+                    <div className="oh-group">
+                      {[[0, "M1-M2"], [1, "M2-M3"], [2, "M3-M4"]].map(([r, l]) => (
+                        <button key={r} type="button" className={`oh-chip ${rank === r ? "on" : ""}`}
+                          onClick={() => setRank(r)}>{l}</button>
+                      ))}
+                    </div></label>
+                )}
+              </>
+            ) : (
+              <label><span>{isCal ? "Near month" : "Big leg month"}</span>
+                <select className="oh-weeks pt-form-select" value={nearExp} onChange={(e) => setNearExp(e.target.value)}>
+                  {expList.map((x) => <option key={x} value={x}>{expLabel(x)}</option>)}
+                </select></label>
+            )}
           </div>
+
+          {data && mode === "month" && (
+            <div className="sh-sub">
+              {isCal
+                ? `${data.label}: ${expLabel(data.near_exp)} (near) vs ${expLabel(data.far_exp)} (far)`
+                : `${data.label}: ${expLabel(data.big_exp)} vs ${expLabel(data.small_exp)} - months matched the board's way`}
+            </div>
+          )}
 
           {err && <div className="settings-banner danger">⚠ {err}</div>}
           {!data && !err && <div className="empty-state">Loading…</div>}
@@ -139,8 +206,11 @@ function SpreadHistory({ pairs, onClose }) {
                 <text x={W - PX} y={H - 2} className="sh-axis" textAnchor="end">{when(series[series.length - 1].date)}</text>
               </svg>
               <div className="sh-tip">
-                {hv ? <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · near {n(hv.near)} · far {n(hv.far)}</>
-                    : "Move over the line for a day's numbers"}
+                {hv ? (
+                  isCal
+                    ? <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · near {n(hv.near)} ({expLabel(hv.near_exp)}) · far {n(hv.far)} ({expLabel(hv.far_exp)})</>
+                    : <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · big {n(hv.big_rate)} ({expLabel(hv.big_exp)}) · small {n(hv.small_rate)} ({expLabel(hv.small_exp)})</>
+                ) : "Move over the line for a day's numbers"}
               </div>
             </div>
           )}
@@ -149,23 +219,32 @@ function SpreadHistory({ pairs, onClose }) {
             <div className="pt-tablewrap sh-tablewrap">
               <table className="pt-table sh-table">
                 <thead><tr>
-                  <th>Date</th><th>Near close</th><th>Far close</th><th>Difference</th><th>%</th>
+                  <th>Date</th>
+                  {isCal ? <><th>Near close</th><th>Far close</th></> : <><th>Big (rate)</th><th>Small (rate)</th></>}
+                  <th>Difference</th><th>%</th>
+                  {mode === "continuous" && <th>Contracts</th>}
                 </tr></thead>
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.date}>
                       <td>{when(r.date)}</td>
-                      <td className="sh-muted">{n(r.near)}</td><td className="sh-muted">{n(r.far)}</td>
+                      {isCal
+                        ? <><td className="sh-muted">{n(r.near)}</td><td className="sh-muted">{n(r.far)}</td></>
+                        : <><td className="sh-muted">{n(r.big_rate)}</td><td className="sh-muted">{n(r.small_rate)}</td></>}
                       <td className={r.diff >= 0 ? "pos" : "neg"}><b>{sgn(r.diff)}</b></td>
                       <td className={r.pct >= 0 ? "pos" : "neg"}>{sgn(r.pct)}</td>
+                      {mode === "continuous" && (
+                        <td className="sh-muted sh-contracts">
+                          {isCal ? `${expLabel(r.near_exp)} / ${expLabel(r.far_exp)}` : `${expLabel(r.big_exp)} / ${expLabel(r.small_exp)}`}
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {data.rows.length === 0 && (
-                    <tr><td colSpan={5} className="sh-empty">
-                      {data.error
-                        || (data.far_days === 0 || data.near_days === 0
-                          ? `No closing prices yet for ${data.far_days === 0 ? (data.far_symbol || "the far month") : (data.near_symbol || "the near month")} - a contract that has not traded has no daily close, so there is nothing to compare until it does.`
-                          : "No closing prices for this pair in this period. A far month that has not traded yet has none; try a longer period, or check back after it starts trading.")}
+                    <tr><td colSpan={7} className="sh-empty">
+                      No closing prices for this selection. The archive starts in 2021 and a
+                      contract only has closes from its first trade; Gold Ten and Silver 100
+                      were listed later than the others.
                     </td></tr>
                   )}
                 </tbody>
@@ -237,17 +316,14 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
         <MetalSpread data={otherCommData} embedded showPct={false} colorFn={otherCommColorKey} loadingText="Loading other-commodity data…" />
       )}
 
-      {tab === "calendar" && (
+      {isSpread && (
         <div className="sh-btnrow">
           <button type="button" className="oh-chip"
-            title="Day-by-day stored spread of any calendar pair"
+            title="Day-by-day spread from MCX closing prices, 2021 to yesterday"
             onClick={() => setHistOpen(true)}>Spread History</button>
         </div>
       )}
-      {histOpen && (
-        <SpreadHistory onClose={() => setHistOpen(false)}
-          pairs={calendarRows.map((r) => ({ name: r.name, title: r.mcx_label || r.label }))} />
-      )}
+      {histOpen && <SpreadHistory kind={tab} onClose={() => setHistOpen(false)} />}
 
       {isSpread && (
         rows.length === 0 ? (
