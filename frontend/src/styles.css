@@ -6014,3 +6014,16 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-tablefull::-webkit-scrollbar-thumb:hover { background: var(--text-primary); }
 .sh-table td, .sh-table th { padding: 6px 12px; }
 .sh-table tbody tr:hover td { background: rgba(201,162,78,.08); }
+
+/* Spread History v4: symbol + view live in the header; chart matches the side panel */
+.sh-modal .pt-modal-head { gap: 18px; align-items: center; }
+.sh-modal .pt-modal-head > div:first-child { flex: none; min-width: 300px; }
+.sh-headctl { display: flex; align-items: flex-end; gap: 16px; flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+.sh-headctl label { display: grid; gap: 4px; }
+.sh-headctl label > span { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.sh-headctl select { min-width: 320px; }
+.sh-top { align-items: stretch; }
+.sh-chartcol { display: flex; }
+.sh-chartcol .sh-chart { flex: 1; min-height: 0; max-height: none; height: auto; display: flex; flex-direction: column; }
+.sh-chartcol .sh-chart svg { flex: 1; height: auto; min-height: 220px; }
+.sh-side .sh-controls .oh-group { width: 100%; }

@@ -162,6 +162,26 @@ function SpreadHistory({ kind, onClose }) {
               {isCal ? " · far month minus near month" : " · big leg minus small leg, board multipliers"}
             </span>
           </div>
+          <div className="sh-headctl">
+            <label><span>{isCal ? "Symbol" : "Pair"}</span>
+              {isCal ? (
+                <select className="oh-weeks pt-form-select" value={sym} onChange={(e) => setSym(e.target.value)}>
+                  {(opts?.symbols || []).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              ) : (
+                <select className="oh-weeks pt-form-select" value={cross} onChange={(e) => setCross(e.target.value)}>
+                  {(opts?.cross || []).map((c) => <option key={`${c.big}|${c.small}`} value={`${c.big}|${c.small}`}>{c.label}</option>)}
+                </select>
+              )}
+            </label>
+            <label><span>View</span>
+              <div className="oh-group">
+                <button type="button" className={`oh-chip ${mode === "continuous" ? "on" : ""}`}
+                  onClick={() => setMode("continuous")}>Continuous</button>
+                <button type="button" className={`oh-chip ${mode === "month" ? "on" : ""}`}
+                  onClick={() => setMode("month")}>Month-wise</button>
+              </div></label>
+          </div>
           <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
@@ -213,26 +233,8 @@ function SpreadHistory({ kind, onClose }) {
 
             </div>
             <aside className="sh-side">
-              <div className="sh-side-title">Filters</div>
+              <div className="sh-side-title">Period</div>
           <div className="sh-controls">
-            <label><span>{isCal ? "Symbol" : "Pair"}</span>
-              {isCal ? (
-                <select className="oh-weeks pt-form-select" value={sym} onChange={(e) => setSym(e.target.value)}>
-                  {(opts?.symbols || []).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              ) : (
-                <select className="oh-weeks pt-form-select" value={cross} onChange={(e) => setCross(e.target.value)}>
-                  {(opts?.cross || []).map((c) => <option key={`${c.big}|${c.small}`} value={`${c.big}|${c.small}`}>{c.label}</option>)}
-                </select>
-              )}
-            </label>
-            <label><span>View</span>
-              <div className="oh-group">
-                <button type="button" className={`oh-chip ${mode === "continuous" ? "on" : ""}`}
-                  onClick={() => setMode("continuous")}>Continuous</button>
-                <button type="button" className={`oh-chip ${mode === "month" ? "on" : ""}`}
-                  onClick={() => setMode("month")}>Month-wise</button>
-              </div></label>
             {mode === "continuous" ? (
               <>
                 <label><span>Year</span>
