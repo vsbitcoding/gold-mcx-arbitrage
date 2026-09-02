@@ -89,15 +89,39 @@ function SpreadHistory({ kind, onClose }) {
     return { latest: v[v.length - 1], avg, min: Math.min(...v), max: Math.max(...v), days: v.length };
   }, [series]);
 
-  const W = 1000, H = 230, PX = 34, PY = 16;
+  const W = 1000, H = 360, PX = 62, PY = 18, PB = 30;
   const chart = useMemo(() => {
     if (!stats || series.length < 2) return null;
-    const lo = stats.min, hi = stats.max, span = hi - lo || 1;
-    const x = (i) => PX + (i / (series.length - 1)) * (W - PX * 2);
-    const y = (v) => PY + (1 - (v - lo) / span) * (H - PY * 2);
+    // y range padded a little so the extremes do not sit on the frame
+    const pad = (stats.max - stats.min || 1) * 0.06;
+    const lo = stats.min - pad, hi = stats.max + pad, span = hi - lo || 1;
+    const x = (i) => PX + (i / (series.length - 1)) * (W - PX - 16);
+    const y = (v) => PY + (1 - (v - lo) / span) * (H - PY - PB);
     const pts = series.map((r, i) => [x(i), y(r.diff)]);
+    const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+    const base = y(Math.max(lo, Math.min(hi, 0)));
+    const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${base.toFixed(1)} L${pts[0][0].toFixed(1)},${base.toFixed(1)} Z`;
+    // 20-day average: the trend under the daily spikes
+    const win = Math.min(20, Math.max(2, Math.floor(series.length / 8)));
+    const ma = [];
+    let acc = 0;
+    for (let i = 0; i < series.length; i += 1) {
+      acc += series[i].diff;
+      if (i >= win) acc -= series[i - win].diff;
+      if (i >= win - 1) ma.push([x(i), y(acc / win)]);
+    }
+    const maPath = ma.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+    // y ticks: 5 round-ish values; x ticks: first trading day of each year (or month if short)
+    const yTicks = [];
+    for (let k = 0; k <= 4; k += 1) { const v = lo + (span * k) / 4; yTicks.push({ v, y: y(v) }); }
+    const seen = new Set(); const xTicks = [];
+    const byYear = series.length > 400;
+    series.forEach((r, i) => {
+      const key = byYear ? r.date.slice(0, 4) : r.date.slice(0, 7);
+      if (!seen.has(key)) { seen.add(key); xTicks.push({ x: x(i), label: byYear ? key : when(r.date).slice(3) }); }
+    });
     const zero = lo <= 0 && hi >= 0 ? y(0) : null;
-    return { pts, path: pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" "), zero, x, y };
+    return { pts, line, area, maPath, win, yTicks, xTicks: xTicks.slice(0, 14), zero, x, y };
   }, [series, stats]);
   const onMove = (e) => {
     if (!chart) return;
@@ -197,20 +221,37 @@ function SpreadHistory({ kind, onClose }) {
 
           {chart && (
             <div className="sh-chart">
+              <div className="sh-legend">
+                <span><i className="sh-lg-line" /> daily difference</span>
+                <span><i className="sh-lg-ma" /> {chart.win}-day average</span>
+                {chart.zero != null && <span><i className="sh-lg-zero" /> zero</span>}
+              </div>
               <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
                 onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+                {chart.yTicks.map((tk) => (
+                  <g key={tk.y}>
+                    <line x1={PX} x2={W - 16} y1={tk.y} y2={tk.y} className="sh-grid-y" />
+                    <text x={PX - 8} y={tk.y + 4} className="sh-axis" textAnchor="end">{fmtNum(tk.v, 0)}</text>
+                  </g>
+                ))}
+                {chart.xTicks.map((tk) => (
+                  <g key={tk.x}>
+                    <line x1={tk.x} x2={tk.x} y1={PY} y2={H - PB} className="sh-grid-x" />
+                    <text x={tk.x + 4} y={H - 10} className="sh-axis">{tk.label}</text>
+                  </g>
+                ))}
                 {chart.zero != null && (
-                  <line x1={PX} x2={W - PX} y1={chart.zero} y2={chart.zero} className="sh-zero" />
+                  <line x1={PX} x2={W - 16} y1={chart.zero} y2={chart.zero} className="sh-zero" />
                 )}
-                <path d={chart.path} className="sh-line" />
+                <path d={chart.area} className="sh-area" />
+                <path d={chart.line} className="sh-line" />
+                <path d={chart.maPath} className="sh-ma" />
                 {hv && (
                   <>
-                    <line x1={chart.x(hover)} x2={chart.x(hover)} y1={PY} y2={H - PY} className="sh-cross" />
-                    <circle cx={chart.x(hover)} cy={chart.y(hv.diff)} r="4" className="sh-dot" />
+                    <line x1={chart.x(hover)} x2={chart.x(hover)} y1={PY} y2={H - PB} className="sh-cross" />
+                    <circle cx={chart.x(hover)} cy={chart.y(hv.diff)} r="4.5" className="sh-dot" />
                   </>
                 )}
-                <text x={PX} y={H - 2} className="sh-axis">{when(series[0].date)}</text>
-                <text x={W - PX} y={H - 2} className="sh-axis" textAnchor="end">{when(series[series.length - 1].date)}</text>
               </svg>
               <div className="sh-tip">
                 {hv ? (

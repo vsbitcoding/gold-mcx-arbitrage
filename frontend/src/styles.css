@@ -5953,3 +5953,26 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-progress { height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); background-size: 200% 100%; animation: shprog 1s linear infinite; }
 @keyframes shprog { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (max-width: 1100px) { .sh-grid { grid-template-columns: 1fr; } .sh-right { max-height: 40vh; } }
+
+/* Spread History: above the app header, and the chart fills the left column */
+.pt-overlay { z-index: 1200; padding: 2vh 2vw; align-items: flex-start; }
+.sh-modal { display: flex; flex-direction: column; height: 96vh; max-height: 96vh; overflow: hidden; }
+.sh-modal .pt-modal-head { flex: none; }
+.sh-modal .sh-body { flex: 1; min-height: 0; overflow: hidden; }
+.sh-grid { height: 100%; }
+.sh-left { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+.sh-left .sh-controls, .sh-left .sh-stats, .sh-left .sh-sub, .sh-left .sh-progress, .sh-left .settings-banner { flex: none; }
+.sh-chart { flex: 1; min-height: 240px; display: flex; flex-direction: column; }
+.sh-chart svg { flex: 1; height: auto; min-height: 220px; }
+.sh-right { max-height: 100%; height: 100%; }
+.sh-line { stroke-width: 1.4; }
+.sh-area { fill: var(--accent); opacity: .10; }
+.sh-ma { fill: none; stroke: var(--text-primary); stroke-width: 2; opacity: .85; vector-effect: non-scaling-stroke; }
+.sh-grid-y, .sh-grid-x { stroke: var(--border); stroke-width: 1; opacity: .7; vector-effect: non-scaling-stroke; }
+.sh-grid-x { opacity: .35; }
+.sh-legend { display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); padding: 2px 6px 6px; }
+.sh-legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.sh-lg-line { border-color: var(--accent) !important; }
+.sh-lg-ma { border-color: var(--text-primary) !important; }
+.sh-lg-zero { border-color: var(--border) !important; border-top-style: dashed !important; }
+@media (max-width: 1100px) { .sh-modal { height: auto; max-height: 96vh; overflow-y: auto; } .sh-grid { height: auto; } .sh-left { height: auto; } .sh-chart svg { height: 260px; } }
