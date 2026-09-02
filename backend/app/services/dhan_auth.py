@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import struct
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -150,23 +151,35 @@ def fetch_token(client_id: str, pin: str, totp_secret: str) -> DhanToken:
     return tok
 
 
+_mint_lock = threading.Lock()
+
+
 def get_token(client_id: str, pin: str, totp_secret: str) -> DhanToken:
     """Cached, auto-refreshing token getter: memory → disk → mint.
 
     The disk hop is what makes deploys safe: after a restart (or a benign
-    in-memory invalidate) the still-valid token is reused — no new login."""
+    in-memory invalidate) the still-valid token is reused — no new login.
+
+    Serialised: on 02-Sep two threads (feed loop and the option poll) reached
+    the mint together, the second one got "Token can be generated once every
+    2 minutes", and the feed loop read that as a rate-limit and slept 900 s
+    on a board that had a perfectly good token. Under the lock the second
+    caller finds the first one's fresh token in memory and never mints."""
     global _cached
     if _cached and not _cached.needs_refresh():
         return _cached
-    disk = _load_disk()
-    if disk:
-        log.info("Reusing cached Dhan token (expires in %.1f h) — no fresh login needed.",
-                 disk.expires_in() / 3600)
-        _cached = disk
+    with _mint_lock:
+        if _cached and not _cached.needs_refresh():     # minted while we waited
+            return _cached
+        disk = _load_disk()
+        if disk:
+            log.info("Reusing cached Dhan token (expires in %.1f h) — no fresh login needed.",
+                     disk.expires_in() / 3600)
+            _cached = disk
+            return _cached
+        _cached = fetch_token(client_id, pin, totp_secret)
+        _save_disk(_cached)
         return _cached
-    _cached = fetch_token(client_id, pin, totp_secret)
-    _save_disk(_cached)
-    return _cached
 
 
 def invalidate(disk: bool = False) -> None:
