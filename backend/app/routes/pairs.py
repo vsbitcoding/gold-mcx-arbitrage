@@ -13,6 +13,14 @@ def live(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     return build_live_payload(db)
 
 
+@router.get("/history-pairs")
+def history_pairs(user: str = Depends(get_current_user)):
+    """Every pair the history dialog may show: live ones plus remembered
+    expired ones (client, 03-Sep: expiry must not erase a pair's history)."""
+    from app.services.spread_close_history import list_pairs
+    return {"pairs": list_pairs()}
+
+
 @router.get("/spread-history")
 def spread_history(pair: str, days: int = 120,
                    user: str = Depends(get_current_user)):

@@ -245,6 +245,11 @@ def _run_real_feed_thread() -> None:
 
             # Refresh pair registry → build all 56 pairs and gather subscription list
             n = pair_registry.refresh(min_days_ahead=1, max_per_instrument=6)
+            try:
+                from app.services.spread_close_history import record_pairs
+                record_pairs()
+            except Exception as e:  # noqa: BLE001
+                log.warning("pair-leg record failed: %s", e)
             if n == 0:
                 raise RuntimeError("Pair registry empty — no active MCX gold contracts resolved.")
 
@@ -518,6 +523,11 @@ def _run_simulated_thread() -> None:
     import random
     log.warning("SIMULATED feed (no Dhan credentials).")
     pair_registry.refresh(min_days_ahead=1, max_per_instrument=6)
+    try:
+        from app.services.spread_close_history import record_pairs
+        record_pairs()
+    except Exception as e:  # noqa: BLE001
+        log.warning("pair-leg record failed: %s", e)
     subs = pair_registry.get_subscriptions()
     _set_state(mode="simulated", instruments=subs)
     base_by_short = {"petal": 122.0, "guinea": 968.0, "ten": 1218.0, "mini": 12180.0}

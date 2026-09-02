@@ -16,6 +16,22 @@ function SpreadHistory({ pairs, onClose }) {
   const [days, setDays] = useState(120);
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  // The board only knows LIVE pairs; the server also remembers expired ones
+  // (client, 03-Sep: expiry must not erase a pair's history).
+  const [allPairs, setAllPairs] = useState(pairs);
+  useEffect(() => {
+    let alive = true;
+    api.historyPairs()
+      .then((r) => {
+        if (!alive || !r.pairs?.length) return;
+        setAllPairs(r.pairs.map((x) => ({
+          name: x.name,
+          title: x.expired ? `${x.title}  (expired)` : x.title,
+        })));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     if (!pair) return undefined;
     let alive = true;
@@ -38,7 +54,7 @@ function SpreadHistory({ pairs, onClose }) {
             <label><span>Pair</span>
               <select className="oh-weeks pt-form-select" value={pair}
                 onChange={(e) => setPair(e.target.value)}>
-                {pairs.map((x) => <option key={x.name} value={x.name}>{x.title}</option>)}
+                {allPairs.map((x) => <option key={x.name} value={x.name}>{x.title}</option>)}
               </select></label>
             <label><span>Days</span>
               <select className="oh-weeks pt-form-select" value={days}

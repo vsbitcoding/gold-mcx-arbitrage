@@ -64,13 +64,86 @@ def _closes(sid: str, days: int) -> dict[str, float]:
     return out
 
 
-def pair_history(pair_name: str, days: int) -> dict:
-    """Rows newest first: date, near/far closes, ONE difference, %."""
+def record_pairs() -> None:
+    """Remember every live calendar pair's legs, so expiry cannot erase its
+    history. Called after each pair-registry refresh; upserts are cheap."""
+    from app.database import SessionLocal
+    from app.models import PairLeg
+    from app.services.pair_registry import get_pairs
+    pairs = [p for p in get_pairs() if p.get("type") == "calendar"]
+    if not pairs:
+        return
+    db = SessionLocal()
+    try:
+        known = {r.name: r for r in db.query(PairLeg).all()}
+        now = datetime.now()
+        for p in pairs:
+            row = known.get(p["name"])
+            if not row:
+                row = PairLeg(name=p["name"])
+                db.add(row)
+            row.group_label = p.get("group_label")
+            row.big_security_id = str(p["big_security_id"])
+            row.small_security_id = str(p["small_security_id"])
+            row.big_symbol = p.get("big_trading_symbol")
+            row.small_symbol = p.get("small_trading_symbol")
+            row.last_seen = now
+        db.commit()
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        log.warning("record_pairs failed: %s", e)
+    finally:
+        db.close()
+
+
+def list_pairs() -> list[dict]:
+    """Everything selectable in the history dialog: live pairs first, then the
+    remembered expired ones, newest expiry group first."""
+    from app.database import SessionLocal
+    from app.models import PairLeg
+    from app.services.pair_registry import get_pairs
+    live = {p["name"]: p for p in get_pairs() if p.get("type") == "calendar"}
+    out = [{"name": n, "title": p.get("mcx_label") or p.get("label") or n,
+            "expired": False} for n, p in live.items()]
+    db = SessionLocal()
+    try:
+        for r in db.query(PairLeg).order_by(PairLeg.name.desc()).all():
+            if r.name in live:
+                continue
+            title = f"{r.group_label or ''} {r.big_symbol or ''} / {r.small_symbol or ''}".strip()
+            out.append({"name": r.name, "title": title or r.name, "expired": True})
+    finally:
+        db.close()
+    return out
+
+
+def _legs_of(pair_name: str) -> dict | None:
+    """The pair's legs - from the live registry, or the memory of it."""
     from app.services.pair_registry import get_pairs
     pair = next((p for p in get_pairs() if p.get("name") == pair_name), None)
+    if pair:
+        return pair
+    from app.database import SessionLocal
+    from app.models import PairLeg
+    db = SessionLocal()
+    try:
+        r = db.query(PairLeg).filter(PairLeg.name == pair_name).first()
+        if not r:
+            return None
+        return {"name": r.name, "big_security_id": r.big_security_id,
+                "small_security_id": r.small_security_id,
+                "big_trading_symbol": r.big_symbol,
+                "small_trading_symbol": r.small_symbol}
+    finally:
+        db.close()
+
+
+def pair_history(pair_name: str, days: int) -> dict:
+    """Rows newest first: date, near/far closes, ONE difference, %."""
+    pair = _legs_of(pair_name)
     if not pair:
         return {"pair": pair_name, "rows": [], "count": 0,
-                "error": "pair not live any more - only live pairs have history here"}
+                "error": "unknown pair - it was never recorded"}
     with _lock:
         far = _closes(pair["big_security_id"], days)
         near = _closes(pair["small_security_id"], days)

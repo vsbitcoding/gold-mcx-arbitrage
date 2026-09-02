@@ -444,6 +444,26 @@ class CrudeIvSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PairLeg(Base):
+    """Which contracts a calendar pair was made of - remembered PAST expiry.
+
+    The live registry forgets a pair the moment its near leg expires, which
+    made its history unreachable (client, 03-Sep: "expired contract not remove
+    rate from history"). Dhan still serves candles for expired security ids,
+    so keeping name -> legs here keeps every pair's close history viewable
+    for as long as Dhan keeps the candles.
+    """
+    __tablename__ = "pair_legs"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64), unique=True, nullable=False)
+    group_label = Column(String(32), nullable=True)
+    big_security_id = Column(String(16), nullable=False)
+    small_security_id = Column(String(16), nullable=False)
+    big_symbol = Column(String(40), nullable=True)
+    small_symbol = Column(String(40), nullable=True)
+    last_seen = Column(DateTime, nullable=True)
+
+
 class ElecHourly(Base):
     """Hourly NSE-vs-MCX electricity future prices - ONE difference per row
     (client's single-value rule). Recorded live at the top of each hour; it
