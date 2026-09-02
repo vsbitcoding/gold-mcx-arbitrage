@@ -34,8 +34,14 @@ def _closes(sid: str, days: int) -> dict[str, float]:
     hit = _cache.get(sid)
     if hit and now - hit[0] < _CACHE_TTL:
         return hit[1]
-    from app.services import dhan_feed
-    token = dhan_feed.get_live_token()
+    # The feed's socket token is NOT the right one for REST: the socket keeps
+    # working on a token that a later in-process re-mint has invalidated for
+    # REST (seen 02-Sep 14:30 - history went blank while the feed ticked on).
+    # dhan_auth.get_token is the cached, auto-refreshing one every REST caller
+    # uses; in-process it never mints while a valid token exists.
+    from app.services import dhan_auth
+    token = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
+                                settings.DHAN_TOTP_SECRET).access_token
     to = datetime.now().date()
     out: dict[str, float] = {}
     # Dhan rejects windows starting before listing (DH-905); shrink until it
@@ -56,6 +62,12 @@ def _closes(sid: str, days: int) -> dict[str, float]:
         if "close" in d:
             for ts, cl in zip(d.get("timestamp") or [], d.get("close") or []):
                 out[datetime.fromtimestamp(ts).date().isoformat()] = cl
+            break
+        # Say what Dhan said. A silent empty answer is how this went blank on
+        # the client's screen without a line in the log.
+        code = str(d.get("errorCode") or d.get("errorType") or d)[:80]
+        log.warning("closes %s window %d: %s", sid, win, code)
+        if "DH-905" not in code:          # only the listing-window error is worth retrying
             break
         time.sleep(0.4)
     _cache[sid] = (now, out)
@@ -157,6 +169,7 @@ def pair_history(pair_name: str, days: int) -> dict:
             "date": d, "near": near[d], "far": far[d], "diff": diff,
             "pct": round(diff / near[d] * 100, 2) if near[d] else None,
         })
+    log.info("spread-history %s: %d rows over %d days", pair_name, len(rows), days)
     return {"pair": pair_name, "days": days, "count": len(rows),
             "near_symbol": pair.get("small_trading_symbol"),
             "far_symbol": pair.get("big_trading_symbol"), "rows": rows}
