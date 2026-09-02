@@ -20,7 +20,9 @@ function SpreadHistory({ kind, onClose }) {
   const [cross, setCross] = useState("");              // cross: "big|small"
   const [rank, setRank] = useState(0);                 // calendar continuous: M1-M2, M2-M3...
   const [nearExp, setNearExp] = useState("");          // month mode: chosen near/big expiry
-  const [yearFrom, setYearFrom] = useState(2021);
+  const [year, setYear] = useState(String(new Date().getFullYear()));   // "all" | "YYYY"
+  const [page, setPage] = useState(1);
+  const PAGE = 100;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -63,14 +65,16 @@ function SpreadHistory({ kind, onClose }) {
     const params = {
       kind, big: bigKey, small: kind === "cross" ? crossObj?.small : undefined,
       mode, rank: kind === "calendar" ? rank : 0,
-      start: mode === "continuous" ? `${yearFrom}-01-01` : "2016-01-01",
+      start: mode !== "continuous" ? "2015-01-01" : (year === "all" ? "2015-01-01" : `${year}-01-01`),
+      end: mode === "continuous" && year !== "all" ? `${year}-12-31` : undefined,
       big_exp: mode === "month" ? nearExp : undefined,
     };
+    setPage(1);
     api.bhavSeries(params)
       .then((r) => { if (seq === reqSeq.current) { setData(r); setErr(null); setLoading(false); } })
       .catch((e) => { if (seq === reqSeq.current) { setErr(e.message); setLoading(false); } });
     return undefined;
-  }, [opts, kind, bigKey, crossObj, mode, rank, nearExp, yearFrom]);
+  }, [opts, kind, bigKey, crossObj, mode, rank, nearExp, year]);
 
   const n = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
   const sgn = (v, d = 2) => (v == null ? "—" : (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), d));
@@ -183,11 +187,13 @@ function SpreadHistory({ kind, onClose }) {
               </div></label>
             {mode === "continuous" ? (
               <>
-                <label><span>From year</span>
+                <label><span>Year</span>
                   <div className="oh-group">
+                    <button type="button" className={`oh-chip ${year === "all" ? "on" : ""}`}
+                      onClick={() => setYear("all")}>All</button>
                     {years.map((y) => (
-                      <button key={y} type="button" className={`oh-chip ${yearFrom === y ? "on" : ""}`}
-                        onClick={() => setYearFrom(y)}>{y}</button>
+                      <button key={y} type="button" className={`oh-chip ${year === String(y) ? "on" : ""}`}
+                        onClick={() => setYear(String(y))}>{y}</button>
                     ))}
                   </div></label>
                 {isCal && (
@@ -285,19 +291,19 @@ function SpreadHistory({ kind, onClose }) {
                   <th>Date</th>
                   {isCal ? <><th>Near close</th><th>Far close</th></> : <><th>Big (rate)</th><th>Small (rate)</th></>}
                   <th>Difference</th>
-                  {isCal && <th title={`difference × ${data.std_mult || 1} - the board's common basis`}>Diff {data.std_unit || "per 10 gm"}</th>}
+                  {isCal && (data.std_mult || 1) !== 1 && <th title={`difference × ${data.std_mult} - the board's common basis`}>Diff {data.std_unit || "per 10 gm"}</th>}
                   <th>%</th>
                   {mode === "continuous" && <th>Contracts</th>}
                 </tr></thead>
                 <tbody>
-                  {data.rows.map((r) => (
+                  {data.rows.slice((page - 1) * PAGE, page * PAGE).map((r) => (
                     <tr key={r.date}>
                       <td>{when(r.date)}</td>
                       {isCal
                         ? <><td className="sh-muted">{n(r.near)}</td><td className="sh-muted">{n(r.far)}</td></>
                         : <><td className="sh-muted">{n(r.big_rate)}</td><td className="sh-muted">{n(r.small_rate)}</td></>}
                       <td className={r.diff >= 0 ? "pos" : "neg"}><b>{sgn(r.diff)}</b></td>
-                      {isCal && <td className={(r.diff_std ?? r.diff) >= 0 ? "pos" : "neg"}><b>{sgn(r.diff_std ?? r.diff)}</b></td>}
+                      {isCal && (data.std_mult || 1) !== 1 && <td className={(r.diff_std ?? r.diff) >= 0 ? "pos" : "neg"}><b>{sgn(r.diff_std ?? r.diff)}</b></td>}
                       <td className={r.pct >= 0 ? "pos" : "neg"}>{sgn(r.pct)}</td>
                       {mode === "continuous" && (
                         <td className="sh-muted sh-contracts">
@@ -315,6 +321,16 @@ function SpreadHistory({ kind, onClose }) {
                   )}
                 </tbody>
               </table>
+              {data.rows.length > PAGE && (
+                <div className="pt-pager sh-pager">
+                  <span className="pt-pager-total">{data.rows.length} days · newest first</span>
+                  <button type="button" className="oh-chip" disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
+                  <span className="pt-pager-page">page {page} / {Math.ceil(data.rows.length / PAGE)}</span>
+                  <button type="button" className="oh-chip" disabled={page >= Math.ceil(data.rows.length / PAGE)}
+                    onClick={() => setPage((p) => p + 1)}>Next ›</button>
+                </div>
+              )}
             </div>
           )}
         </div>
