@@ -5936,3 +5936,20 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-empty { text-align: left !important; white-space: normal !important; color: var(--text-secondary); padding: 14px 12px !important; line-height: 1.5; }
 .sh-contracts { font-size: 10.5px; white-space: nowrap; }
 .sh-controls .oh-group { flex-wrap: wrap; }
+
+/* Spread History: use the screen. Two columns on wide screens - controls,
+   summary and chart on the left, the full-height table on the right. */
+.pt-overlay { padding: 3vh 2vw; }
+.sh-modal { width: min(1700px, 96vw); max-height: 94vh; }
+.sh-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr); gap: 18px; align-items: start; }
+.sh-left { display: grid; gap: 14px; min-width: 0; }
+.sh-right { max-height: calc(94vh - 120px); }
+.sh-chart svg { height: 230px; }
+.sh-stats b { font-size: 22px; }
+.sh-controls select { min-width: 340px; }
+/* refresh without blinking: content stays, softens, comes back */
+.sh-refreshing .sh-stats, .sh-refreshing .sh-chart, .sh-refreshing .sh-right { opacity: .55; transition: opacity .15s ease; }
+.sh-stats, .sh-chart, .sh-right { transition: opacity .2s ease; }
+.sh-progress { height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); background-size: 200% 100%; animation: shprog 1s linear infinite; }
+@keyframes shprog { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (max-width: 1100px) { .sh-grid { grid-template-columns: 1fr; } .sh-right { max-height: 40vh; } }

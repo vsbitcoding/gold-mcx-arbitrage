@@ -22,8 +22,10 @@ function SpreadHistory({ kind, onClose }) {
   const [nearExp, setNearExp] = useState("");          // month mode: chosen near/big expiry
   const [yearFrom, setYearFrom] = useState(2021);
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [hover, setHover] = useState(null);
+  const reqSeq = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -53,8 +55,11 @@ function SpreadHistory({ kind, onClose }) {
   useEffect(() => {
     if (!opts || !bigKey) return undefined;
     if (mode === "month" && !nearExp) return undefined;
-    let alive = true;
-    setData(null); setHover(null);
+    // The previous table stays on screen, dimmed, until the new one arrives -
+    // blanking it made every click look like a page reload. A sequence number
+    // drops answers that arrive out of order after fast clicking.
+    const seq = ++reqSeq.current;
+    setLoading(true); setHover(null);
     const params = {
       kind, big: bigKey, small: kind === "cross" ? crossObj?.small : undefined,
       mode, rank: kind === "calendar" ? rank : 0,
@@ -62,9 +67,9 @@ function SpreadHistory({ kind, onClose }) {
       big_exp: mode === "month" ? nearExp : undefined,
     };
     api.bhavSeries(params)
-      .then((r) => { if (alive) { setData(r); setErr(null); } })
-      .catch((e) => { if (alive) setErr(e.message); });
-    return () => { alive = false; };
+      .then((r) => { if (seq === reqSeq.current) { setData(r); setErr(null); setLoading(false); } })
+      .catch((e) => { if (seq === reqSeq.current) { setErr(e.message); setLoading(false); } });
+    return undefined;
   }, [opts, kind, bigKey, crossObj, mode, rank, nearExp, yearFrom]);
 
   const n = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
@@ -84,7 +89,7 @@ function SpreadHistory({ kind, onClose }) {
     return { latest: v[v.length - 1], avg, min: Math.min(...v), max: Math.max(...v), days: v.length };
   }, [series]);
 
-  const W = 760, H = 150, PX = 34, PY = 14;
+  const W = 1000, H = 230, PX = 34, PY = 16;
   const chart = useMemo(() => {
     if (!stats || series.length < 2) return null;
     const lo = stats.min, hi = stats.max, span = hi - lo || 1;
@@ -121,7 +126,8 @@ function SpreadHistory({ kind, onClose }) {
           </div>
           <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
         </div>
-        <div className="sh-body">
+        <div className={`sh-body sh-grid ${loading ? "sh-refreshing" : ""}`}>
+          <div className="sh-left">
           <div className="sh-controls">
             <label><span>{isCal ? "Symbol" : "Pair"}</span>
               {isCal ? (
@@ -178,6 +184,7 @@ function SpreadHistory({ kind, onClose }) {
 
           {err && <div className="settings-banner danger">⚠ {err}</div>}
           {!data && !err && <div className="empty-state">Loading…</div>}
+          {loading && data && <div className="sh-progress" aria-hidden="true" />}
 
           {data && stats && (
             <div className="sh-stats">
@@ -215,8 +222,10 @@ function SpreadHistory({ kind, onClose }) {
             </div>
           )}
 
+          </div>
+
           {data && (
-            <div className="pt-tablewrap sh-tablewrap">
+            <div className="pt-tablewrap sh-tablewrap sh-right">
               <table className="pt-table sh-table">
                 <thead><tr>
                   <th>Date</th>
