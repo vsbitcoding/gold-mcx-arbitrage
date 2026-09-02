@@ -16,23 +16,10 @@ def live(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
 @router.get("/spread-history")
 def spread_history(pair: str, days: int = 120,
                    user: str = Depends(get_current_user)):
-    """Daily spread history for one pair (client, 02-Sep: he wants the stored
-    numbers visible, not just stored). Rows before a pair went live are the
-    close-based backfill - decrease and increase equal there by construction."""
+    """Day-by-day spread of one calendar pair, from each leg's DAILY CLOSE -
+    one value per day, the client's rule (02-Sep: "increase-decrease karta
+    single value aapi de, based on closing price"). Computed on demand from
+    Dhan candles behind an hour's cache; nothing is stored."""
     days = max(7, min(int(days), 400))
-    from datetime import datetime, timedelta
-    from app.models import DailySpread
-    db = SessionLocal()
-    try:
-        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        rows = (db.query(DailySpread)
-                .filter(DailySpread.pair_name == pair,
-                        DailySpread.snap_date >= cutoff)
-                .order_by(DailySpread.snap_date.desc()).all())
-        return {"pair": pair, "days": days, "count": len(rows), "rows": [{
-            "date": r.snap_date,
-            "decrease": r.decrease_spread, "decrease_pct": r.decrease_pct,
-            "increase": r.increase_spread, "increase_pct": r.increase_pct,
-        } for r in rows]}
-    finally:
-        db.close()
+    from app.services.spread_close_history import pair_history
+    return pair_history(pair, days)

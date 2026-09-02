@@ -37,6 +37,9 @@ const PRODUCTS = [
   // History looking like Live instead of suddenly doubling in length.
   { key: "crude", label: "Crude Oil", title: "Crude Oil — NSE vs MCX", futDec: 1, strikeDec: 0, step: 100 },
   { key: "natgas", label: "Natural Gas", title: "Natural Gas — NSE vs MCX", futDec: 2, strikeDec: 0 },
+  // Futures-only: NSE lists no electricity options, so this key renders its
+  // own slim view (ElecCompare) instead of the chain machinery.
+  { key: "electricity", label: "Electricity", title: "Electricity — NSE vs MCX", futDec: 0 },
 ];
 const SLOTS = [
   { key: "all", label: "All" },
@@ -327,6 +330,130 @@ function StaleNote({ d }) {
   );
 }
 
+// Electricity - futures only, one difference (the client's note, 02-Sep).
+// Live: both exchanges' futures side by side with a single MCX-minus-NSE
+// number. History: our own hourly record, one row per hour since 02-Sep -
+// older hours cannot exist (Angel's historical API has no NCO segment).
+function ElecCompare({ d, err, product, setProduct, month, setMonth }) {
+  const [view, setView] = useState("live");
+  const [days, setDays] = useState(7);
+  const [hist, setHist] = useState(null);
+  const [histErr, setHistErr] = useState(null);
+  useEffect(() => {
+    if (view !== "history") return undefined;
+    let alive = true;
+    setHist(null);
+    api.elecHourly(month, days)
+      .then((r) => { if (alive) { setHist(r); setHistErr(null); } })
+      .catch((e) => { if (alive) setHistErr(e.message); });
+    return () => { alive = false; };
+  }, [view, month, days]);
+
+  const nse = d?.nse?.future || null;
+  const mcx = d?.mcx?.future || null;
+  const live = !!d?.fresh;
+  const num = (v, dec = 0) => (v == null ? "—" : fmtNum(v, dec));
+
+  const leg = (label, f, age) => (
+    <div className="el-leg">
+      <em>{label}</em>
+      <b>{num(f?.ltp)}</b>
+      <span>Buyer {num(f?.bid)} · Seller {num(f?.ask)}</span>
+      <i>{f?.symbol || "—"}{age != null ? ` · ${Math.round(age)}s` : ""}</i>
+    </div>
+  );
+
+  return (
+    <div className="cru-page">
+      <div className="nm-head">
+        <div className="nm-head-left">
+          <h2>Electricity — NSE vs MCX</h2>
+          <span className={`intl-status ${live ? "on" : "off"}`}>
+            {live ? "● Live" : "○ Feed issue"}
+          </span>
+        </div>
+        <div className="nm-head-end">
+          <div className="oh-group" role="tablist" aria-label="Commodity">
+            {PRODUCTS.map((p) => (
+              <button key={p.key} type="button" role="tab" aria-selected={product === p.key}
+                className={`oh-chip ${product === p.key ? "on" : ""}`}
+                onClick={() => setProduct(p.key)}>{p.label}</button>
+            ))}
+          </div>
+          <div className="oh-group" role="tablist" aria-label="Month">
+            {[[0, "Month 1"], [1, "Month 2"]].map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={month === k}
+                className={`oh-chip ${month === k ? "on" : ""}`}
+                onClick={() => setMonth(k)}>{l}</button>
+            ))}
+          </div>
+          <div className="oh-group" role="tablist" aria-label="View">
+            {[["live", "Live"], ["history", "1 Hr History"]].map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={view === k}
+                className={`oh-chip ${view === k ? "on" : ""}`}
+                onClick={() => setView(k)}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {err && <div className="settings-banner danger">⚠ {err}</div>}
+
+      {view === "live" && (
+        <div className="el-board">
+          {leg("NSE", nse, d?.nse?.age)}
+          <div className="el-diff">
+            <em>Difference (MCX − NSE)</em>
+            <b className={(d?.diff ?? 0) >= 0 ? "pos" : "neg"}>{num(d?.diff)}</b>
+            <span>{d?.pct == null ? "—" : `${fmtNum(d.pct, 2)}%`}</span>
+          </div>
+          {leg("MCX", mcx, d?.mcx?.age)}
+        </div>
+      )}
+
+      {view === "history" && (
+        <section className="nmg-card">
+          <div className="nmg-rhd">
+            <b>HOURLY DIFFERENCE</b>
+            <select className="oh-weeks" value={days}
+              onChange={(e) => setDays(Number(e.target.value))}>
+              {[2, 7, 30, 90].map((x) => <option key={x} value={x}>{x} days</option>)}
+            </select>
+          </div>
+          {histErr && <div className="settings-banner danger">⚠ {histErr}</div>}
+          {!hist && !histErr && <div className="empty-state">Loading…</div>}
+          {hist && (
+            <div className="pt-tablewrap">
+              <table className="pt-table sh-table">
+                <thead><tr>
+                  <th>Hour</th><th>NSE</th><th>MCX</th><th>Difference</th><th>%</th>
+                </tr></thead>
+                <tbody>
+                  {hist.rows.map((r) => (
+                    <tr key={r.hour}>
+                      <td>{r.hour}</td>
+                      <td>{num(r.nse)}</td><td>{num(r.mcx)}</td>
+                      <td className={r.diff >= 0 ? "pos" : "neg"}><b>{num(r.diff)}</b></td>
+                      <td>{r.pct == null ? "—" : fmtNum(r.pct, 2)}</td>
+                    </tr>
+                  ))}
+                  {hist.rows.length === 0 && (
+                    <tr><td colSpan={5}>
+                      Recording started 02-Sep-2026 - rows appear from the next
+                      market hour onward. Older hourly data does not exist for
+                      the NSE side.
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function NseMcxCrude() {
   const [product, setProduct] = useState(() => {
     try {
@@ -395,7 +522,7 @@ export default function NseMcxCrude() {
   // History rows never change once written, so this fetches on a control change
   // and never polls. The old boards stay on screen while the new ones load.
   useEffect(() => {
-    if (view !== "history") return undefined;
+    if (view !== "history" || product === "electricity") return undefined;
     let alive = true;
     setLoadingHist(true);
     (async () => {
@@ -407,6 +534,13 @@ export default function NseMcxCrude() {
     })();
     return () => { alive = false; };
   }, [view, product, slot, days, month]);
+
+  if (product === "electricity") {
+    return (
+      <ElecCompare d={d} err={err} product={product} setProduct={setProduct}
+        month={month} setMonth={setMonth} />
+    );
+  }
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
   const live = d?.nse?.ok && d?.mcx?.ok;

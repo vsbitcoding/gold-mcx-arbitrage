@@ -153,6 +153,8 @@ export const api = {
   international: () => request("/api/international"),
   nseMcx: (commodity = "crude", month = 0) =>
     request(`/api/nse-mcx?commodity=${encodeURIComponent(commodity)}&month=${month}`),
+  elecHourly: (month = 0, days = 7) =>
+    request(`/api/nse-mcx/elec-hourly?month=${month}&days=${days}`),
   nseMcxGraph: ({ commodity = "crude", strike = null, side = "ce", month = 0, days = 30 } = {}) =>
     request(`/api/nse-mcx/graph?commodity=${encodeURIComponent(commodity)}` +
             `&side=${side}&month=${month}&days=${days}` +

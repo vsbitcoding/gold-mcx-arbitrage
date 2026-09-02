@@ -270,7 +270,7 @@ def _run_real_feed_thread() -> None:
             # Resolve + add base-metal calendar legs (Copper/Aluminium/Zinc/Nickel/Lead +
             # minis) — watch-only 'Metal' tab. These are MCX FUTCOM, so they flow through
             # the default MCX-Full path below (NOT added to non_mcx_meta).
-            from app.services import (goldopt_service, mcx_opt_stream, metals_service,
+            from app.services import (elec_service, goldopt_service, mcx_opt_stream, metals_service,
                                       othercomm_service, price_service)
             try:
                 metals_service.refresh()
@@ -294,6 +294,12 @@ def _run_real_feed_thread() -> None:
                 goldopt_service.refresh()
             except Exception as e:
                 log.warning("goldopt_service.refresh() failed: %s", e)
+            try:
+                elec_service.refresh()
+                for sid, m in elec_service.get_subscription_meta().items():
+                    subs.setdefault(sid, m)
+            except Exception as e:  # noqa: BLE001
+                log.warning("elec subscription failed: %s", e)
             for sid, m in goldopt_service.get_subscription_meta().items():
                 subs[sid] = m
 

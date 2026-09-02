@@ -67,6 +67,11 @@ COMMODITIES: dict[str, dict] = {
     # rows across +-1000 instead (client asked for 21 hundreds, 13-Aug).
     "crude":  {"name": "CRUDEOIL",   "label": "NSE CRUDE OIL", "strike_step": 100},
     "natgas": {"name": "NATURALGAS", "label": "NSE NATURAL GAS"},
+    # Electricity (client's note, 02-Sep): NSE lists no ELECMBL options, so
+    # this is futures_only - its future rides EVERY poll call for free (all
+    # resolved futures do), but it takes no turn in the chain rotation, so
+    # crude and gas keep exactly the cadence they have today.
+    "electricity": {"name": "ELECMBL", "label": "NSE ELECTRICITY", "futures_only": True},
 }
 
 _MONTHS = {m: i + 1 for i, m in enumerate(
@@ -85,7 +90,8 @@ def skey(commodity: str, month: int) -> str:
 
 
 CHAINS = [(c, m) for c in COMMODITIES for m in (0, 1)]
-POLL_ORDER = ([skey(c, 0) for c in COMMODITIES] * 2) + [skey(c, 1) for c in COMMODITIES]
+_ROTATING = [c for c in COMMODITIES if not COMMODITIES[c].get("futures_only")]
+POLL_ORDER = ([skey(c, 0) for c in _ROTATING] * 2) + [skey(c, 1) for c in _ROTATING]
 
 
 def _blank() -> dict:

@@ -444,6 +444,22 @@ class CrudeIvSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ElecHourly(Base):
+    """Hourly NSE-vs-MCX electricity future prices - ONE difference per row
+    (client's single-value rule). Recorded live at the top of each hour; it
+    cannot be backfilled because Angel's historical API has no NCO segment."""
+    __tablename__ = "elec_hourly"
+    id = Column(Integer, primary_key=True)
+    hour = Column(String(16), nullable=False, index=True)     # "2026-09-02 14:00"
+    month = Column(Integer, nullable=False, default=0)        # 0 front, 1 next
+    nse_close = Column(Float, nullable=True)
+    mcx_close = Column(Float, nullable=True)
+    diff = Column(Float, nullable=True)                       # MCX minus NSE
+    pct = Column(Float, nullable=True)
+    nse_symbol = Column(String(32), nullable=True)
+    mcx_symbol = Column(String(40), nullable=True)
+
+
 class NseMcxSnapshot(Base):
     """Thrice-daily (10:00, 12:00 & 15:00 IST) snapshot of the NSE-vs-MCX
     comparison board — the client asked to track how the same strike drifts

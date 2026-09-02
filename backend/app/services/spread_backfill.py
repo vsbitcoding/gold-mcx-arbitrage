@@ -34,7 +34,7 @@ _lock = threading.Lock()
 _status: dict = {"running": False, "msg": "never run", "at": None}
 
 _HIST_URL = "https://api.dhan.co/v2/charts/historical"
-_BULLION_KEYS = ("gold", "silver", "elecmbl")
+_BULLION_KEYS = ("gold", "silver")
 
 
 def status() -> dict:

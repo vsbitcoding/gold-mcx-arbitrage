@@ -28,8 +28,9 @@ SYMBOL_MAP = {
     "silverm": "SILVERM",    # SILVER MINI (5 kg)
     "silvermic": "SILVERMIC",  # SILVER MIC (1 kg)
     "silver100": "SILVER100",  # SILVER 100 (100 g)
-    # Electricity monthly base load (client, 02-Sep-2026): calendar spreads +
-    # price group + daily history, exactly like the bullion instruments.
+    # Electricity monthly base load: NOT a price/calendar instrument - it feeds
+    # the NSE-vs-MCX electricity comparison (client's note, 02-Sep), which
+    # resolves its MCX legs through this map.
     "elecmbl": "ELECDMBL",
 }
 

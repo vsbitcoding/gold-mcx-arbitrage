@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import (activity, crude_iv_history, dhan_feed, extra_instruments,
+from app.services import (activity, elec_service, crude_iv_history, dhan_feed, extra_instruments,
                           mcxccl_service, nse_mcx_history, options_history_service,
                           span_service)
 
@@ -128,6 +128,7 @@ def _loop() -> None:
     last_span_refresh: str | None = None
     last_roll: str | None = None
     last_expiry_roll: str | None = None
+    last_elec_hour: str | None = None
     last_mcxccl_attempt: datetime | None = None
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
@@ -239,6 +240,19 @@ def _loop() -> None:
             # up serves an expired contract until something knocks it over.
             # This is one reconnect a day at a quiet hour, which is nothing
             # like the six-in-45-minutes that once cooled us down for 15 min.
+            # NSE-vs-MCX electricity, one row per hour (client's note, 02-Sep).
+            # Cheap: two in-memory reads and at most two inserts; the service
+            # skips honestly when either side is not live.
+            _hr = now.strftime("%Y-%m-%d %H")
+            if last_elec_hour != _hr and now.minute < 10:
+                last_elec_hour = _hr
+                try:
+                    res = elec_service.snapshot_hour()
+                    if res.startswith(("snapped", "store")):
+                        log.info("maintenance: elec hourly: %s", res)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("maintenance: elec hourly failed: %s", e)
+
             # Expiry-day roll (client, 31-Aug-2026): contracts stay current
             # until 23:00 of their own expiry day, so on a day when something
             # on the socket expires, one resubscribe at 23:00 walks the whole

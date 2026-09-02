@@ -275,10 +275,37 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     }
 
 
+def _elec_payload(month: int = 0) -> dict:
+    """Electricity is futures-only (NSE lists no ELECMBL options), so it skips
+    the whole chain machinery: two live futures, one difference - the client's
+    single-value rule - and the dash discipline via the legs themselves."""
+    from app.services import elec_service
+    month = 1 if month else 0
+    a = angel_feed.get_data("electricity", month)
+    nse_fut = dict(a.get("future") or {})
+    mcx = elec_service.mcx_future(month) or {}
+    n_age = a.get("age")
+    n_fresh = a.get("ok") and n_age is not None and n_age <= _FRESH_SECONDS
+    fresh = bool(n_fresh and mcx.get("fresh"))
+    n_ltp, m_ltp = nse_fut.get("ltp"), mcx.get("ltp")
+    diff = round(m_ltp - n_ltp, 2) if (fresh and n_ltp and m_ltp) else None
+    return {
+        "commodity": "electricity", "month": month, "fresh": fresh,
+        "nse": {"label": "NSE ELECTRICITY", "future": nse_fut or None,
+                "age": n_age, "connected": bool(a.get("ok")), "error": a.get("error")},
+        "mcx": {"label": "MCX ELECTRICITY", "future": mcx or None,
+                "age": mcx.get("age")},
+        "diff": diff,
+        "pct": (round(diff / n_ltp * 100, 2) if diff is not None and n_ltp else None),
+    }
+
+
 @router.get("/nse-mcx")
-def nse_mcx(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+def nse_mcx(commodity: str = Query("crude", pattern="^(crude|natgas|electricity)$"),
             month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
             window: int = Query(10, ge=1, le=25, description="strikes each side of ATM")):
+    if commodity == "electricity":
+        return _elec_payload(month)
     return payload(commodity, window, month)
 
 
@@ -288,6 +315,16 @@ def nse_mcx_crude(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
                   window: int = Query(10, ge=1, le=25)):
     """Kept because the dashboard and the client's app both already call it."""
     return payload(commodity, window, month)
+
+
+@router.get("/nse-mcx/elec-hourly")
+def elec_hourly(month: int = Query(0, ge=0, le=1),
+                days: int = Query(30, ge=1, le=365)):
+    """The stored hourly rows - one difference per hour, recorded live since
+    02-Sep-2026. Older cannot exist: Angel's historical API has no NCO segment,
+    so there is nothing to backfill the NSE side from."""
+    from app.services import elec_service
+    return elec_service.history(month=month, days=days)
 
 
 def _strike_arg(raw: str | None) -> float | str | None:

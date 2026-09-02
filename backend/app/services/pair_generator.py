@@ -41,7 +41,6 @@ CROSS_TEMPLATES = [
 CALENDAR_INSTRUMENTS = [
     "petal", "guinea", "ten", "mini",
     "gold", "silver", "silverm", "silvermic", "silver100",
-    "elecmbl",           # electricity monthly base load (client, 02-Sep)
 ]
 
 # Display names (GOLD prefix dropped — common knowledge it's gold trading)
@@ -55,7 +54,6 @@ MCX_SYMBOL = {
     "silverm": "SILVER MINI",
     "silvermic": "SILVER MIC",
     "silver100": "SILVER 100",
-    "elecmbl": "ELECTRICITY",
 }
 
 

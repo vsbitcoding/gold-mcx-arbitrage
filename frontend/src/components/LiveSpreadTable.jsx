@@ -8,10 +8,9 @@ import { useToast } from "./Toast.jsx";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
-// Daily history of one pair's spread (client, 02-Sep: the stored numbers must
-// be visible, not just stored). Opens from the calendar tab; works for every
-// calendar pair, electricity included - rows older than the pair's live life
-// come from the close-based backfill, where decrease equals increase.
+// Daily history of one pair's spread - ONE value per day from each leg's
+// closing price (client, 02-Sep: "increase-decrease karta single value aapi
+// de, based on closing price"). Computed from exchange daily closes on demand.
 function SpreadHistory({ pairs, onClose }) {
   const [pair, setPair] = useState(pairs[0]?.name || "");
   const [days, setDays] = useState(120);
@@ -53,18 +52,19 @@ function SpreadHistory({ pairs, onClose }) {
             <div className="pt-tablewrap">
               <table className="pt-table sh-table">
                 <thead><tr>
-                  <th>Date</th><th>Decrease</th><th>%</th><th>Increase</th><th>%</th>
+                  <th>Date</th><th>Near close</th><th>Far close</th><th>Difference</th><th>%</th>
                 </tr></thead>
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.date}>
                       <td>{r.date}</td>
-                      <td>{n(r.decrease)}</td><td>{n(r.decrease_pct)}</td>
-                      <td>{n(r.increase)}</td><td>{n(r.increase_pct)}</td>
+                      <td>{n(r.near)}</td><td>{n(r.far)}</td>
+                      <td className={r.diff >= 0 ? "pos" : "neg"}><b>{n(r.diff)}</b></td>
+                      <td>{n(r.pct)}</td>
                     </tr>
                   ))}
                   {data.rows.length === 0 && (
-                    <tr><td colSpan={5}>No stored history for this pair yet.</td></tr>
+                    <tr><td colSpan={5}>{data.error || "No history for this pair yet."}</td></tr>
                   )}
                 </tbody>
               </table>
