@@ -82,19 +82,25 @@ function SpreadHistory({ kind, onClose }) {
   const expLabel = (iso) => (iso ? when(iso) : "—");
 
   const series = useMemo(() => (data?.rows || []).slice().reverse(), [data]);
+  // Lowest and highest carry the day and the contracts that made them
+  // (client, 02-Sep: "date and contract name niche add karvanu").
   const stats = useMemo(() => {
-    const v = series.map((r) => r.diff).filter((x) => x != null);
-    if (!v.length) return null;
-    const avg = v.reduce((a, b) => a + b, 0) / v.length;
-    return { latest: v[v.length - 1], avg, min: Math.min(...v), max: Math.max(...v), days: v.length };
+    const rows = series.filter((r) => r.diff != null);
+    if (!rows.length) return null;
+    let lo = rows[0], hi = rows[0], sum = 0;
+    rows.forEach((r) => { sum += r.diff; if (r.diff < lo.diff) lo = r; if (r.diff > hi.diff) hi = r; });
+    return { latest: rows[rows.length - 1], avg: sum / rows.length, lo, hi, days: rows.length };
   }, [series]);
+  const legsOf = (r) => (kind === "calendar"
+    ? `${expLabel(r.near_exp)} / ${expLabel(r.far_exp)}`
+    : `${expLabel(r.big_exp)} / ${expLabel(r.small_exp)}`);
 
   const W = 1000, H = 360, PX = 62, PY = 18, PB = 30;
   const chart = useMemo(() => {
     if (!stats || series.length < 2) return null;
     // y range padded a little so the extremes do not sit on the frame
-    const pad = (stats.max - stats.min || 1) * 0.06;
-    const lo = stats.min - pad, hi = stats.max + pad, span = hi - lo || 1;
+    const pad = (stats.hi.diff - stats.lo.diff || 1) * 0.06;
+    const lo = stats.lo.diff - pad, hi = stats.hi.diff + pad, span = hi - lo || 1;
     const x = (i) => PX + (i / (series.length - 1)) * (W - PX - 16);
     const y = (v) => PY + (1 - (v - lo) / span) * (H - PY - PB);
     const pts = series.map((r, i) => [x(i), y(r.diff)]);
@@ -216,10 +222,13 @@ function SpreadHistory({ kind, onClose }) {
 
           {data && stats && (
             <div className="sh-stats">
-              <div><em>Latest</em><b className={stats.latest >= 0 ? "pos" : "neg"}>{sgn(stats.latest)}</b><i>{when(series[series.length - 1].date)}</i></div>
+              <div><em>Latest</em><b className={stats.latest.diff >= 0 ? "pos" : "neg"}>{sgn(stats.latest.diff)}</b>
+                <i>{when(stats.latest.date)}</i><i className="sh-legs">{legsOf(stats.latest)}</i></div>
               <div><em>Average</em><b>{sgn(stats.avg)}</b><i>{stats.days} days</i></div>
-              <div><em>Lowest</em><b className="neg">{sgn(stats.min)}</b></div>
-              <div><em>Highest</em><b className="pos">{sgn(stats.max)}</b></div>
+              <div><em>Lowest</em><b className="neg">{sgn(stats.lo.diff)}</b>
+                <i>{when(stats.lo.date)}</i><i className="sh-legs">{legsOf(stats.lo)}</i></div>
+              <div><em>Highest</em><b className="pos">{sgn(stats.hi.diff)}</b>
+                <i>{when(stats.hi.date)}</i><i className="sh-legs">{legsOf(stats.hi)}</i></div>
             </div>
           )}
 

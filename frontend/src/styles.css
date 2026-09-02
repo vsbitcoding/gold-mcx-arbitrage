@@ -5976,3 +5976,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-lg-ma { border-color: var(--text-primary) !important; }
 .sh-lg-zero { border-color: var(--border) !important; border-top-style: dashed !important; }
 @media (max-width: 1100px) { .sh-modal { height: auto; max-height: 96vh; overflow-y: auto; } .sh-grid { height: auto; } .sh-left { height: auto; } .sh-chart svg { height: 260px; } }
+.sh-stats i { display: block; margin-left: 0; margin-top: 2px; }
+.sh-stats i.sh-legs { font-size: 10px; letter-spacing: .02em; opacity: .85; }
