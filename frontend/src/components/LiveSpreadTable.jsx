@@ -132,8 +132,12 @@ function SpreadHistory({ kind, onClose }) {
     setHover(best);
   };
   const hv = hover != null ? series[hover] : null;
+  // From-year chips follow the data: the archive reaches back to May-2015,
+  // and whatever it holds is offered, so a longer backfill shows up here
+  // without another change.
   const years = [];
-  for (let y = 2021; y <= new Date().getFullYear(); y += 1) years.push(y);
+  const firstYear = Number((opts?.coverage?.from || "2021").slice(0, 4)) || 2021;
+  for (let y = firstYear; y <= new Date().getFullYear(); y += 1) years.push(y);
   const isCal = kind === "calendar";
 
   return (
