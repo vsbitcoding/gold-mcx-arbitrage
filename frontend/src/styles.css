@@ -5892,3 +5892,45 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .el-diff b { display: block; font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
 .el-diff span { font-size: 13px; color: var(--text-secondary); }
 @media (max-width: 720px) { .el-board { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------- Spread History popup ----- */
+.sh-modal { width: min(880px, 100%); max-height: 88vh; }
+.sh-sub { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
+.sh-body { padding: 14px 18px 18px; display: grid; gap: 14px; }
+.sh-controls { display: flex; gap: 18px; align-items: end; flex-wrap: wrap; }
+.sh-controls label { display: grid; gap: 5px; }
+.sh-controls label > span {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.sh-controls select { min-width: 300px; }
+
+.sh-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sh-stats > div {
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 13px;
+}
+.sh-stats em {
+  display: block; font-style: normal; font-size: 10px; font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary);
+}
+.sh-stats b { display: block; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.sh-stats i { font-style: normal; font-size: 10.5px; color: var(--text-secondary); }
+
+.sh-chart { border: 1px solid var(--border); border-radius: 10px; padding: 8px 8px 4px; background: var(--bg-surface); }
+.sh-chart svg { width: 100%; height: 150px; display: block; cursor: crosshair; }
+.sh-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sh-zero { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.sh-cross { stroke: var(--text-secondary); stroke-width: 1; opacity: .5; vector-effect: non-scaling-stroke; }
+.sh-dot { fill: var(--accent); stroke: var(--bg-surface); stroke-width: 2; }
+.sh-axis { font-size: 10px; fill: var(--text-secondary); }
+.sh-tip { font-size: 12px; color: var(--text-secondary); padding: 6px 4px 2px; min-height: 22px; }
+.sh-tip b { color: var(--text-primary); font-weight: 800; }
+
+.sh-tablewrap { max-height: 38vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.sh-table thead th { position: sticky; top: 0; background: var(--bg-surface); z-index: 1; }
+.sh-table td, .sh-table th { padding: 7px 12px; }
+.sh-table td:first-child, .sh-table th:first-child { text-align: left; font-weight: 700; }
+.sh-table .sh-muted { color: var(--text-secondary); }
+@media (max-width: 640px) { .sh-stats { grid-template-columns: 1fr 1fr; } .sh-controls select { min-width: 100%; } }
+.sh-empty { text-align: left !important; white-space: normal !important; color: var(--text-secondary); padding: 14px 12px !important; line-height: 1.5; }

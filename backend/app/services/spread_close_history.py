@@ -70,7 +70,11 @@ def _closes(sid: str, days: int) -> dict[str, float]:
         if "DH-905" not in code:          # only the listing-window error is worth retrying
             break
         time.sleep(0.4)
-    _cache[sid] = (now, out)
+    # Cache only what Dhan actually gave. An empty answer during the dead-token
+    # window on 02-Sep was cached for the full hour and kept a live pair blank
+    # long after the token was fixed. Empties get a minute, so a burst of
+    # clicks does not hammer Dhan but a fixed token shows through quickly.
+    _cache[sid] = (now if out else now - _CACHE_TTL + 60, out)
     if len(_cache) > 64:
         _cache.clear()
     return out
@@ -169,7 +173,11 @@ def pair_history(pair_name: str, days: int) -> dict:
             "date": d, "near": near[d], "far": far[d], "diff": diff,
             "pct": round(diff / near[d] * 100, 2) if near[d] else None,
         })
-    log.info("spread-history %s: %d rows over %d days", pair_name, len(rows), days)
+    log.info("spread-history %s: %d rows over %d days (near %d, far %d candles)",
+             pair_name, len(rows), days, len(near), len(far))
     return {"pair": pair_name, "days": days, "count": len(rows),
+            # so the dialog can say WHICH leg has no closes - a far month that
+            # has never traded has no daily candles, and that is not a fault
+            "near_days": len(near), "far_days": len(far),
             "near_symbol": pair.get("small_trading_symbol"),
             "far_symbol": pair.get("big_trading_symbol"), "rows": rows}
