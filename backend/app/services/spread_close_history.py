@@ -29,6 +29,49 @@ _cache: dict = {}          # sid -> (fetched_at, {date: close})
 _CACHE_TTL = 3600.0
 
 
+_INTRADAY_URL = "https://api.dhan.co/v2/charts/intraday"
+_CHUNK_DAYS = 89          # Dhan: "Intraday Charts can be fetched for 90 days at a time"
+
+
+def _closes_from_intraday(sid: str, token: str, days: int) -> dict[str, float]:
+    """Daily closes rebuilt from hourly candles - the last candle of each day.
+
+    Dhan's DAILY endpoint answers DH-907 for some perfectly liquid contracts
+    (02-Sep: GOLDPETAL Dec-26 had 7,803 lots of volume that day and no daily
+    history at all) while its INTRADAY endpoint has every hour of them. So
+    when the daily door is shut, the same truth is fetched hour by hour, in
+    30-day chunks, and each day's last close stands as its close.
+    """
+    out: dict[str, float] = {}
+    to = datetime.now().date()
+    start = to - timedelta(days=days)
+    cur = start
+    while cur <= to:
+        end = min(cur + timedelta(days=_CHUNK_DAYS - 1), to)
+        try:
+            r = requests.post(_INTRADAY_URL, headers={
+                "access-token": token, "client-id": settings.DHAN_CLIENT_ID,
+                "Content-Type": "application/json"}, json={
+                "securityId": str(sid), "exchangeSegment": "MCX_COMM",
+                "instrument": "FUTCOM", "interval": "60",
+                "fromDate": cur.isoformat(), "toDate": end.isoformat()}, timeout=30)
+            d = r.json()
+        except Exception as e:  # noqa: BLE001
+            log.warning("intraday %s %s..%s: %s", sid, cur, end, e)
+            break
+        if "close" in d:
+            for ts, cl in zip(d.get("timestamp") or [], d.get("close") or []):
+                if cl:
+                    out[datetime.fromtimestamp(ts).date().isoformat()] = cl   # later hours overwrite
+        else:
+            code = str(d.get("errorCode") or d)[:60]
+            if "DH-905" not in code:                 # pre-listing chunk: skip, keep going
+                log.warning("intraday %s %s..%s: %s", sid, cur, end, code)
+        cur = end + timedelta(days=1)
+        time.sleep(0.3)
+    return out
+
+
 def _closes(sid: str, days: int) -> dict[str, float]:
     now = time.time()
     hit = _cache.get(sid)
@@ -70,6 +113,13 @@ def _closes(sid: str, days: int) -> dict[str, float]:
         if "DH-905" not in code:          # only the listing-window error is worth retrying
             break
         time.sleep(0.4)
+    if not out:
+        # The daily door was shut (DH-907 or nothing) - the intraday one may
+        # not be. Only when daily gave nothing, so liquid contracts stay on
+        # the one-call path.
+        out = _closes_from_intraday(sid, token, days)
+        if out:
+            log.info("closes %s: daily empty, rebuilt %d days from intraday", sid, len(out))
     # Cache only what Dhan actually gave. An empty answer during the dead-token
     # window on 02-Sep was cached for the full hour and kept a live pair blank
     # long after the token was fixed. Empties get a minute, so a burst of
