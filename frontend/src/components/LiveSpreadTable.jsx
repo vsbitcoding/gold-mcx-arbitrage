@@ -164,8 +164,56 @@ function SpreadHistory({ kind, onClose }) {
           </div>
           <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
         </div>
-        <div className={`sh-body sh-grid ${loading ? "sh-refreshing" : ""}`}>
-          <div className="sh-left">
+        <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
+          <div className="sh-top">
+            <div className="sh-chartcol">
+          {chart && (
+            <div className="sh-chart">
+              <div className="sh-legend">
+                <span><i className="sh-lg-line" /> daily difference</span>
+                <span><i className="sh-lg-ma" /> {chart.win}-day average</span>
+                {chart.zero != null && <span><i className="sh-lg-zero" /> zero</span>}
+              </div>
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+                onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+                {chart.yTicks.map((tk) => (
+                  <g key={tk.y}>
+                    <line x1={PX} x2={W - 16} y1={tk.y} y2={tk.y} className="sh-grid-y" />
+                    <text x={PX - 8} y={tk.y + 4} className="sh-axis" textAnchor="end">{fmtNum(tk.v, 0)}</text>
+                  </g>
+                ))}
+                {chart.xTicks.map((tk) => (
+                  <g key={tk.x}>
+                    <line x1={tk.x} x2={tk.x} y1={PY} y2={H - PB} className="sh-grid-x" />
+                    <text x={tk.x + 4} y={H - 10} className="sh-axis">{tk.label}</text>
+                  </g>
+                ))}
+                {chart.zero != null && (
+                  <line x1={PX} x2={W - 16} y1={chart.zero} y2={chart.zero} className="sh-zero" />
+                )}
+                <path d={chart.area} className="sh-area" />
+                <path d={chart.line} className="sh-line" />
+                <path d={chart.maPath} className="sh-ma" />
+                {hv && (
+                  <>
+                    <line x1={chart.x(hover)} x2={chart.x(hover)} y1={PY} y2={H - PB} className="sh-cross" />
+                    <circle cx={chart.x(hover)} cy={chart.y(hv.diff)} r="4.5" className="sh-dot" />
+                  </>
+                )}
+              </svg>
+              <div className="sh-tip">
+                {hv ? (
+                  isCal
+                    ? <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · near {n(hv.near)} ({expLabel(hv.near_exp)}) · far {n(hv.far)} ({expLabel(hv.far_exp)})</>
+                    : <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · big {n(hv.big_rate)} ({expLabel(hv.big_exp)}) · small {n(hv.small_rate)} ({expLabel(hv.small_exp)})</>
+                ) : "Move over the line for a day's numbers"}
+              </div>
+            </div>
+          )}
+
+            </div>
+            <aside className="sh-side">
+              <div className="sh-side-title">Filters</div>
           <div className="sh-controls">
             <label><span>{isCal ? "Symbol" : "Pair"}</span>
               {isCal ? (
@@ -226,6 +274,7 @@ function SpreadHistory({ kind, onClose }) {
           {!data && !err && <div className="empty-state">Loading…</div>}
           {loading && data && <div className="sh-progress" aria-hidden="true" />}
 
+              <div className="sh-side-title">Summary</div>
           {data && stats && (
             <div className="sh-stats">
               <div><em>Latest</em><b className={stats.latest.diff >= 0 ? "pos" : "neg"}>{sgn(stats.latest.diff)}</b>
@@ -238,54 +287,10 @@ function SpreadHistory({ kind, onClose }) {
             </div>
           )}
 
-          {chart && (
-            <div className="sh-chart">
-              <div className="sh-legend">
-                <span><i className="sh-lg-line" /> daily difference</span>
-                <span><i className="sh-lg-ma" /> {chart.win}-day average</span>
-                {chart.zero != null && <span><i className="sh-lg-zero" /> zero</span>}
-              </div>
-              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-                onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-                {chart.yTicks.map((tk) => (
-                  <g key={tk.y}>
-                    <line x1={PX} x2={W - 16} y1={tk.y} y2={tk.y} className="sh-grid-y" />
-                    <text x={PX - 8} y={tk.y + 4} className="sh-axis" textAnchor="end">{fmtNum(tk.v, 0)}</text>
-                  </g>
-                ))}
-                {chart.xTicks.map((tk) => (
-                  <g key={tk.x}>
-                    <line x1={tk.x} x2={tk.x} y1={PY} y2={H - PB} className="sh-grid-x" />
-                    <text x={tk.x + 4} y={H - 10} className="sh-axis">{tk.label}</text>
-                  </g>
-                ))}
-                {chart.zero != null && (
-                  <line x1={PX} x2={W - 16} y1={chart.zero} y2={chart.zero} className="sh-zero" />
-                )}
-                <path d={chart.area} className="sh-area" />
-                <path d={chart.line} className="sh-line" />
-                <path d={chart.maPath} className="sh-ma" />
-                {hv && (
-                  <>
-                    <line x1={chart.x(hover)} x2={chart.x(hover)} y1={PY} y2={H - PB} className="sh-cross" />
-                    <circle cx={chart.x(hover)} cy={chart.y(hv.diff)} r="4.5" className="sh-dot" />
-                  </>
-                )}
-              </svg>
-              <div className="sh-tip">
-                {hv ? (
-                  isCal
-                    ? <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · near {n(hv.near)} ({expLabel(hv.near_exp)}) · far {n(hv.far)} ({expLabel(hv.far_exp)})</>
-                    : <><b>{when(hv.date)}</b> · difference <b className={hv.diff >= 0 ? "pos" : "neg"}>{sgn(hv.diff)}</b> ({sgn(hv.pct)}%) · big {n(hv.big_rate)} ({expLabel(hv.big_exp)}) · small {n(hv.small_rate)} ({expLabel(hv.small_exp)})</>
-                ) : "Move over the line for a day's numbers"}
-              </div>
-            </div>
-          )}
-
+            </aside>
           </div>
-
           {data && (
-            <div className="pt-tablewrap sh-tablewrap sh-right">
+            <div className="pt-tablewrap sh-tablewrap sh-tablefull">
               <table className="pt-table sh-table">
                 <thead><tr>
                   <th>Date</th>

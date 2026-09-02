@@ -5981,3 +5981,19 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-right { display: flex; flex-direction: column; }
 .sh-right table { flex: none; }
 .sh-pager { position: sticky; bottom: 0; background: var(--bg-surface); margin-top: auto; }
+
+/* Spread History v3: chart top-left, filters + summary top-right, table below */
+.sh-layout { display: flex; flex-direction: column; gap: 14px; }
+.sh-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(360px, 0.9fr); gap: 16px; flex: none; }
+.sh-chartcol { min-width: 0; display: flex; }
+.sh-chartcol .sh-chart { flex: 1; min-height: 340px; }
+.sh-chartcol .sh-chart svg { min-height: 300px; }
+.sh-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sh-side-title { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+.sh-side .sh-controls { flex-direction: column; align-items: stretch; gap: 10px; }
+.sh-side .sh-controls select { min-width: 0; width: 100%; }
+.sh-side .sh-stats { grid-template-columns: 1fr 1fr; }
+.sh-side .sh-stats b { font-size: 19px; }
+.sh-tablefull { flex: 1; min-height: 200px; max-height: none; display: flex; flex-direction: column; }
+.sh-tablefull table { flex: none; }
+@media (max-width: 1100px) { .sh-top { grid-template-columns: 1fr; } .sh-chartcol .sh-chart { min-height: 260px; } }
