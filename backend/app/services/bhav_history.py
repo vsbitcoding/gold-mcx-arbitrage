@@ -129,7 +129,13 @@ def ingest_csv(text: str) -> int:
     rows = list(csv.DictReader(io.StringIO(text)))
     keep = []
     for r in rows:
-        if (r.get("INSTRUMENTNAME") or "").strip() != "FUTCOM":
+        # Files before ~2017 carry no INSTRUMENTNAME at all - MCX had no
+        # options then, so every row is a future; blank OPTIONTYPE and
+        # STRIKEPRICE say the same thing. Later files name it FUTCOM.
+        inst = (r.get("INSTRUMENTNAME") or "").strip()
+        if inst and inst != "FUTCOM":
+            continue
+        if not inst and ((r.get("OPTIONTYPE") or "").strip() or (r.get("STRIKEPRICE") or "").strip()):
             continue
         sym = (r.get("SYMBOL") or "").strip().upper()
         if sym not in _SHORT:
