@@ -5,11 +5,82 @@ import MetalSpread, { otherCommColorKey } from "./MetalSpread.jsx";
 import PriceTable from "./PriceTable.jsx";
 import SignalsPanel from "./SignalsPanel.jsx";
 import { useToast } from "./Toast.jsx";
+import { api } from "../api/client.js";
+import { fmtNum } from "../utils/format.js";
+
+// Daily history of one pair's spread (client, 02-Sep: the stored numbers must
+// be visible, not just stored). Opens from the calendar tab; works for every
+// calendar pair, electricity included - rows older than the pair's live life
+// come from the close-based backfill, where decrease equals increase.
+function SpreadHistory({ pairs, onClose }) {
+  const [pair, setPair] = useState(pairs[0]?.name || "");
+  const [days, setDays] = useState(120);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    if (!pair) return undefined;
+    let alive = true;
+    setData(null);
+    api.spreadHistory(pair, days)
+      .then((r) => { if (alive) { setData(r); setErr(null); } })
+      .catch((e) => { if (alive) setErr(e.message); });
+    return () => { alive = false; };
+  }, [pair, days]);
+  const n = (v) => (v == null ? "—" : fmtNum(v, 2));
+  return (
+    <div className="pt-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pt-modal" role="dialog" aria-label="Spread history">
+        <div className="pt-modal-head">
+          <b>Spread history</b>
+          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="pt-form">
+          <div className="pt-form-row">
+            <label><span>Pair</span>
+              <select className="oh-weeks pt-form-select" value={pair}
+                onChange={(e) => setPair(e.target.value)}>
+                {pairs.map((x) => <option key={x.name} value={x.name}>{x.title}</option>)}
+              </select></label>
+            <label><span>Days</span>
+              <select className="oh-weeks pt-form-select" value={days}
+                onChange={(e) => setDays(Number(e.target.value))}>
+                {[30, 60, 120, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
+              </select></label>
+          </div>
+          {err && <div className="settings-banner danger">⚠ {err}</div>}
+          {!data && !err && <div className="empty-state">Loading…</div>}
+          {data && (
+            <div className="pt-tablewrap">
+              <table className="pt-table sh-table">
+                <thead><tr>
+                  <th>Date</th><th>Decrease</th><th>%</th><th>Increase</th><th>%</th>
+                </tr></thead>
+                <tbody>
+                  {data.rows.map((r) => (
+                    <tr key={r.date}>
+                      <td>{r.date}</td>
+                      <td>{n(r.decrease)}</td><td>{n(r.decrease_pct)}</td>
+                      <td>{n(r.increase)}</td><td>{n(r.increase_pct)}</td>
+                    </tr>
+                  ))}
+                  {data.rows.length === 0 && (
+                    <tr><td colSpan={5}>No stored history for this pair yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // `tab` is driven by the top nav bar (App). This component just renders the
 // active tab's content (signals / cross / calendar / metals / price / othercomm).
 export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, priceData }) {
   const toast = useToast();
+  const [histOpen, setHistOpen] = useState(false);
   const sigSeen = useRef(null);
   const seeded = useRef(false);
   const [page, setPage] = useState(1);
@@ -64,6 +135,18 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
       {tab === "price" && <PriceTable data={priceData} embedded />}
       {tab === "othercomm" && (
         <MetalSpread data={otherCommData} embedded showPct={false} colorFn={otherCommColorKey} loadingText="Loading other-commodity data…" />
+      )}
+
+      {tab === "calendar" && (
+        <div className="sh-btnrow">
+          <button type="button" className="oh-chip"
+            title="Day-by-day stored spread of any calendar pair"
+            onClick={() => setHistOpen(true)}>Spread History</button>
+        </div>
+      )}
+      {histOpen && (
+        <SpreadHistory onClose={() => setHistOpen(false)}
+          pairs={calendarRows.map((r) => ({ name: r.name, title: r.mcx_label || r.label }))} />
       )}
 
       {isSpread && (

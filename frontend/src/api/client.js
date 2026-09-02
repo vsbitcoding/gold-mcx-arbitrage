@@ -192,6 +192,9 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }),
+  // Daily spread history for one calendar/cross pair (History button)
+  spreadHistory: (pair, days = 120) =>
+    request(`/api/pairs/spread-history?pair=${encodeURIComponent(pair)}&days=${days}`),
   // MCXCCL bullion warehouse stock + stock-vs-spread correlation
   bullionStock: () => request("/api/bullion-stock"),
   bullionStockStatus: () => request("/api/bullion-stock/status"),

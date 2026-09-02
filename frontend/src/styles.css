@@ -5867,3 +5867,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   border-radius: 9px; padding: 9px 12px;
 }
 .pt-sent b { font-weight: 800; }
+
+/* Spread History on the calendar tab */
+.sh-btnrow { display: flex; justify-content: flex-end; margin: 2px 0 10px; }
+.sh-table td:first-child, .sh-table th:first-child { text-align: left; }
