@@ -271,7 +271,9 @@ function SpreadHistory({ kind, onClose }) {
                 <thead><tr>
                   <th>Date</th>
                   {isCal ? <><th>Near close</th><th>Far close</th></> : <><th>Big (rate)</th><th>Small (rate)</th></>}
-                  <th>Difference</th><th>%</th>
+                  <th>Difference</th>
+                  {isCal && <th title={`difference × ${data.std_mult || 1} - the board's common basis`}>Diff {data.std_unit || "per 10 gm"}</th>}
+                  <th>%</th>
                   {mode === "continuous" && <th>Contracts</th>}
                 </tr></thead>
                 <tbody>
@@ -282,6 +284,7 @@ function SpreadHistory({ kind, onClose }) {
                         ? <><td className="sh-muted">{n(r.near)}</td><td className="sh-muted">{n(r.far)}</td></>
                         : <><td className="sh-muted">{n(r.big_rate)}</td><td className="sh-muted">{n(r.small_rate)}</td></>}
                       <td className={r.diff >= 0 ? "pos" : "neg"}><b>{sgn(r.diff)}</b></td>
+                      {isCal && <td className={(r.diff_std ?? r.diff) >= 0 ? "pos" : "neg"}><b>{sgn(r.diff_std ?? r.diff)}</b></td>}
                       <td className={r.pct >= 0 ? "pos" : "neg"}>{sgn(r.pct)}</td>
                       {mode === "continuous" && (
                         <td className="sh-muted sh-contracts">
@@ -291,7 +294,7 @@ function SpreadHistory({ kind, onClose }) {
                     </tr>
                   ))}
                   {data.rows.length === 0 && (
-                    <tr><td colSpan={7} className="sh-empty">
+                    <tr><td colSpan={8} className="sh-empty">
                       No closing prices for this selection. The archive starts in 2021 and a
                       contract only has closes from its first trade; Gold Ten and Silver 100
                       were listed later than the others.

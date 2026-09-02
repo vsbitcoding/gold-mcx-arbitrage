@@ -84,6 +84,8 @@ def bhav_series(
                                   continuous=(mode == "continuous"), rank=rank)
         label = f"{bh.LABELS[big]} calendar"
         legs = {"near_exp": big_exp, "far_exp": small_exp} if mode == "month" else {}
+        legs["std_unit"] = bh.STD_UNIT.get(big, "per 10 gm")
+        legs["std_mult"] = bh.MULTIPLIERS.get(big, 1.0)
     else:
         tpl = next((t for t in CROSS_TEMPLATES if t[0] == big and t[1] == small), None)
         if not tpl:

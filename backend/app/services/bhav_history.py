@@ -316,8 +316,16 @@ def calendar_series(symbol: str, near_exp: str | None, far_exp: str | None,
             continue
         diff = round(f - n, 2)
         rows.append({"date": td, "near": n, "far": f, "diff": diff,
+                     # the same difference on the board's common basis - per
+                     # 10 g for gold (petal x10, guinea x1.25), per kg for
+                     # silver (silver100 x100) - so symbols compare (client note)
+                     "diff_std": round(diff * MULTIPLIERS.get(symbol, 1.0), 2),
                      "pct": round(diff / n * 100, 3), "near_exp": n_e, "far_exp": f_e})
     return rows
+
+
+# What "one unit" means for the standardised column, per symbol family.
+STD_UNIT = {k: ("per kg" if k.startswith("silver") else "per 10 gm") for k in SYMBOLS}
 
 
 def cross_series(big: str, small: str, mode: str, big_exp: str | None, small_exp: str | None,
