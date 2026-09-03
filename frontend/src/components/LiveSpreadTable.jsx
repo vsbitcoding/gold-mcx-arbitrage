@@ -290,7 +290,7 @@ function SpreadHistory({ kind, onClose }) {
                   {mode === "continuous" && <th>Contracts</th>}
                 </tr></thead>
                 <tbody>
-                  {data.rows.slice((page - 1) * PAGE, page * PAGE).map((r) => (
+                  {series.slice((page - 1) * PAGE, page * PAGE).map((r) => (
                     <tr key={r.date}>
                       <td>{when(r.date)}</td>
                       {isCal
@@ -317,7 +317,7 @@ function SpreadHistory({ kind, onClose }) {
               </table>
               {data.rows.length > PAGE && (
                 <div className="pt-pager sh-pager">
-                  <span className="pt-pager-total">{data.rows.length} days · newest first</span>
+                  <span className="pt-pager-total">{data.rows.length} days · January to December, page by page</span>
                   <button type="button" className="oh-chip" disabled={page <= 1}
                     onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
                   <span className="pt-pager-page">page {page} / {Math.ceil(data.rows.length / PAGE)}</span>
