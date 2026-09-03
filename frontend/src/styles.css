@@ -6027,3 +6027,17 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-chartcol .sh-chart { flex: 1; min-height: 0; max-height: none; height: auto; display: flex; flex-direction: column; }
 .sh-chartcol .sh-chart svg { flex: 1; height: auto; min-height: 220px; }
 .sh-side .sh-controls .oh-group { width: 100%; }
+
+/* Spread History v5: one toolbar line, tiles in a row, chart, then table */
+.sh-toolbar { display: flex; flex-direction: row !important; flex-wrap: wrap; align-items: flex-end; gap: 14px 22px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); }
+.sh-toolbar label { display: grid; gap: 4px; }
+.sh-toolbar label > span { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.sh-toolbar select { min-width: 260px; width: auto; }
+.sh-toolbar .sh-year { min-width: 200px; }
+.sh-toolbar .oh-group { width: auto !important; }
+.sh-layout > .sh-stats { grid-template-columns: repeat(4, 1fr); }
+.sh-layout > .sh-stats b { font-size: 20px; }
+.sh-layout > .sh-chart { flex: none; height: 270px; display: flex; flex-direction: column; }
+.sh-layout > .sh-chart svg { flex: 1; height: auto; min-height: 0; }
+.sh-layout > .sh-tablefull { flex: 1 1 auto; min-height: 260px; }
+.sh-layout > .sh-sub, .sh-layout > .settings-banner, .sh-layout > .sh-progress { flex: none; }

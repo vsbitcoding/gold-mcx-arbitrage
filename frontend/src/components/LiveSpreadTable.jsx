@@ -162,7 +162,10 @@ function SpreadHistory({ kind, onClose }) {
               {isCal ? " · far month minus near month" : " · big leg minus small leg, board multipliers"}
             </span>
           </div>
-          <div className="sh-headctl">
+          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
+          <div className="sh-controls sh-toolbar">
             <label><span>{isCal ? "Symbol" : "Pair"}</span>
               {isCal ? (
                 <select className="oh-weeks pt-form-select" value={sym} onChange={(e) => setSym(e.target.value)}>
@@ -181,12 +184,56 @@ function SpreadHistory({ kind, onClose }) {
                 <button type="button" className={`oh-chip ${mode === "month" ? "on" : ""}`}
                   onClick={() => setMode("month")}>Month-wise</button>
               </div></label>
+
+            {mode === "continuous" ? (
+              <>
+                <label><span>Year</span>
+                  <select className="oh-weeks pt-form-select sh-year" value={year}
+                    onChange={(e) => setYear(e.target.value)}>
+                    <option value="all">All years (2015 to today)</option>
+                    {years.slice().reverse().map((y) => <option key={y} value={String(y)}>{y}</option>)}
+                  </select></label>
+                {isCal && (
+                  <label><span>Months</span>
+                    <div className="oh-group">
+                      {[[0, "M1-M2"], [1, "M2-M3"], [2, "M3-M4"]].map(([r, l]) => (
+                        <button key={r} type="button" className={`oh-chip ${rank === r ? "on" : ""}`}
+                          onClick={() => setRank(r)}>{l}</button>
+                      ))}
+                    </div></label>
+                )}
+              </>
+            ) : (
+              <label><span>{isCal ? "Near month" : "Big leg month"}</span>
+                <select className="oh-weeks pt-form-select" value={nearExp} onChange={(e) => setNearExp(e.target.value)}>
+                  {expList.map((x) => <option key={x} value={x}>{expLabel(x)}</option>)}
+                </select></label>
+            )}
           </div>
-          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
-        </div>
-        <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
-          <div className="sh-top">
-            <div className="sh-chartcol">
+
+          {data && mode === "month" && (
+            <div className="sh-sub">
+              {isCal
+                ? `${data.label}: ${expLabel(data.near_exp)} (near) vs ${expLabel(data.far_exp)} (far)`
+                : `${data.label}: ${expLabel(data.big_exp)} vs ${expLabel(data.small_exp)} - months matched the board's way`}
+            </div>
+          )}
+
+          {err && <div className="settings-banner danger">⚠ {err}</div>}
+          {!data && !err && <div className="empty-state">Loading…</div>}
+          {loading && data && <div className="sh-progress" aria-hidden="true" />}
+          {data && stats && (
+            <div className="sh-stats">
+              <div><em>Latest</em><b className={stats.latest.diff >= 0 ? "pos" : "neg"}>{sgn(stats.latest.diff)}</b>
+                <i>{when(stats.latest.date)}</i><i className="sh-legs">{legsOf(stats.latest)}</i></div>
+              <div><em>Average</em><b>{sgn(stats.avg)}</b><i>{stats.days} days</i></div>
+              <div><em>Lowest</em><b className="neg">{sgn(stats.lo.diff)}</b>
+                <i>{when(stats.lo.date)}</i><i className="sh-legs">{legsOf(stats.lo)}</i></div>
+              <div><em>Highest</em><b className="pos">{sgn(stats.hi.diff)}</b>
+                <i>{when(stats.hi.date)}</i><i className="sh-legs">{legsOf(stats.hi)}</i></div>
+            </div>
+          )}
+
           {chart && (
             <div className="sh-chart">
               <div className="sh-legend">
@@ -231,66 +278,6 @@ function SpreadHistory({ kind, onClose }) {
             </div>
           )}
 
-            </div>
-            <aside className="sh-side">
-              <div className="sh-side-title">Period</div>
-          <div className="sh-controls">
-            {mode === "continuous" ? (
-              <>
-                <label><span>Year</span>
-                  <div className="oh-group">
-                    <button type="button" className={`oh-chip ${year === "all" ? "on" : ""}`}
-                      onClick={() => setYear("all")}>All</button>
-                    {years.map((y) => (
-                      <button key={y} type="button" className={`oh-chip ${year === String(y) ? "on" : ""}`}
-                        onClick={() => setYear(String(y))}>{y}</button>
-                    ))}
-                  </div></label>
-                {isCal && (
-                  <label><span>Months</span>
-                    <div className="oh-group">
-                      {[[0, "M1-M2"], [1, "M2-M3"], [2, "M3-M4"]].map(([r, l]) => (
-                        <button key={r} type="button" className={`oh-chip ${rank === r ? "on" : ""}`}
-                          onClick={() => setRank(r)}>{l}</button>
-                      ))}
-                    </div></label>
-                )}
-              </>
-            ) : (
-              <label><span>{isCal ? "Near month" : "Big leg month"}</span>
-                <select className="oh-weeks pt-form-select" value={nearExp} onChange={(e) => setNearExp(e.target.value)}>
-                  {expList.map((x) => <option key={x} value={x}>{expLabel(x)}</option>)}
-                </select></label>
-            )}
-          </div>
-
-          {data && mode === "month" && (
-            <div className="sh-sub">
-              {isCal
-                ? `${data.label}: ${expLabel(data.near_exp)} (near) vs ${expLabel(data.far_exp)} (far)`
-                : `${data.label}: ${expLabel(data.big_exp)} vs ${expLabel(data.small_exp)} - months matched the board's way`}
-            </div>
-          )}
-
-          {err && <div className="settings-banner danger">⚠ {err}</div>}
-          {!data && !err && <div className="empty-state">Loading…</div>}
-          {loading && data && <div className="sh-progress" aria-hidden="true" />}
-
-              <div className="sh-side-title">Summary</div>
-          {data && stats && (
-            <div className="sh-stats">
-              <div><em>Latest</em><b className={stats.latest.diff >= 0 ? "pos" : "neg"}>{sgn(stats.latest.diff)}</b>
-                <i>{when(stats.latest.date)}</i><i className="sh-legs">{legsOf(stats.latest)}</i></div>
-              <div><em>Average</em><b>{sgn(stats.avg)}</b><i>{stats.days} days</i></div>
-              <div><em>Lowest</em><b className="neg">{sgn(stats.lo.diff)}</b>
-                <i>{when(stats.lo.date)}</i><i className="sh-legs">{legsOf(stats.lo)}</i></div>
-              <div><em>Highest</em><b className="pos">{sgn(stats.hi.diff)}</b>
-                <i>{when(stats.hi.date)}</i><i className="sh-legs">{legsOf(stats.hi)}</i></div>
-            </div>
-          )}
-
-            </aside>
-          </div>
           {data && (
             <div className="pt-tablewrap sh-tablewrap sh-tablefull">
               <table className="pt-table sh-table">
