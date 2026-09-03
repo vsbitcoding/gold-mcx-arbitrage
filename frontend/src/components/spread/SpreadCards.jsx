@@ -117,8 +117,10 @@ export default function SpreadCards({ groups, onHistory }) {
                   {onHistory && (
                     <span className="sc-histcell">
                       <button type="button" className="sc-histbtn"
-                        title="This contract's day-by-day spread history"
-                        onClick={() => onHistory(row)}>History</button>
+                        title={`Day-by-day spread history of this ${isCalendar ? "pair of months" : "contract month"} only`}
+                        onClick={() => onHistory(row)}>
+                        <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M8 4.5V8l2.5 1.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                        History</button>
                     </span>
                   )}
                 </div>

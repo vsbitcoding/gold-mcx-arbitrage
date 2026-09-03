@@ -54,7 +54,7 @@ function SpreadHistory({ kind, onClose, preset }) {
     return (opts?.symbols?.find((s) => s.key === k)?.expiries || []).slice().reverse();  // newest first
   }, [opts, kind, sym, crossObj]);
   useEffect(() => {
-    if (expList.length && !expList.includes(nearExp)) setNearExp(expList[0]);
+    if (expList.length && !nearExp) setNearExp(expList[0]);
   }, [expList]);
 
   useEffect(() => {
@@ -233,7 +233,7 @@ function SpreadHistory({ kind, onClose, preset }) {
             ) : (
               <label><span>{isCal ? "Near month" : "Big leg month"}</span>
                 <select className="oh-weeks pt-form-select" value={nearExp} onChange={(e) => setNearExp(e.target.value)}>
-                  {expList.map((x) => <option key={x} value={x}>{expLabel(x)}</option>)}
+                  {(expList.includes(nearExp) || !nearExp ? expList : [nearExp, ...expList]).map((x) => <option key={x} value={x}>{expLabel(x)}</option>)}
                 </select></label>
             )}
           </div>
@@ -379,9 +379,19 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
   // A board row's History button: the pair's legs and that row's expiry.
   // Calendar rows: big = far, small = near, so the near month is small_expiry.
   function openRowHistory(row) {
-    const exp = (s) => String(s || "").slice(0, 10);
-    if (row.type === "calendar") setHistPreset({ sym: row.big, exp: exp(row.small_expiry) });
-    else setHistPreset({ big: row.big, small: row.small, exp: exp(row.big_expiry) });
+    // The expiry comes from the pair NAME, which every live row carries:
+    //   cross    "Petal-Guinea@2026-09-30"          -> big leg's month
+    //   calendar "Petal@2026-09-30/2026-10-30"      -> near / far
+    // (big_expiry is not on the live payload, and an empty preset made every
+    // row open on the newest contract.)
+    const tag = String(row.name || "").split("@")[1] || "";
+    const iso = (s) => String(s || "").slice(0, 10);
+    if (row.type === "calendar") {
+      const [near] = tag.split("/");
+      setHistPreset({ sym: row.big, exp: iso(near || row.small_expiry) });
+    } else {
+      setHistPreset({ big: row.big, small: row.small, exp: iso(tag || row.big_expiry) });
+    }
     setHistOpen(true);
   }
   const sigSeen = useRef(null);

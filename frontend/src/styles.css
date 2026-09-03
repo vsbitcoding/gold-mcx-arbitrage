@@ -6066,3 +6066,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
   background: none; border: 1px solid var(--border); color: var(--text-secondary);
 }
 .sc-histbtn:hover { border-color: var(--accent); color: var(--accent); }
+.sc-histbtn { display: inline-flex; align-items: center; gap: 5px; background: rgba(201,162,78,.12); border-color: rgba(201,162,78,.45); color: var(--accent); }
+.sc-histbtn:hover { background: var(--accent); color: #1a1408; border-color: var(--accent); }
