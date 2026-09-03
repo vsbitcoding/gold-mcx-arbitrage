@@ -83,6 +83,7 @@ function SpreadHistory({ kind, onClose }) {
     return `${d} ${M} ${y.slice(2)}`;
   };
   const expLabel = (iso) => (iso ? when(iso) : "—");
+  const unitOf = (k) => (String(k || "").startsWith("silver") ? "per kg" : "per 10 gm");
 
   const series = useMemo(() => (data?.rows || []).slice().reverse(), [data]);
   // Lowest and highest carry the day and the contracts that made them
@@ -311,7 +312,9 @@ function SpreadHistory({ kind, onClose }) {
                 <thead><tr>
                   <th>Date</th>
                   {isCal ? <><th>Near close</th><th>Far close</th></> : <><th>Big (rate)</th><th>Small (rate)</th></>}
-                  <th>Difference</th>
+                  <th title={isCal ? "far close minus near close, contract basis"
+                    : "big rate minus small rate - both legs already on the board's common basis (per 10 gm gold / per kg silver)"}>
+                    {isCal ? "Difference" : `Difference (${unitOf(crossObj?.big)})`}</th>
                   {isCal && (data.std_mult || 1) !== 1 && <th title={`difference × ${data.std_mult} - the board's common basis`}>Diff {data.std_unit || "per 10 gm"}</th>}
                   <th>%</th>
                   {mode === "continuous" && <th>Contracts</th>}
