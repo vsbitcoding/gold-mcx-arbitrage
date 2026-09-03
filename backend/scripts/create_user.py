@@ -6,7 +6,8 @@ Usage:
     python -m scripts.create_user <name> <role>         # interactive password
     python -m scripts.create_user <name> <role> <pass>  # non-interactive
 
-Roles: admin (whole dashboard) | trader (Auto Trades page only).
+Roles: admin (whole dashboard, manages users) | user (pages ticked by the
+admin in Manage Users) | trader (Auto Trades page only).
 """
 import getpass
 import sys
@@ -15,7 +16,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import User
 from app.security import hash_password
 
-ROLES = ("admin", "trader")
+ROLES = ("admin", "user", "trader")
 
 
 def main() -> None:

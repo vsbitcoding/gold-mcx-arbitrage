@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, paper as paper_route, premium as premium_route, price as price_route, public_v1, scrip_master as scrip_master_route, signals as signals_route, ws as ws_route
+from app.routes import auth, users as users_route, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, paper as paper_route, premium as premium_route, price as price_route, public_v1, scrip_master as scrip_master_route, signals as signals_route, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.dhan_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
@@ -36,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(users_route.router)
 app.include_router(pairs.router)
 app.include_router(feed.router)
 app.include_router(calculator.router)
@@ -93,10 +94,16 @@ async def _confine_traders(request, call_next):
                 username = payload.get("sub") or ""
             except _jwt.PyJWTError:
                 username = ""
-            if username and sec.role_of(username) == "trader" and not sec.trader_may(path):
+            if username and not sec.may(username, path):
                 from fastapi.responses import JSONResponse
+                perm = sec.perms_of(username)
+                if not perm["active"]:
+                    return JSONResponse(status_code=401, content={
+                        "detail": "This login has been disabled."})
                 return JSONResponse(status_code=403, content={
-                    "detail": "This login is limited to the Auto Trades page."})
+                    "detail": "This login is limited to the Auto Trades page."
+                    if perm["role"] == "trader" else
+                    "This login has no access to this page."})
     return await call_next(request)
 
 

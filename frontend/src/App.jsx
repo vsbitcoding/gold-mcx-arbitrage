@@ -16,7 +16,8 @@ import AutoTrades from "./components/AutoTrades.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
-import { api, getToken, clearToken, getRole } from "./api/client.js";
+import UsersPage from "./components/UsersPage.jsx";
+import { api, getToken, clearToken, getRole, getPages, storeSession } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
@@ -30,12 +31,26 @@ function getStoredTheme() {
 function getStoredDensity() {
   return localStorage.getItem("arbi_density") || "comfortable";
 }
+// The pages this login may open, in the menu's order. An admin gets every
+// page plus Manage Users; a user only what the admin ticked.
+function allowedPages() {
+  const pages = getPages();
+  if (pages === "all") return [...VALID_PAGES, "users"];
+  return VALID_PAGES.filter((k) => pages.includes(k));
+}
+// The live board (Cross / Calendar / Signals) rides the rates socket, which the
+// server refuses to a login without one of those pages.
+function hasBoardAccess() {
+  const pages = getPages();
+  return pages === "all" || ["cross", "calendar", "signals"].some((k) => pages.includes(k));
+}
+
 function getStoredPage() {
-  // A trader login has exactly one page; everything else in storage is stale.
-  if (getRole() === "trader") return "autotrades";
+  const allowed = allowedPages();
   const p = localStorage.getItem("arbi_page");
   const q = LEGACY_PAGES[p] || p;
-  return VALID_PAGES.includes(q) ? q : "cross";
+  if (allowed.includes(q)) return q;
+  return allowed[0] || "cross";
 }
 
 function Dashboard() {
@@ -95,7 +110,7 @@ function Dashboard() {
   // trader it stayed "CONNECTING" for ever. For that login the pill follows the
   // MARKET feed instead: the thing the paper trades actually price off.
   useEffect(() => {
-    if (getRole() !== "trader" || !feedStatus) return;
+    if (hasBoardAccess() || !feedStatus) return;
     // `mode` is the feed's own state machine ("live", "starting", ...) - checked
     // against the real payload; the first guess (`ws_connected`) is not in it,
     // and a key that is never there would have pinned the pill on LIVE for ever,
@@ -124,7 +139,9 @@ function Dashboard() {
 
   useEffect(() => {
     refreshSlow();
-    const trader = getRole() === "trader";
+    // "trader" here = any login without the board pages (trader role, or a
+    // user whose ticked pages do not include Cross / Calendar / Signals).
+    const trader = !hasBoardAccess();
     if (!trader) refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
 
     // Slow REST cadence: feed status every 10s. Paused while the tab is hidden.
@@ -178,10 +195,11 @@ function Dashboard() {
     let alive = true, timer = null;
     async function load() {
       try {
+        // only the watch tabs this login may open - the others would 403
         const [m, o, p] = await Promise.all([
-          api.metalsSpread().catch(() => null),
-          api.otherCommSpread().catch(() => null),
-          api.priceTable().catch(() => null),
+          can("metals") ? api.metalsSpread().catch(() => null) : null,
+          can("othercomm") ? api.otherCommSpread().catch(() => null) : null,
+          (can("price") || can("making")) ? api.priceTable().catch(() => null) : null,
         ]);
         if (!alive) return;
         if (m) setMetalData(m);
@@ -189,7 +207,9 @@ function Dashboard() {
         if (p) setPriceData(p);
       } catch { /* keep last */ }
     }
-    if (getRole() === "trader") return undefined;   // no nav badges to feed
+    const allowed = allowedPages();
+    const can = (k) => allowed.includes(k);
+    if (!can("metals") && !can("othercomm") && !can("price") && !can("making")) return undefined;
     function start() { if (!timer) timer = setInterval(load, 2000); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     function onVis() { if (document.hidden) stop(); else { load(); start(); } }
@@ -233,6 +253,16 @@ function Dashboard() {
     setDensity((d) => (d === "compact" ? "comfortable" : "compact"));
   }
 
+  // Re-read this login's pages on every load: the admin may have edited them.
+  // A change updates storage and reloads once, so the menu and the wall agree.
+  useEffect(() => {
+    api.me().then((m) => {
+      const before = JSON.stringify([getRole(), getPages()]);
+      storeSession(m);
+      if (JSON.stringify([getRole(), getPages()]) !== before) window.location.reload();
+    }).catch(() => {});
+  }, []);
+
   const counts = {
     signals: pairs.filter((r) => r.signal).length,
     cross: pairs.filter((r) => r.type === "cross").length,
@@ -246,6 +276,7 @@ function Dashboard() {
     <div className="app">
       <Header
         role={getRole()}
+        pages={getPages()}
         user={user}
         onLogout={logout}
         theme={theme}
@@ -278,6 +309,7 @@ function Dashboard() {
       {page === "ivcalc" && <IvCalculator />}
       {page === "intl" && <International />}
       {page === "autotrades" && <AutoTrades />}
+        {page === "users" && getRole() === "admin" && <UsersPage />}
         {page === "options" && <OptionsSpread />}
         {page === "goldopt" && <GoldOptions />}
         {page === "stock" && <BullionStock />}

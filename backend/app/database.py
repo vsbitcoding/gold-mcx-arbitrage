@@ -60,6 +60,10 @@ _REQUIRED_COLUMNS = {
     # admin, so the backfill default must be 'admin', not the model's default.
     "users": [
         ("role", "VARCHAR(16) DEFAULT 'admin'"),
+        ("pages", "TEXT"),
+        ("is_active", "INTEGER DEFAULT 1"),
+        ("created_by", "VARCHAR(64)"),
+        ("last_login", "DATETIME"),
     ],
     "paper_trades": [
         ("exit_reason", "VARCHAR(12)"),

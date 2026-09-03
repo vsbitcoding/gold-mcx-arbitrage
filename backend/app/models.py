@@ -88,8 +88,14 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
-    # 'admin' sees the whole dashboard; 'trader' sees only the Auto Trades page.
+    # 'admin' sees the whole dashboard and manages users; 'trader' sees only
+    # the Auto Trades page (the webhook client); 'user' sees the pages listed
+    # in `pages` (client's ask, 03-Sep-2026: he creates logins and ticks tabs).
     role = Column(String(16), nullable=False, default="admin")
+    pages = Column(Text)                       # JSON list of page keys ('user' role)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_by = Column(String(64))
+    last_login = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

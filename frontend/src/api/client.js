@@ -10,12 +10,30 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem("arbi_role");
   localStorage.removeItem("arbi_user");
+  localStorage.removeItem("arbi_pages");
 }
 
-// 'admin' sees the whole dashboard; 'trader' (the webhook client) sees only the
-// Auto Trades page. The server told us at login; this is display-gating.
+// 'admin' sees the whole dashboard and manages users; 'trader' (the webhook
+// client) sees only Auto Trades; 'user' sees the pages the admin ticked. The
+// server told us at login (and again on every load via /api/auth/me); this is
+// display-gating - the server wall answers 403 outside the list regardless.
 export function getRole() {
   return localStorage.getItem("arbi_role") || "admin";
+}
+// Page keys this login may open; "all" for an admin.
+export function getPages() {
+  const role = getRole();
+  if (role === "admin") return "all";
+  if (role === "trader") return ["autotrades"];
+  try {
+    const v = JSON.parse(localStorage.getItem("arbi_pages") || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+export function storeSession(data) {
+  if (data.role) localStorage.setItem("arbi_role", data.role);
+  if (data.username) localStorage.setItem("arbi_user", data.username);
+  if (Array.isArray(data.pages)) localStorage.setItem("arbi_pages", JSON.stringify(data.pages));
 }
 
 async function _doRequest(path, opts) {
@@ -89,13 +107,21 @@ export async function login(username, password) {
   }
   const data = await res.json();
   setToken(data.access_token);
-  if (data.role) localStorage.setItem("arbi_role", data.role);
-  if (data.username) localStorage.setItem("arbi_user", data.username);
+  storeSession(data);
   return data;
 }
 
 export const api = {
   livePairs: () => request("/api/pairs/live"),
+  // session + user management (admin only on the server)
+  me: () => request("/api/auth/me"),
+  users: () => request("/api/users"),
+  userPages: () => request("/api/users/pages"),
+  userSave: (body, id) => request(id ? `/api/users/${id}` : "/api/users", {
+    method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }),
+  userDelete: (id) => request(`/api/users/${id}`, { method: "DELETE" }),
   saveRule: (pair, body) =>
     request(`/api/pairs/${encodeURIComponent(pair)}/rule`, {
       method: "PUT",

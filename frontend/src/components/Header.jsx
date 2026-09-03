@@ -58,12 +58,13 @@ export default function Header({
   onNavigate,
   counts = {},
   role = "admin",
+  pages = "all",
 }) {
-  // The trader login exists for exactly one page; everything else is hidden,
-  // not merely de-emphasised.
-  const NAV = role === "trader"
-    ? NAV_ITEMS.filter((i) => i.key === "autotrades")
-    : NAV_ITEMS;
+  // Only the pages this login was given are in the menu at all - hidden, not
+  // merely de-emphasised (and the server refuses the rest anyway).
+  const NAV = pages === "all"
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((i) => pages.includes(i.key));
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -290,6 +291,18 @@ export default function Header({
                 <span className="user-item-ic">{theme === "dark" ? "☀" : "☾"}</span>
                 <span className="user-item-lbl">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
               </button>
+              {role === "admin" && (
+                <button className={`user-item ${page === "users" ? "on" : ""}`} role="menuitem"
+                  onClick={() => { setUserMenu(false); onNavigate("users"); }}>
+                  <span className="user-item-ic">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                  </span>
+                  <span className="user-item-lbl">Manage Users</span>
+                </button>
+              )}
               <button className="user-item danger" role="menuitem" onClick={() => { setUserMenu(false); onLogout(); }}>
                 <span className="user-item-ic">⎋</span>
                 <span className="user-item-lbl">Logout</span>
@@ -327,6 +340,14 @@ export default function Header({
                 </button>
               ))}
             </div>
+            {role === "admin" && (
+              <div className="nav-drawer-list nav-drawer-extra">
+                <button className={`nav-drawer-item ${page === "users" ? "active" : ""}`} onClick={() => go("users")}>
+                  <span className="nav-drawer-ic">👥</span>
+                  <span className="nav-drawer-lbl">Manage Users</span>
+                </button>
+              </div>
+            )}
             <div className="nav-drawer-foot">
               <span className="username-chip">{user || "User"}</span>
               <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
