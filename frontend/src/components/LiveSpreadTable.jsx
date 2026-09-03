@@ -11,12 +11,10 @@ import { fmtNum } from "../utils/format.js";
 // Daily history of one pair's spread - ONE value per day from each leg's
 // closing price (client, 02-Sep: "increase-decrease karta single value aapi
 // de, based on closing price"). Computed from exchange daily closes on demand.
-function SpreadHistory({ kind, group = "bullion", onClose, preset }) {
+function SpreadHistory({ kind, onClose, preset }) {
   // kind: "calendar" | "cross" (follows the tab the button was pressed on).
   // preset: from a board row's History button - {sym|big,small, exp} opens
   // straight into that contract's month-wise history (client, 02-Sep).
-  // group: "bullion" (Calendar / Cross tabs) or "metal" (Metal Spread tab) -
-  // which symbols the calendar select offers (client, 03-Sep).
   // Data: MCX's daily bhavcopy closes, 2015 to yesterday - one value per day.
   const [opts, setOpts] = useState(null);
   const [mode, setMode] = useState(preset ? "month" : "continuous");   // continuous | month
@@ -38,8 +36,7 @@ function SpreadHistory({ kind, group = "bullion", onClose, preset }) {
       .then((r) => {
         if (!alive) return;
         setOpts(r);
-        const mine = (r.symbols || []).filter((s) => (s.group || "bullion") === group);
-        if (!sym && mine.length) setSym(mine[0].key);
+        if (!sym && r.symbols?.length) setSym(r.symbols[0].key);
         if (!cross && r.cross?.length) setCross(`${r.cross[0].big}|${r.cross[0].small}`);
       })
       .catch((e) => { if (alive) setErr(e.message); });
@@ -47,7 +44,6 @@ function SpreadHistory({ kind, group = "bullion", onClose, preset }) {
   }, []);
 
   const symObj = useMemo(() => opts?.symbols?.find((s) => s.key === sym), [opts, sym]);
-  const symList = useMemo(() => (opts?.symbols || []).filter((s) => (s.group || "bullion") === group), [opts, group]);
   const crossObj = useMemo(() => {
     const [b, s] = cross.split("|");
     return opts?.cross?.find((c) => c.big === b && c.small === s);
@@ -189,7 +185,7 @@ function SpreadHistory({ kind, group = "bullion", onClose, preset }) {
       <div className="pt-modal sh-modal" role="dialog" aria-label="Spread history">
         <div className="pt-modal-head">
           <div>
-            <b>Spread history · {group === "metal" ? "Metal" : isCal ? "Calendar" : "Cross pair"}</b>
+            <b>Spread history · {isCal ? "Calendar" : "Cross pair"}</b>
             <span className="sh-sub">
               One value per day from MCX closing prices
               {opts?.coverage?.from ? ` · data ${when(opts.coverage.from)} to ${when(opts.coverage.to)}` : ""}
@@ -200,7 +196,7 @@ function SpreadHistory({ kind, group = "bullion", onClose, preset }) {
             <label><span>{isCal ? "Symbol" : "Pair"}</span>
               {isCal ? (
                 <select className="oh-weeks pt-form-select" value={sym} onChange={(e) => setSym(e.target.value)}>
-                  {symList.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  {(opts?.symbols || []).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               ) : (
                 <select className="oh-weeks pt-form-select" value={cross} onChange={(e) => setCross(e.target.value)}>
@@ -398,12 +394,6 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
     }
     setHistOpen(true);
   }
-  // Metal Spread rows (client, 03-Sep: "do as per Calendar Spread"): the metal
-  // is the bhavcopy symbol in lower case, the near month is on the row.
-  function openMetalHistory(row) {
-    setHistPreset({ sym: String(row.symbol || "").toLowerCase(), exp: String(row.near_expiry || "").slice(0, 10) });
-    setHistOpen(true);
-  }
   const sigSeen = useRef(null);
   const seeded = useRef(false);
   const [page, setPage] = useState(1);
@@ -454,13 +444,13 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
   return (
     <div className="sessions-container">
       {tab === "signals" && <SignalsPanel signals={signalRows} />}
-      {tab === "metals" && <MetalSpread data={metalData} embedded onHistory={openMetalHistory} />}
+      {tab === "metals" && <MetalSpread data={metalData} embedded />}
       {tab === "price" && <PriceTable data={priceData} embedded />}
       {tab === "othercomm" && (
         <MetalSpread data={otherCommData} embedded showPct={false} colorFn={otherCommColorKey} loadingText="Loading other-commodity data…" />
       )}
 
-      {(isSpread || tab === "metals") && (
+      {isSpread && (
         <div className="sh-btnrow">
           <button type="button" className="oh-chip"
             title="Day-by-day spread from MCX closing prices, 2021 to yesterday"
@@ -468,7 +458,7 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
         </div>
       )}
       {histOpen && (
-        <SpreadHistory kind={tab === "metals" ? "calendar" : tab} group={tab === "metals" ? "metal" : "bullion"} preset={histPreset}
+        <SpreadHistory kind={tab} preset={histPreset}
           onClose={() => { setHistOpen(false); setHistPreset(null); }} />
       )}
 

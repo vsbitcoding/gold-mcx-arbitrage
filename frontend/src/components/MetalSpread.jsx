@@ -38,7 +38,6 @@ export default function MetalSpread({
   showPct = true,
   colorFn = metalColorKey,
   loadingText = "Loading metal data…",
-  onHistory,                                 // Metal Spread tab only: row History button
 }) {
   const controlled = dataProp !== undefined;   // parent supplies data when embedded
   const [dataState, setDataState] = useState(null);
@@ -97,7 +96,7 @@ export default function MetalSpread({
               <div className="metal-card-head">{c.metal}</div>
               <div className="metal-card-body">
                 {c.rows.map((r, i) => (
-                  <div className={`metal-row${onHistory ? " mr-hist" : ""}`} key={i}>
+                  <div className="metal-row" key={i}>
                     <div className="mr-month">{r.month}</div>
                     <div className="mr-diff">
                       <span className={`mr-diff-val ${signCls(r.difference)}`}>
@@ -113,16 +112,6 @@ export default function MetalSpread({
                       <div className={`mr-pct ${signCls(r.pct)}`}>
                         {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
                       </div>
-                    )}
-                    {onHistory && (
-                      <button type="button" className="sc-histbtn mr-histbtn"
-                        title="Day-by-day history of this pair of months only"
-                        onClick={() => onHistory(r)}>
-                        <svg viewBox="0 0 20 20" width="15" height="15" aria-label="History">
-                          <path d="M3 15.5 8 9.5l3.5 3 5.5-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M2.5 17.5h15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </button>
                     )}
                   </div>
                 ))}

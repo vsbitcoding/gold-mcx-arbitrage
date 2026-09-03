@@ -134,9 +134,6 @@ def get_table() -> dict:
             "month": f'{p["near_expiry"].strftime("%b")}–{p["far_expiry"].strftime("%b")}',
             "near_month": p["near_expiry"].strftime("%d %b %Y"),
             "far_month": p["far_expiry"].strftime("%d %b %Y"),
-            # ISO legs for the row's History button (bhavcopy month-wise view)
-            "near_expiry": p["near_expiry"].strftime("%Y-%m-%d"),
-            "far_expiry": p["far_expiry"].strftime("%Y-%m-%d"),
             "far_price": far_price,      # 1392.15
             "near_price": near_price,    # 1376.30
             "difference": difference,    # 15.85
