@@ -48,7 +48,7 @@ function fmtCalExpiry(label) {
  * Card view of cross / calendar pairs (WATCH-ONLY). For cross pairs, a signaled
  * row gets a colored tint + a ⚡ icon at the end — click it for the popup detail.
  */
-export default function SpreadCards({ groups }) {
+export default function SpreadCards({ groups, onHistory }) {
   // Store only the row key, then re-resolve the live row each render so the
   // popup updates in real time as new snapshots poll in (not a frozen snapshot).
   const [selectedName, setSelectedName] = useState(null);
@@ -82,14 +82,15 @@ export default function SpreadCards({ groups }) {
                 <span className="sc-pair">{g.label}</span>
                 <span className="sc-count">{rows.length} exp</span>
               </div>
-              <div className="sc-row sc-colhead">
+              <div className={`sc-row sc-colhead${onHistory ? " sc-hist" : ""}`}>
                 <span>Expiry</span>
                 <span className="sc-c">▼ Dec</span>
                 <span className="sc-c">▲ Inc</span>
                 <span className="sc-c">{isCalendar ? "%" : ""}</span>
+                {onHistory && <span className="sc-c sc-histhead">History</span>}
               </div>
               {rows.map((row, i) => (
-                <div className={`sc-row${row.signal ? ` sc-rowsig sc-rowsig-${row.signal.direction}` : ""}`} key={row.name}>
+                <div className={`sc-row${onHistory ? " sc-hist" : ""}${row.signal ? ` sc-rowsig sc-rowsig-${row.signal.direction}` : ""}`} key={row.name}>
                   <span className="sc-exp">
                     <span className="sc-exp-txt">{isCalendar ? fmtCalExpiry(row.expiry_label) : (row.expiry_label || "—")}</span>
                     {i === 0 && <span className="sc-front" title="Front month">★</span>}
@@ -111,6 +112,13 @@ export default function SpreadCards({ groups }) {
                           ⚡
                         </button>
                       )}
+                    </span>
+                  )}
+                  {onHistory && (
+                    <span className="sc-histcell">
+                      <button type="button" className="sc-histbtn"
+                        title="This contract's day-by-day spread history"
+                        onClick={() => onHistory(row)}>History</button>
                     </span>
                   )}
                 </div>

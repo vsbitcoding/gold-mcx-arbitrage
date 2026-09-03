@@ -6054,3 +6054,15 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-chartbox { flex: 1; min-height: 0; position: relative; }
 .sh-chartbox svg { display: block; width: 100%; height: 100%; }
 .sh-axis { font-size: 11px; }
+
+/* History column on every board row (client, 02-Sep) */
+.sc-row.sc-hist { grid-template-columns: minmax(120px, 1.4fr) 1fr 1fr 0.7fr 0.8fr; }
+.sc-cal .sc-row.sc-hist { grid-template-columns: minmax(176px, 1.6fr) 1fr 1fr 0.9fr 0.8fr; }
+.sc-histhead { text-align: right; }
+.sc-histcell { display: flex; justify-content: flex-end; }
+.sc-histbtn {
+  font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 9px; border-radius: 999px; cursor: pointer;
+  background: none; border: 1px solid var(--border); color: var(--text-secondary);
+}
+.sc-histbtn:hover { border-color: var(--accent); color: var(--accent); }

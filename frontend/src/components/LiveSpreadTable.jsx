@@ -11,15 +11,17 @@ import { fmtNum } from "../utils/format.js";
 // Daily history of one pair's spread - ONE value per day from each leg's
 // closing price (client, 02-Sep: "increase-decrease karta single value aapi
 // de, based on closing price"). Computed from exchange daily closes on demand.
-function SpreadHistory({ kind, onClose }) {
+function SpreadHistory({ kind, onClose, preset }) {
   // kind: "calendar" | "cross" (follows the tab the button was pressed on).
-  // Data: MCX's daily bhavcopy closes, 2021 to yesterday - one value per day.
+  // preset: from a board row's History button - {sym|big,small, exp} opens
+  // straight into that contract's month-wise history (client, 02-Sep).
+  // Data: MCX's daily bhavcopy closes, 2015 to yesterday - one value per day.
   const [opts, setOpts] = useState(null);
-  const [mode, setMode] = useState("continuous");      // continuous | month
-  const [sym, setSym] = useState("");                  // calendar: symbol key
-  const [cross, setCross] = useState("");              // cross: "big|small"
+  const [mode, setMode] = useState(preset ? "month" : "continuous");   // continuous | month
+  const [sym, setSym] = useState(preset?.sym || "");                    // calendar: symbol key
+  const [cross, setCross] = useState(preset?.big ? `${preset.big}|${preset.small}` : "");
   const [rank, setRank] = useState(0);                 // calendar continuous: M1-M2, M2-M3...
-  const [nearExp, setNearExp] = useState("");          // month mode: chosen near/big expiry
+  const [nearExp, setNearExp] = useState(preset?.exp || "");   // month mode: chosen near/big expiry
   const [year, setYear] = useState(String(new Date().getFullYear()));   // "all" | "YYYY"
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
@@ -51,7 +53,9 @@ function SpreadHistory({ kind, onClose }) {
     const k = kind === "calendar" ? sym : crossObj?.big;
     return (opts?.symbols?.find((s) => s.key === k)?.expiries || []).slice().reverse();  // newest first
   }, [opts, kind, sym, crossObj]);
-  useEffect(() => { if (expList.length && !expList.includes(nearExp)) setNearExp(expList[0]); }, [expList]);
+  useEffect(() => {
+    if (expList.length && !expList.includes(nearExp)) setNearExp(expList[0]);
+  }, [expList]);
 
   useEffect(() => {
     if (!opts || !bigKey) return undefined;
@@ -371,6 +375,15 @@ function SpreadHistory({ kind, onClose }) {
 export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, priceData }) {
   const toast = useToast();
   const [histOpen, setHistOpen] = useState(false);
+  const [histPreset, setHistPreset] = useState(null);
+  // A board row's History button: the pair's legs and that row's expiry.
+  // Calendar rows: big = far, small = near, so the near month is small_expiry.
+  function openRowHistory(row) {
+    const exp = (s) => String(s || "").slice(0, 10);
+    if (row.type === "calendar") setHistPreset({ sym: row.big, exp: exp(row.small_expiry) });
+    else setHistPreset({ big: row.big, small: row.small, exp: exp(row.big_expiry) });
+    setHistOpen(true);
+  }
   const sigSeen = useRef(null);
   const seeded = useRef(false);
   const [page, setPage] = useState(1);
@@ -431,17 +444,20 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
         <div className="sh-btnrow">
           <button type="button" className="oh-chip"
             title="Day-by-day spread from MCX closing prices, 2021 to yesterday"
-            onClick={() => setHistOpen(true)}>Spread History</button>
+            onClick={() => { setHistPreset(null); setHistOpen(true); }}>Spread History</button>
         </div>
       )}
-      {histOpen && <SpreadHistory kind={tab} onClose={() => setHistOpen(false)} />}
+      {histOpen && (
+        <SpreadHistory kind={tab} preset={histPreset}
+          onClose={() => { setHistOpen(false); setHistPreset(null); }} />
+      )}
 
       {isSpread && (
         rows.length === 0 ? (
           <div className="empty-state" style={{ padding: "24px 16px" }}>Loading…</div>
         ) : (
           <>
-            <SpreadCards groups={sliceGroups} />
+            <SpreadCards groups={sliceGroups} onHistory={openRowHistory} />
             {groupedRows.length > PAIR_PAGE_SIZE && (
               <div className="pagination-controls">
                 <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
