@@ -6041,3 +6041,13 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-layout > .sh-chart svg { flex: 1; height: auto; min-height: 0; }
 .sh-layout > .sh-tablefull { flex: 1 1 auto; min-height: 260px; }
 .sh-layout > .sh-sub, .sh-layout > .settings-banner, .sh-layout > .sh-progress { flex: none; }
+
+/* Spread History v6: the toolbar lives in the header, the table gets the room */
+.sh-modal .pt-modal-head { padding: 10px 18px; gap: 16px; align-items: center; flex-wrap: wrap; }
+.sh-modal .pt-modal-head > div:first-child { flex: 1 1 260px; min-width: 240px; }
+.sh-modal .pt-modal-head .sh-toolbar { flex: 0 1 auto; border: none; background: none; padding: 0; gap: 10px 16px; margin-left: auto; align-items: flex-end; }
+.sh-modal .pt-modal-head .sh-toolbar select { min-width: 200px; }
+.sh-modal .pt-modal-head .sh-toolbar .sh-year { min-width: 150px; }
+.sh-modal .pt-modal-head .sh-toolbar label > span { font-size: 9.5px; }
+.sh-modal .sh-body { padding-top: 10px; }
+.sh-layout > .sh-chart { height: 250px; }

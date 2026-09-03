@@ -162,9 +162,6 @@ function SpreadHistory({ kind, onClose }) {
               {isCal ? " · far month minus near month" : " · big leg minus small leg, board multipliers"}
             </span>
           </div>
-          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
-        </div>
-        <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
           <div className="sh-controls sh-toolbar">
             <label><span>{isCal ? "Symbol" : "Pair"}</span>
               {isCal ? (
@@ -211,6 +208,9 @@ function SpreadHistory({ kind, onClose }) {
             )}
           </div>
 
+          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className={`sh-body sh-layout ${loading ? "sh-refreshing" : ""}`}>
           {data && mode === "month" && (
             <div className="sh-sub">
               {isCal
