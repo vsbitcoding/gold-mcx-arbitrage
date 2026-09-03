@@ -46,8 +46,11 @@ function UserForm({ initial, pages, me, onClose, onSaved }) {
     if (role === "user" && picked.size === 0) { toast.error("Tick at least one page."); return; }
     setBusy(true);
     try {
-      const body = { username: username.trim().toLowerCase(), role, active,
+      const body = { role, active,
         pages: role === "user" ? pages.map((p) => p.key).filter((k) => picked.has(k)) : [] };
+      // The name goes only when it is new or actually changed: existing logins
+      // such as "Dharmesh" keep their capitals; new ones are lower-cased.
+      if (!editing || username.trim() !== initial.username) body.username = username.trim().toLowerCase();
       if (password) body.password = password;
       const saved = await api.userSave(body, initial?.id);
       toast.success(editing ? `Saved ${saved.username}` : `Created ${saved.username}`);
