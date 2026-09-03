@@ -8,7 +8,7 @@ import PremiumInputs from "./components/PremiumInputs.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
 import GoldOptions from "./components/GoldOptions.jsx";
 import BullionStock from "./components/BullionStock.jsx";
-import CrudeOil from "./components/CrudeOil.jsx";
+import McxNymex from "./components/McxNymex.jsx";
 import NseMcxCrude from "./components/NseMcxCrude.jsx";
 import IvCalculator from "./components/IvCalculator.jsx";
 import International from "./components/International.jsx";
@@ -20,7 +20,9 @@ import { api, getToken, clearToken, getRole } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "crude", "crudeinr", "nsemcx", "ivcalc", "intl", "autotrades"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "mcxnymex", "nsemcx", "ivcalc", "intl", "autotrades"];
+// The two crude tabs became one page with a switch inside; a saved old key lands there.
+const LEGACY_PAGES = { crude: "mcxnymex", crudeinr: "mcxnymex" };
 
 function getStoredTheme() {
   return localStorage.getItem("arbi_theme") || "light";
@@ -32,7 +34,8 @@ function getStoredPage() {
   // A trader login has exactly one page; everything else in storage is stale.
   if (getRole() === "trader") return "autotrades";
   const p = localStorage.getItem("arbi_page");
-  return VALID_PAGES.includes(p) ? p : "cross";
+  const q = LEGACY_PAGES[p] || p;
+  return VALID_PAGES.includes(q) ? q : "cross";
 }
 
 function Dashboard() {
@@ -268,10 +271,9 @@ function Dashboard() {
         {page === "calculator" && <Calculator />}
         {page === "making" && <MakingPrice priceData={priceData} />}
         {page === "premium" && <PremiumInputs />}
-        {page === "crude" && <CrudeOil />}
+        {page === "mcxnymex" && <McxNymex />}
         {/* Same screen, US side restated in rupees at the USD/INR future. A
             separate tab because the client wants the dollar view kept. */}
-        {page === "crudeinr" && <CrudeOil currency="inr" />}
       {page === "nsemcx" && <NseMcxCrude />}
       {page === "ivcalc" && <IvCalculator />}
       {page === "intl" && <International />}

@@ -2,23 +2,24 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
-  { key: "cross", label: "Cross Pairs" },
-  { key: "calendar", label: "Calendar" },
-  { key: "metals", label: "Metal" },
-  { key: "price", label: "Price" },
-  { key: "othercomm", label: "Other Commodity" },
+  // Names and order are the client's (his two notes, 03-Sep-2026). Whatever
+  // does not fit the bar folds into "More" in this same order.
+  { key: "cross", label: "Cross Pair" },
+  { key: "calendar", label: "Calendar Spread" },
+  { key: "metals", label: "Metal Spread" },
+  { key: "othercomm", label: "Other Commodity Spread" },
+  { key: "price", label: "Metal Price" },
   { key: "calculator", label: "ETF vs MCX" },
-  { key: "making", label: "Making Price" },
   { key: "premium", label: "Premium" },
-  { key: "options", label: "Nifty / Sensex" },
-  { key: "goldopt", label: "Commodity Options" },
-  { key: "stock", label: "Bullion Stock" },
-  { key: "signals", label: "⚡ Signals" },
-  { key: "crude", label: "Crude / Gas" },
-  { key: "crudeinr", label: "Crude / Gas INR" },
+  { key: "goldopt", label: "Commodity Option" },
   { key: "nsemcx", label: "NSE vs MCX" },
+  { key: "mcxnymex", label: "MCX vs NYMEX" },
+  { key: "making", label: "Making Price" },
+  { key: "stock", label: "Bullion Stock" },
+  { key: "intl", label: "COMEX + NYMEX" },
   { key: "ivcalc", label: "IV Calculator" },
-  { key: "intl", label: "International" },
+  { key: "options", label: "Nifty / Sensex" },
+  { key: "signals", label: "⚡ Signals" },
   { key: "autotrades", label: "Auto Trades" },
 ];
 

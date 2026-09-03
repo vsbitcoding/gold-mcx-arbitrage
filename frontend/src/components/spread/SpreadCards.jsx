@@ -87,7 +87,7 @@ export default function SpreadCards({ groups, onHistory }) {
                 <span className="sc-c">▼ Dec</span>
                 <span className="sc-c">▲ Inc</span>
                 <span className="sc-c">{isCalendar ? "%" : ""}</span>
-                {onHistory && <span className="sc-c sc-histhead">History</span>}
+                {onHistory && <span className="sc-c sc-histhead" title="History">Hist.</span>}
               </div>
               {rows.map((row, i) => (
                 <div className={`sc-row${onHistory ? " sc-hist" : ""}${row.signal ? ` sc-rowsig sc-rowsig-${row.signal.direction}` : ""}`} key={row.name}>
@@ -119,8 +119,7 @@ export default function SpreadCards({ groups, onHistory }) {
                       <button type="button" className="sc-histbtn"
                         title={`Day-by-day spread history of this ${isCalendar ? "pair of months" : "contract month"} only`}
                         onClick={() => onHistory(row)}>
-                        <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M8 4.5V8l2.5 1.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                        History</button>
+                        <svg viewBox="0 0 20 20" width="15" height="15" aria-label="History"><path d="M3 16h14M3 16V4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M5 13l3.5-4.5 3 2.5L16 5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="5" r="1.6" fill="currentColor"/></svg></button>
                     </span>
                   )}
                 </div>
