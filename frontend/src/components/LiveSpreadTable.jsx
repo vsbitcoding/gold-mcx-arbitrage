@@ -22,7 +22,6 @@ function SpreadHistory({ kind, onClose }) {
   const [nearExp, setNearExp] = useState("");          // month mode: chosen near/big expiry
   const [year, setYear] = useState(String(new Date().getFullYear()));   // "all" | "YYYY"
   const [page, setPage] = useState(1);
-  const PAGE = 100;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -142,6 +141,17 @@ function SpreadHistory({ kind, onClose }) {
     setHover(best);
   };
   const hv = hover != null ? series[hover] : null;
+  // Paging by YEAR: All years pages through 2015, 2016, ... one full year at a
+  // time; a chosen year is one page. Hundred-row pages cut a year mid-month.
+  const pageYears = useMemo(() => {
+    if (year !== "all") return [];
+    return Array.from(new Set(series.map((r) => r.date.slice(0, 4))));
+  }, [series, year]);
+  const pageRows = useMemo(() => {
+    if (year !== "all") return series;
+    const y = pageYears[page - 1];
+    return y ? series.filter((r) => r.date.startsWith(y)) : series;
+  }, [series, year, pageYears, page]);
   // From-year chips follow the data: the archive reaches back to May-2015,
   // and whatever it holds is offered, so a longer backfill shows up here
   // without another change.
@@ -290,7 +300,7 @@ function SpreadHistory({ kind, onClose }) {
                   {mode === "continuous" && <th>Contracts</th>}
                 </tr></thead>
                 <tbody>
-                  {series.slice((page - 1) * PAGE, page * PAGE).map((r) => (
+                  {pageRows.map((r) => (
                     <tr key={r.date}>
                       <td>{when(r.date)}</td>
                       {isCal
@@ -315,14 +325,19 @@ function SpreadHistory({ kind, onClose }) {
                   )}
                 </tbody>
               </table>
-              {data.rows.length > PAGE && (
+              {year === "all" && pageYears.length > 1 && (
                 <div className="pt-pager sh-pager">
-                  <span className="pt-pager-total">{data.rows.length} days · January to December, page by page</span>
+                  <span className="pt-pager-total">{data.rows.length} days · one year per page, January to December</span>
                   <button type="button" className="oh-chip" disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
-                  <span className="pt-pager-page">page {page} / {Math.ceil(data.rows.length / PAGE)}</span>
-                  <button type="button" className="oh-chip" disabled={page >= Math.ceil(data.rows.length / PAGE)}
-                    onClick={() => setPage((p) => p + 1)}>Next ›</button>
+                    onClick={() => setPage((p) => p - 1)}>‹ {pageYears[page - 2] || ""}</button>
+                  <span className="pt-pager-page"><b>{pageYears[page - 1]}</b> · {pageRows.length} days</span>
+                  <button type="button" className="oh-chip" disabled={page >= pageYears.length}
+                    onClick={() => setPage((p) => p + 1)}>{pageYears[page] || ""} ›</button>
+                </div>
+              )}
+              {year !== "all" && (
+                <div className="pt-pager sh-pager">
+                  <span className="pt-pager-total">{data.rows.length} days · January to December</span>
                 </div>
               )}
             </div>
