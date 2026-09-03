@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
-// International market screen — the SIX items the client subscribes to on IBKR
-// (COMEX L1 + NYMEX L1), nothing else. Numbered 1-6 exactly as he listed them
-// so he can tick each one off against his own terminal.
+// "COMEX + NYMEX" screen (the client's name for it, 03-Sep): the FIVE IBKR
+// items he subscribes to, numbered as he listed them. The crude option chain,
+// ATM strike and straddle that used to sit below were removed on his note.
 // Polls one tiny in-memory endpoint every 2s and pauses when the tab is hidden.
 const num = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
 const signed = (v, d = 2) =>
@@ -73,36 +73,23 @@ export default function International() {
   const ib = d.ibkr || {};
   const gf = ib.gold_future || {}, sf = ib.silver_future || {}, cf = ib.crude_future || {};
   const xs = ib.gold_spot || {}, ys = ib.silver_spot || {};
-  const opts = ib.crude_options || {};
-  const rows = opts.rows || [];
 
   const mid = (o) => (o?.bid != null && o?.ask != null ? (o.bid + o.ask) / 2 : (o?.bid ?? o?.ask ?? null));
-  const gcMid = mid(gf), siMid = mid(sf), clMid = mid(cf);
+  const gcMid = mid(gf), siMid = mid(sf);
   const xauMid = mid(xs), xagMid = mid(ys);
-
-  const atmStrike = clMid != null && rows.length
-    ? rows.reduce((best, r) => (Math.abs(r.strike - clMid) < Math.abs(best - clMid) ? r.strike : best), rows[0].strike)
-    : null;
-  const atmRow = atmStrike != null ? rows.find((r) => r.strike === atmStrike) : null;
 
   // Derived — IBKR data only, nothing from any other feed.
   const goldBasis = gcMid != null && xauMid != null ? gcMid - xauMid : null;
   const silverBasis = siMid != null && xagMid != null ? siMid - xagMid : null;
   const spotRatio = xauMid != null && xagMid ? xauMid / xagMid : null;
   const futRatio = gcMid != null && siMid ? gcMid / siMid : null;
-  const callMid = mid(atmRow?.call), putMid = mid(atmRow?.put);
-  const straddle = callMid != null && putMid != null ? callMid + putMid : null;
-
-  const expiry = opts.expiry
-    ? `${opts.expiry.slice(6, 8)}-${opts.expiry.slice(4, 6)}-${opts.expiry.slice(0, 4)}`
-    : null;
 
   return (
     <div className="intl-page">
       <div className="intl-head">
         <div>
-          <h2>International Market</h2>
-          <div className="intl-sub">6 live items · Interactive Brokers · COMEX + NYMEX</div>
+          <h2>COMEX + NYMEX</h2>
+          <div className="intl-sub">5 live items · Interactive Brokers</div>
         </div>
         {/* A competing IBKR login blanks every price while the socket stays up,
             so "Live real-time" over six empty cards is the one thing this pill
@@ -141,81 +128,14 @@ export default function International() {
           bid={cf.bid} ask={cf.ask} />
       </div>
 
-      {/* Everything below is derived from the six feeds above — nothing else. */}
+      {/* Everything below is derived from the five feeds above — nothing else. */}
       <div className="intl-stats">
         <Stat label="Gold basis" hint="future − spot" value={goldBasis} />
         <Stat label="Silver basis" hint="future − spot" value={silverBasis} decimals={3} />
         <Stat label="Gold / Silver" hint="spot ratio" value={spotRatio} plain />
         <Stat label="Gold / Silver" hint="future ratio" value={futRatio} plain />
-        <Stat label="Crude ATM" hint="nearest strike" value={atmStrike} plain />
-        <Stat label="ATM straddle" hint="call + put" value={straddle} plain />
       </div>
 
-      <div className="intl-section-title">
-        <span className="intl-num">6</span> CRUDE OPTIONS
-        <em>
-          NYMEX{expiry ? ` · expiry ${expiry}` : ""}
-          {clMid != null ? ` · underlying CL ${num(clMid)}` : ""}
-          {rows.length ? ` · ${rows.length} strikes around the money` : ""}
-        </em>
-      </div>
-      {rows.length === 0 ? (
-        <div className="oh-note oh-slim">Option chain loading…</div>
-      ) : (
-        <div className="intl-chain-wrap">
-          <table className="intl-chain">
-            <thead>
-              <tr>
-                <th colSpan={3} className="intl-call">CALL <em>buy right</em></th>
-                <th className="intl-strike-col">
-                  STRIKE
-                  {clMid != null && <em>CL {num(clMid)}</em>}
-                </th>
-                <th colSpan={3} className="intl-put">PUT <em>sell right</em></th>
-              </tr>
-              <tr className="intl-chain-sub">
-                <th className="intl-call">Bid</th>
-                <th className="intl-call">Ask</th>
-                <th className="intl-call">Mid</th>
-                <th className="intl-strike-col" />
-                <th className="intl-put">Mid</th>
-                <th className="intl-put">Bid</th>
-                <th className="intl-put">Ask</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const atm = r.strike === atmStrike;
-                const cItm = clMid != null && r.strike < clMid;   // call in-the-money
-                const pItm = clMid != null && r.strike > clMid;   // put in-the-money
-                const cM = mid(r.call), pM = mid(r.put);
-                return (
-                  <tr key={r.strike} className={atm ? "atm-row" : ""}>
-                    <td className={`intl-call ${cItm ? "itm" : ""}`}>{num(r.call?.bid)}</td>
-                    <td className={`intl-call ${cItm ? "itm" : ""}`}>{num(r.call?.ask)}</td>
-                    <td className={`intl-call strong ${cItm ? "itm" : ""}`}>{num(cM)}</td>
-                    <td className="intl-strike-col">
-                      <span className="intl-strike">
-                        <span className="intl-strike-n">{num(r.strike)}</span>
-                        {atm && <span className="atm-badge">ATM</span>}
-                      </span>
-                    </td>
-                    <td className={`intl-put strong ${pItm ? "itm" : ""}`}>{num(pM)}</td>
-                    <td className={`intl-put ${pItm ? "itm" : ""}`}>{num(r.put?.bid)}</td>
-                    <td className={`intl-put ${pItm ? "itm" : ""}`}>{num(r.put?.ask)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="intl-chain-legend">
-            <span><i className="sw call" /> Call side</span>
-            <span><i className="sw put" /> Put side</span>
-            <span><i className="sw itm" /> Shaded = in the money</span>
-            <span><i className="sw atm" /> ATM = strike nearest the crude price</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

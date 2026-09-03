@@ -60,12 +60,20 @@ SYMBOLS = {
     "petal": "GOLDPETAL", "guinea": "GOLDGUINEA", "ten": "GOLDTEN", "mini": "GOLDM",
     "gold": "GOLD", "silver": "SILVER", "silverm": "SILVERM", "silvermic": "SILVERMIC",
     "silver100": "SILVER100",
+    # base metals - the Metal Spread tab gets the same history (client, 03-Sep)
+    "copper": "COPPER", "aluminium": "ALUMINIUM", "alumini": "ALUMINI",
+    "zinc": "ZINC", "zincmini": "ZINCMINI", "nickel": "NICKEL",
+    "lead": "LEAD", "leadmini": "LEADMINI",
 }
+METALS = ("copper", "aluminium", "alumini", "zinc", "zincmini", "nickel", "lead", "leadmini")
 _SHORT = {v: k for k, v in SYMBOLS.items()}
 LABELS = {
     "petal": "PETAL", "guinea": "GUINEA", "ten": "TEN", "mini": "MINI", "gold": "GOLD",
     "silver": "SILVER", "silverm": "SILVER MINI", "silvermic": "SILVER MIC",
     "silver100": "SILVER 100",
+    "copper": "COPPER", "aluminium": "ALUMINIUM", "alumini": "ALUMINIUM MINI",
+    "zinc": "ZINC", "zincmini": "ZINC MINI", "nickel": "NICKEL",
+    "lead": "LEAD", "leadmini": "LEAD MINI",
 }
 
 _status: dict = {"running": False, "msg": "never run", "files": 0, "rows": 0, "at": None}
@@ -325,7 +333,7 @@ def calendar_series(symbol: str, near_exp: str | None, far_exp: str | None,
 
 
 # What "one unit" means for the standardised column, per symbol family.
-STD_UNIT = {k: ("per kg" if k.startswith("silver") else "per 10 gm") for k in SYMBOLS}
+STD_UNIT = {k: ("per 10 gm" if k in ("petal", "guinea", "ten", "mini", "gold") else "per kg") for k in SYMBOLS}
 
 
 def cross_series(big: str, small: str, mode: str, big_exp: str | None, small_exp: str | None,

@@ -114,6 +114,9 @@ MULTIPLIERS = {
     "gold": 1.0,                       # GOLD full (1 kg) quoted per 10 g, like ten/mini
     "silver": 1.0, "silverm": 1.0, "silvermic": 1.0,  # all silver quoted per kg
     "silver100": 100.0,                # SILVER100 quoted ~1/100 of per-kg basis → ×100 (client)
+    # base metals are all quoted per kg - no scaling between big and mini
+    "copper": 1.0, "aluminium": 1.0, "alumini": 1.0, "zinc": 1.0, "zincmini": 1.0,
+    "nickel": 1.0, "lead": 1.0, "leadmini": 1.0,
 }
 
 # Weight (grams) per single lot of each MCX contract

@@ -44,7 +44,10 @@ def bhav_options(user: str = Depends(get_current_user)):
     from app.services.pair_generator import CROSS_TEMPLATES
     return {
         "coverage": bh.coverage(),
-        "symbols": [{"key": k, "label": bh.LABELS[k], "expiries": bh.expiries(k)}
+        # group: the Calendar dialog lists bullion, the Metal Spread one lists
+        # base metals (client, 03-Sep: "Metal Spread - do as per Calendar Spread")
+        "symbols": [{"key": k, "label": bh.LABELS[k], "expiries": bh.expiries(k),
+                     "group": "metal" if k in bh.METALS else "bullion"}
                     for k in bh.SYMBOLS],
         "cross": [{"big": b, "small": s, "mode": m,
                    "label": f"{bh.LABELS[b]} / {bh.LABELS[s]}"}

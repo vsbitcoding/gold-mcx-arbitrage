@@ -32,6 +32,10 @@ SYMBOL_MAP = {
     # the NSE-vs-MCX electricity comparison (client's note, 02-Sep), which
     # resolves its MCX legs through this map.
     "elecmbl": "ELECDMBL",
+    # Base metals for the Metal Price page (client's note, 03-Sep-2026)
+    "copper": "COPPER", "aluminium": "ALUMINIUM", "alumini": "ALUMINI",
+    "zinc": "ZINC", "zincmini": "ZINCMINI", "nickel": "NICKEL",
+    "lead": "LEAD", "leadmini": "LEADMINI",
 }
 
 

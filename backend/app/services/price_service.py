@@ -25,6 +25,10 @@ PRICE_SEQUENCE: list[tuple[str, str]] = [
     ("petal", "Gold Petal"),
     ("silvermic", "Silver Mic"),
     ("silver100", "Silver 100"),
+    # base metals (client, 03-Sep)
+    ("copper", "Copper"), ("aluminium", "Aluminium"), ("alumini", "Aluminium Mini"),
+    ("zinc", "Zinc"), ("zincmini", "Zinc Mini"), ("nickel", "Nickel"),
+    ("lead", "Lead"), ("leadmini", "Lead Mini"),
 ]
 
 _state: dict = {"contracts": {}}  # {short: [contract dicts]}
