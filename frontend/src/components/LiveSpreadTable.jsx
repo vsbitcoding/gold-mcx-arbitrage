@@ -167,10 +167,12 @@ function SpreadHistory({ kind, onClose, preset }) {
     if (year !== "all") return [];
     return Array.from(new Set(series.map((r) => r.date.slice(0, 4))));
   }, [series, year]);
+  // Table rows NEWEST first (client, 03-Sep: "Dec to Jan, not Jan to Dec");
+  // the chart keeps its left-to-right time axis.
   const pageRows = useMemo(() => {
-    if (year !== "all") return series;
-    const y = pageYears[page - 1];
-    return y ? series.filter((r) => r.date.startsWith(y)) : series;
+    const y = year !== "all" ? null : pageYears[page - 1];
+    const rows = y ? series.filter((r) => r.date.startsWith(y)) : series;
+    return rows.slice().reverse();
   }, [series, year, pageYears, page]);
   // From-year chips follow the data: the archive reaches back to May-2015,
   // and whatever it holds is offered, so a longer backfill shows up here
@@ -351,7 +353,7 @@ function SpreadHistory({ kind, onClose, preset }) {
               </table>
               {year === "all" && pageYears.length > 1 && (
                 <div className="pt-pager sh-pager">
-                  <span className="pt-pager-total">{data.rows.length} days · one year per page, January to December</span>
+                  <span className="pt-pager-total">{data.rows.length} days · one year per page, December to January</span>
                   <button type="button" className="oh-chip" disabled={page <= 1}
                     onClick={() => setPage((p) => p - 1)}>‹ {pageYears[page - 2] || ""}</button>
                   <span className="pt-pager-page"><b>{pageYears[page - 1]}</b> · {pageRows.length} days</span>
@@ -361,7 +363,7 @@ function SpreadHistory({ kind, onClose, preset }) {
               )}
               {year !== "all" && (
                 <div className="pt-pager sh-pager">
-                  <span className="pt-pager-total">{data.rows.length} days · January to December</span>
+                  <span className="pt-pager-total">{data.rows.length} days · December to January</span>
                 </div>
               )}
             </div>
