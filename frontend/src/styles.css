@@ -6051,3 +6051,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .sh-modal .pt-modal-head .sh-toolbar label > span { font-size: 9.5px; }
 .sh-modal .sh-body { padding-top: 10px; }
 .sh-layout > .sh-chart { height: 250px; }
+.sh-chartbox { flex: 1; min-height: 0; position: relative; }
+.sh-chartbox svg { display: block; width: 100%; height: 100%; }
+.sh-axis { font-size: 11px; }

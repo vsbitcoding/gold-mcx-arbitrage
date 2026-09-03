@@ -98,7 +98,22 @@ function SpreadHistory({ kind, onClose }) {
     ? `${expLabel(r.near_exp)} / ${expLabel(r.far_exp)}`
     : `${expLabel(r.big_exp)} / ${expLabel(r.small_exp)}`);
 
-  const W = 1000, H = 360, PX = 62, PY = 18, PB = 30;
+  // The chart is drawn in the box's real pixels (measured, re-measured on
+  // resize) rather than scaled from a fixed viewBox - scaling stretched every
+  // axis label into an unreadable smear on wide screens.
+  const chartBox = useRef(null);
+  const [dims, setDims] = useState({ w: 1000, h: 300 });
+  useEffect(() => {
+    const el = chartBox.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      if (r.width > 50 && r.height > 50) setDims({ w: Math.round(r.width), h: Math.round(r.height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [data]);
+  const W = dims.w, H = dims.h, PX = 62, PY = 18, PB = 30;
   const chart = useMemo(() => {
     if (!stats || series.length < 2) return null;
     // y range padded a little so the extremes do not sit on the frame
@@ -131,7 +146,7 @@ function SpreadHistory({ kind, onClose }) {
     });
     const zero = lo <= 0 && hi >= 0 ? y(0) : null;
     return { pts, line, area, maPath, win, yTicks, xTicks: xTicks.slice(0, 14), zero, x, y };
-  }, [series, stats]);
+  }, [series, stats, W, H]);
   const onMove = (e) => {
     if (!chart) return;
     const box = e.currentTarget.getBoundingClientRect();
@@ -251,7 +266,8 @@ function SpreadHistory({ kind, onClose }) {
                 <span><i className="sh-lg-ma" /> {chart.win}-day average</span>
                 {chart.zero != null && <span><i className="sh-lg-zero" /> zero</span>}
               </div>
-              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+              <div className="sh-chartbox" ref={chartBox}>
+              <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H}
                 onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
                 {chart.yTicks.map((tk) => (
                   <g key={tk.y}>
@@ -278,6 +294,7 @@ function SpreadHistory({ kind, onClose }) {
                   </>
                 )}
               </svg>
+              </div>
               <div className="sh-tip">
                 {hv ? (
                   isCal
