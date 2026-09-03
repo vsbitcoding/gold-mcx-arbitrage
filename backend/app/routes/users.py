@@ -122,7 +122,9 @@ def update_user(user_id: int, body: UserIn, admin: str = Depends(require_admin),
         raise HTTPException(400, "You cannot downgrade or disable your own login.")
     if u.role == "admin" and (role != "admin" or not body.active) and _active_admins(db, u.id) == 0:
         raise HTTPException(400, "This is the last active admin; make another admin first.")
-    if name and name != u.username:
+    # Existing logins keep their capitals ("Dharmesh"): a name that only differs
+    # in case is the same name, not a rename.
+    if name and name != u.username and name.lower() != u.username.lower():
         if db.query(User.id).filter(User.username == name).first():
             raise HTTPException(409, f"'{name}' already exists.")
         forget(u.username)

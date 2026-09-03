@@ -85,11 +85,14 @@ async def _confine_traders(request, call_next):
     path = request.url.path
     if path.startswith("/api"):
         auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("bearer "):
+        # The Auto Trades reads also take the token as ?token= (plain-URL
+        # access, 20-Aug); that envelope must meet the same wall.
+        tok = auth[7:] if auth.lower().startswith("bearer ") else request.query_params.get("token", "")
+        if tok:
             from app import security as sec
             import jwt as _jwt
             try:
-                payload = _jwt.decode(auth[7:], settings.APP_SECRET_KEY,
+                payload = _jwt.decode(tok, settings.APP_SECRET_KEY,
                                       algorithms=[sec.ALGORITHM])
                 username = payload.get("sub") or ""
             except _jwt.PyJWTError:
