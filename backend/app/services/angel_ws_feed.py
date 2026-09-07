@@ -98,6 +98,7 @@ _resub = threading.Event()
 _resub_reason = [""]
 _conns: list = []
 _last_rebuild_epoch = [0.0]
+_force_login = [False]
 
 
 def _set_state(**kw) -> None:
@@ -190,7 +191,10 @@ class _Conn:
                 self.ws.subscribe(f"arbi-{self.idx}", 3,
                                   [{"exchangeType": ex, "tokens": toks} for ex, toks in self.groups.items()])
             if self.index_tokens:
-                self.ws.subscribe(f"arbi-idx-{self.idx}", 1,
+                # Quote mode (2): indices have no depth, but this mode carries
+                # the previous close the Nifty / Sensex screen shows day-change
+                # against; LTP mode (1) does not.
+                self.ws.subscribe(f"arbi-idx-{self.idx}", 2,
                                   [{"exchangeType": ex, "tokens": toks} for ex, toks in self.index_tokens.items()])
             log.info("socket %d open: %d tokens on %s", self.idx, self.n_tokens,
                      sorted(set(self.groups) | set(self.index_tokens)))
@@ -211,6 +215,10 @@ class _Conn:
             mode = msg.get("subscription_mode")
             bid = ask = ltp
             volume = oi = None
+            if mode in (2, 3):
+                pc = float(msg.get("closed_price") or 0) / 100.0
+                if pc > 0:
+                    prev_close_store[tok] = pc
             if mode == 3:
                 b = a = 0.0
                 for lvl in (msg.get("best_5_buy_data") or []) + (msg.get("best_5_sell_data") or []):
@@ -225,18 +233,22 @@ class _Conn:
                     else:
                         a = px if not a else min(a, px)      # best sell = lowest
                 # No depth = no buyer / no seller = dash (client rule, 31-Aug).
-                # Angel keeps sending a dead far month's last trade from days
-                # ago; falling back to it would resurrect exactly the ghosts
-                # the rule removed. Same for the LTP itself: it counts only
-                # once the contract has traded today.
+                # Angel keeps sending a dead far month's "last price" even when
+                # it never traded (that number is the settlement price, and its
+                # last_traded_timestamp is 0); falling back to it would
+                # resurrect exactly the ghosts the rule removed. A contract
+                # that has traded at some point keeps its last trade, as any
+                # terminal shows it.
                 bid, ask = b, a
+                # The two NSE ETFs (ETF vs MCX page) lose their book at 15:30
+                # while MCX runs to 23:30; the old feed showed them at the last
+                # trade after the cash close, so they still do.
+                if meta.get("kind") == "etf" and ltp > 0:
+                    bid, ask = (b or ltp), (a or ltp)
                 volume = float(msg.get("volume_trade_for_the_day") or 0)
                 oi = float(msg.get("open_interest") or 0)
-                if volume <= 0:
+                if volume <= 0 and float(msg.get("last_traded_timestamp") or 0) <= 0:
                     ltp = 0.0
-                pc = float(msg.get("closed_price") or 0) / 100.0
-                if pc > 0:
-                    prev_close_store[tok] = pc
             if tok not in self.first_seen:
                 self.first_seen.add(tok)
                 log.info("FIRST tick %s/%s: ltp=%s bid=%s ask=%s", meta.get("short", "?"), tok, ltp, bid, ask)
@@ -368,7 +380,8 @@ def _run_feed_thread() -> None:
     while True:
         try:
             _set_state(mode="reconnecting", ws_connected=False)
-            jwt, feed_token, creds = angel_feed.get_session()
+            jwt, feed_token, creds = angel_feed.get_session(force=_force_login[0])
+            _force_login[0] = False
             _set_state(client_id=creds.get("ANGEL_CLIENT_CODE", ""), client_name="Angel One",
                        token_expiry_epoch=_jwt_expiry(jwt), last_token_refresh_epoch=time.time())
             subs, n_pairs = subscriptions.build()
@@ -418,6 +431,13 @@ def _run_feed_thread() -> None:
                     _set_state(ws_connected=False)
                     if _state["mode"] == "live":
                         _set_state(mode="reconnecting")
+                # A socket that Angel keeps refusing (handshake 401/429) is
+                # usually a session that died server-side: rebuild everything
+                # on a fresh login rather than retrying the dead one all night.
+                refused = [c for c in _conns if not c.connected and c.opened_at == 0 and c.attempt >= 3]
+                if refused and now - _last_rebuild_epoch[0] > REBUILD_GRACE_SECONDS:
+                    _force_login[0] = True
+                    request_resubscribe_force(f"socket {refused[0].idx} refused {refused[0].attempt}x - fresh login")
             reason = _resub_reason[0] or "rebuild"
             log.info("Closing %d socket(s) to rebuild: %s", len(_conns), reason)
             _close_all()
