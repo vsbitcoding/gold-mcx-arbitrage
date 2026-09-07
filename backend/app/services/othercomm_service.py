@@ -7,7 +7,7 @@ For each family, for each ADJACENT month pair (near, far):
     near_price = near month Sell Price (best ask)
     difference = far_price − near_price
 
-Watch-only: NO firing, NO ladders. Legs ride the same Dhan MCX-Full feed.
+Watch-only: NO firing, NO ladders. Legs ride the same live MCX feed.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("othercomm_service")
 
-# Dhan MCX trading-symbol prefix → display name (client-requested order)
+# MCX trading-symbol prefix → display name (client-requested order)
 FAMILIES: dict[str, str] = {
     "CRUDEOIL": "Crude Oil",
     "CRUDEOILM": "Crude Oil Mini",

@@ -1,6 +1,6 @@
 """Angel One SmartAPI feed — NSE commodity (crude, natural gas) + real-time USD/INR.
 
-Dhan and IBKR both refuse NSE's commodity segment: Dhan's API has no such
+Neither the socket feed nor IBKR carries NSE's commodity segment: Angel's socket has no such
 exchange segment at all (their app shows it, the API cannot), and IBKR does not
 list the contracts. Angel does, so this is the third and only source for the
 NSE half of the NSE-vs-MCX comparison. It also carries USD/INR as a genuinely
@@ -18,7 +18,7 @@ Design constraints (same rules as every other feed here):
     again (Angel throttles hard).
   * NEVER touches the historical endpoint. It allows roughly one call before
     blocking for 10+ minutes, and NSE commodity is not covered by it anyway.
-  * Nothing here can disturb the Dhan or IBKR feeds - separate thread, separate
+  * Nothing here can disturb the socket or IBKR feeds - separate thread, separate
     credentials, separate upstream.
 """
 from __future__ import annotations

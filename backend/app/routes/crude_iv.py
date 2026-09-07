@@ -2,7 +2,7 @@
 volatility and greeks on both. Two in-memory reads, zero DB, no upstream call
 per request.
 
-MCX comes from Dhan's REST option chain (the tick feed has no IV), US from the
+MCX IV is computed off the live socket's option prices, US from the
 IBKR monthly contract. Both are trimmed to the client's layout: 10 calls above
 the money, the ATM row, 10 puts below.
 """

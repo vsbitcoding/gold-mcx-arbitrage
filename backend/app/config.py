@@ -27,10 +27,10 @@ class Settings(BaseSettings):
     IBKR_FEED_CLIENT_ID: int = 22
     # Spot metals + crude come from the IBKR feed (client's choice, 30-Jul).
     # Flip IBKR_SPOTS_ENABLED off and FINNHUB_ENABLED on to roll back instantly.
-    # MCX crude option chain with IV + greeks, via Dhan's REST option-chain
+    # MCX crude option chain with IV + greeks, computed off the live socket
     # endpoint (the WebSocket tick stream carries no IV). Reuses the live feed's
-    # cached token; Dhan allows one call per 3 s so the service polls every 5 s.
-    # Angel One SmartAPI - the only source for NSE commodity (Dhan's API has no
+    # (Black-76, forward from put-call parity), recomputed every 10 s.
+    # Angel One SmartAPI REST poll - the only source for NSE commodity (its socket has no
     # such segment, IBKR does not list the contracts). Also supplies real-time
     # USD/INR. Credentials live in ~/.config/arbi-secrets/angelone.env.
     ANGEL_ENABLED: bool = True

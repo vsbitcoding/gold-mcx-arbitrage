@@ -4,7 +4,7 @@ The client asked to track how the same strike drifts apart between the two
 exchanges through the day, and chose the WHOLE table over an ATM-only summary,
 so every strike is stored exactly as the live screen shows it.
 
-This is the only record that will ever exist. Neither Angel, Dhan nor IBKR
+This is the only record that will ever exist. Neither Angel nor IBKR
 serves NSE-commodity history, so nothing can be backfilled - the file can only
 build forward from the first capture.
 

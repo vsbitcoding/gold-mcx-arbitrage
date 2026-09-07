@@ -6,7 +6,7 @@ For each metal family, for each ADJACENT month pair (near, far):
     difference = far_price − near_price                = 15.85
     pct        = difference ÷ near_price × 100          = 1.15 %
 
-Watch-only: NO firing, NO ladders. Legs are subscribed through the same Dhan
+Watch-only: NO firing, NO ladders. Legs are subscribed through the same live
 feed as plain MCX FUTCOM (Full mode, so bid/ask depth is available).
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from app.services.market_data import clean_sides, quote_store
 
 log = logging.getLogger("metals_service")
 
-# Dhan MCX trading-symbol prefix → display name (all base metals + their minis)
+# MCX trading-symbol prefix → display name (all base metals + their minis)
 METALS: dict[str, str] = {
     "COPPER": "Copper",
     "ALUMINIUM": "Aluminium",

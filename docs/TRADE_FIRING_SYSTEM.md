@@ -144,10 +144,9 @@ fresh ladders can still fire.
 - Pass 2: one SELECT of all open positions → close those past `exit`.
 - Commits only if `dirty` (avoids WAL churn on idle ticks).
 
-**Driven by the feed:** `dhan_feed._eval_and_broadcast()` (dhan_feed.py:77) calls
+**Driven by the feed:** `angel_ws_feed._eval_and_broadcast()` calls
 `evaluate(db)` then broadcasts. Throttled by `last_eval` (~500 ms). Called from
-both `_run_real_feed_thread` (dhan_feed.py:~288) and `_run_simulated_thread`
-(dhan_feed.py:~392). **Re-add = restore the `evaluate(db)` call here.**
+both the live feed thread and `_run_simulated_thread`. **Re-add = restore the `evaluate(db)` call here.**
 
 **Daily clear:** `maintenance._daily_clear_ladders()` (maintenance.py:63) deletes
 all ladder rules at MCX close (23:35 IST), nulling `ladder_rule_id` FKs on
@@ -213,7 +212,7 @@ was untouched.
 
 1. **DB:** restore models `LadderRule`, `Position`, `TradeHistory`, `AccountConfig` (+ indexes) in `models.py`; `Base.metadata.create_all` recreates tables.
 2. **Engine:** restore `trade_engine.py` (this file documents every function/formula).
-3. **Feed:** re-add the `evaluate(db)` call in `dhan_feed._eval_and_broadcast()`.
+3. **Feed:** re-add the `evaluate(db)` call in `angel_ws_feed._eval_and_broadcast()`.
 4. **Maintenance:** re-add `_daily_clear_ladders()` call in `maintenance._loop()`.
 5. **Routes:** restore `ladders.py`, `positions.py`, `history.py`, `control.py`, `config.py`; re-register in `main.py` (imports + `include_router`).
 6. **Margin:** restore `margin_service.estimated_margin_for_fire()` (account-cap path).

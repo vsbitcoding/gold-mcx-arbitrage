@@ -5,7 +5,7 @@ tiny (client constraint: "no server / DB load"):
 
   capture  : 4×/trading-day (10:00, 15:00, 15:15 & 15:35 IST), reads ONLY the in-memory
              quote_store via options_service.get_spread_table() — no network,
-             no new Dhan subscriptions — then ONE ~40 KB INSERT. Skips
+             no new feed subscriptions — then ONE ~40 KB INSERT. Skips
              weekends / cold feed / missed capture windows, so it never stores
              misleading or empty boards.
   read     : on-demand only (the dashboard fetches on control change — no

@@ -18,7 +18,7 @@ The rules, exactly as agreed:
   briefly stored for comparison and retired on 20-Aug; alerts still sending it
   are not errors, the field is simply ignored.)
 * Symbols are DYNAMIC. Nothing is hard-coded: the first webhook naming a symbol
-  resolves it against the Dhan scrip master (active front month + lot units)
+  resolves it against the scrip master (active front month + lot units)
   and puts it on the live feed. Gold and silver are pre-seeded so their first
   signal is instant. An unknown name rejects with "symbol not found", logged.
 
@@ -283,7 +283,7 @@ def ensure_symbol(symbol: str) -> tuple[dict | None, bool, str | None]:
 
 
 def symbol_add(raw: str) -> dict:
-    """Manage Symbols popup: add. Resolves against the Dhan master right here,
+    """Manage Symbols popup: add. Resolves against the scrip master right here,
     so a typo is refused with a reason instead of stored broken."""
     sym = normalise_symbol(raw)
     if not sym:
@@ -362,7 +362,7 @@ def symbol_rename(old_raw: str, new_raw: str) -> dict:
 
 
 def refresh() -> None:
-    """Called by the Dhan feed on every (re)connect: re-resolve each symbol so a
+    """Called by the live feed on every (re)connect: re-resolve each symbol so a
     rolled contract is replaced, exactly like every other subscription list."""
     if not _loaded:
         _load_symbols()

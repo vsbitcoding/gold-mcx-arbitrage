@@ -22,7 +22,7 @@ in the same OTM direction — keeping both legs at equivalent moneyness.
 Each index shows ATM + 9 OTM-puts (strikes below ATM) per expiry → 10 rows
 per expiry × 3 expiries = 30 rows total.
 
-To avoid mid-day Dhan re-subscription churn (Dhan rate-limits hard) we
+To avoid mid-day re-subscription churn on the socket we
 subscribe to a WIDER window at startup (ATM-15 ... ATM+5 for each index)
 and only DISPLAY the rolling 10 that match the live ATM.
 """
@@ -39,7 +39,7 @@ from app.services.market_data import prev_close_store, quote_store
 
 log = logging.getLogger("options_service")
 
-# Spot index security IDs (from Dhan scrip master)
+# Spot index security IDs
 # Spot indices, as Angel's socket streams them (NSE / BSE index tokens).
 from app.services.angel_master import INDEX_IDS as _IDX  # noqa: E402
 NIFTY_SPOT_ID = _IDX["NIFTY"]
@@ -67,7 +67,7 @@ DISPLAY_BELOW = 9   # 9 strikes below ATM (OTM puts) + ATM itself = 10
 ABOVE_ROWS = 15
 
 # Subscription buffer (subscribe wider than display so the dynamic ATM stays
-# covered all day WITHOUT re-subscribing mid-session — Dhan rate-limits hard on
+# covered all day WITHOUT re-subscribing mid-session — the socket is rebuilt only on
 # reconnects, so we deliberately use ONE wide static window per day instead).
 # The anchor is captured at the daily ~09:17 IST refresh; the window must cover
 # a full day's index move in BOTH directions from that open level:

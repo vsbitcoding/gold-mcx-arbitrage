@@ -1,19 +1,19 @@
 """MCX option strikes for the NSE-vs-MCX screen, over the LIVE WebSocket.
 
-That screen was reading its MCX half from Dhan's REST option-chain endpoint,
+That screen was reading its MCX half from a REST option-chain endpoint,
 which allows one call every 3 s. With four boards taking turns the far month
 was arriving 30 s old, and the client is comparing prices - old numbers on one
 side of a difference are worse than no numbers.
 
 The chain endpoint exists for one reason: it is the only place IV and greeks
 come from. **This screen uses neither.** It compares bid against bid. So the
-strikes it needs are subscribed on the Dhan WebSocket the app already runs, the
+strikes it needs are subscribed on the live WebSocket the app already runs, the
 same way `goldopt_service` streams its option spreads, and the REST chain is
 left to the Crude/Gas IV tab that genuinely needs it.
 
 Design rules, same as every other feed here:
   * ZERO database writes. Quotes land in the shared in-memory quote_store.
-  * No new connection and no new credential - these ride the one Dhan socket.
+  * No new connection and no new credential - these ride the live socket.
   * Resolved once at feed start and re-checked daily, never per request.
 """
 from __future__ import annotations

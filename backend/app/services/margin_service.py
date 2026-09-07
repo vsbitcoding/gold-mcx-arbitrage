@@ -6,7 +6,7 @@ hardcoded percentages calibrated against real broker leverage figures
 the source can be swapped for a daily MCX SPAN file later without touching
 the rest of the codebase.
 
-Calibration source: typical Dhan/Zerodha/Upstox margin % for MCX commodity
+Calibration source: typical broker margin % (Zerodha/Upstox) for MCX commodity
 futures (verified against the 10.78X leverage shown for GOLDGUINEA).
 """
 from __future__ import annotations

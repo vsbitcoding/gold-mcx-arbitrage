@@ -5,7 +5,7 @@ Design (kept fully off the live-feed hot path) — client's chosen mode:
 **4H % band + warehouse-stock filter** (backtested: 4H band 97.8%/10 mo;
 with the stock filter 100%, 0 losses, on the stock-data window):
   • DAILY batch (background): pull each front-month cross pair's 60-min history
-    (~10 months, Dhan's intraday depth) → 4H bars → % spread series
+    (~10 months of hourly candles) → 4H bars → % spread series
     (spread ÷ small-leg value × 100) → (a) the current band (20-bar mean ± 1.5σ,
     in %) and (b) a per-pair PROBABILITY table — walk-forward, bucketed by z.
     A light band-only refresh rolls the 20-bar band forward every 4 hours.
@@ -45,7 +45,7 @@ SIGNAL_WINDOW_OPEN = 9 * 60 + 10    # 09:10 AM
 SIGNAL_WINDOW_CLOSE = 22 * 60 + 30  # 10:30 PM
 ROLL_DAYS = 7                     # within this many days of expiry → roll signals to the NEXT month (near-expiry = illiquid, untradeable)
 MAXHOLD_BARS = 36                 # 4H bars to reach target = "right" (≈10 trading days; ~3.6 bars/day)
-INTRADAY_DAYS = 320               # 60-min history to request (Dhan keeps ~10 months)
+INTRADAY_DAYS = 320               # 60-min history to request (~10 months, the model's window)
 DEBOUNCE_SECONDS = 300            # mid must HOLD beyond band 5 min before firing (kills fast spikes)
 MAX_AGE_SECONDS = 14 * 24 * 3600  # live signal expires (=wrong) if target not hit in ~10 trading days
 MIN_HOLD_SECONDS = 60 * 60        # a signal that hits target faster than this = noise → discarded
@@ -77,7 +77,7 @@ _state: dict = {"last_refresh": None, "models": 0}
 _bt_grid: list | None = None      # backtest of every STRAT_GRID combo over ~1yr history
 
 
-# ───────────────────────── Dhan history (4H bars) ─────────────────────────
+# ───────────────────────── candle history (4H bars) ─────────────────────────
 # 60-min candles → 4H %-spread bars, shared with the research backtester.
 # Uses the live feed's in-process token (never mints its own).
 from app.services.research_backtest import _bars_4h, _intraday_60  # noqa: E402
@@ -359,7 +359,7 @@ def refresh_model() -> int:
         if days:
             dmin = days[0] if dmin is None else min(dmin, days[0])
             dmax = days[-1] if dmax is None else max(dmax, days[-1])
-        # backtest each R:R variant (CPU only on the already-fetched vals — no extra Dhan calls)
+        # backtest each R:R variant (CPU only on the already-fetched vals — no extra candle calls)
         for gi, g in enumerate(STRAT_GRID):
             w, l, t, d = _combo_bt(vals, g["k"], g.get("t"), g.get("s"),
                                    g.get("mean", False), g.get("sm", 1.0))

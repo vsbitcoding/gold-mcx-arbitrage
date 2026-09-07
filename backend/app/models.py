@@ -103,7 +103,7 @@ class PaperSymbol(Base):
     """An MCX symbol the webhook trader has used, resolved once and kept.
 
     Nothing is hard-coded on our side (client, 20-Aug): the first webhook that
-    names a symbol resolves it against the Dhan scrip master - active front
+    names a symbol resolves it against the scrip master - active front
     month, security id, lot units - and the row keeps it on the live feed across
     restarts. Gold and silver are pre-seeded so their very first signal is
     instant instead of paying the one-time resolve.
@@ -353,7 +353,7 @@ class DailySpread(Base):
     decrease_spread = Column(Float, nullable=True)
     increase_spread = Column(Float, nullable=True)
     # Client's % logic: spread ÷ small/near-leg value × 100 (comparable across
-    # price levels). Live snapshots store both; Dhan close-based backfill rows
+    # price levels). Live snapshots store both; close-based backfill rows
     # store decrease_* only.
     decrease_pct = Column(Float, nullable=True)
     increase_pct = Column(Float, nullable=True)
@@ -469,26 +469,6 @@ class McxDailyClose(Base):
     __table_args__ = (
         UniqueConstraint("trade_date", "symbol", "expiry", name="uq_close_day_contract"),
     )
-
-
-class PairLeg(Base):
-    """Which contracts a calendar pair was made of - remembered PAST expiry.
-
-    The live registry forgets a pair the moment its near leg expires, which
-    made its history unreachable (client, 03-Sep: "expired contract not remove
-    rate from history"). Dhan still serves candles for expired security ids,
-    so keeping name -> legs here keeps every pair's close history viewable
-    for as long as Dhan keeps the candles.
-    """
-    __tablename__ = "pair_legs"
-    id = Column(Integer, primary_key=True)
-    name = Column(String(64), unique=True, nullable=False)
-    group_label = Column(String(32), nullable=True)
-    big_security_id = Column(String(16), nullable=False)
-    small_security_id = Column(String(16), nullable=False)
-    big_symbol = Column(String(40), nullable=True)
-    small_symbol = Column(String(40), nullable=True)
-    last_seen = Column(DateTime, nullable=True)
 
 
 class ElecHourly(Base):

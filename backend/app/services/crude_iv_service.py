@@ -1,15 +1,15 @@
 """MCX crude-oil option chain WITH implied volatility and greeks (client, 05-Aug).
 
 The live WebSocket feed carries bid/ask/ltp only — IV and greeks are not in the
-tick stream at all. They come from Dhan's REST option-chain endpoint instead,
+tick stream at all. They are computed here from the streamed option prices,
 which returns implied_volatility plus delta/theta/gamma/vega for every strike in
 one call.
 
 Design constraints (same rules as every other feed here):
   * ZERO database writes — one small in-memory dict the route reads.
-  * NEVER mints a Dhan token. It reuses the cached one the live feed already
+  * Needs no credential of its own: everything is read from the quote_store the
     holds; minting a second token would invalidate the running feed's token.
-  * Dhan allows ONE option-chain call every 3 seconds. We poll every 5 s, which
+  * Recomputed every 10 s from in-memory quotes, which
     leaves headroom and is far faster than a bullion desk can read a screen.
   * The underlying (front-month CRUDEOIL future) is resolved once and re-checked
     daily, not on every poll.
@@ -32,7 +32,7 @@ from app.services.market_data import quote_store
 
 log = logging.getLogger("option_iv")
 
-# Dhan's floor is one option-chain call per 3 s. With two commodities that is
+# One round every 10 s. With two commodities that is
 # one call each per 8 s - still far faster than a desk reads a screen.
 _GAP_SECONDS = 5.0     # raised from 4.0: the extra comparison chain tipped us into 429s
 _ROUND_SECONDS = 10
@@ -143,7 +143,7 @@ def _reprice(rows: list, expiry: str,
              fallback: float | None = None) -> tuple[float | None, int, float | None]:
     """Replace the vendor's IV and greeks with our own, in place.
 
-    Dhan's figure is wrong and the number says so on its own: at crude 8200 it
+    The vendor figure we once showed was wrong and the number said so on its own: at crude 8200 it
     reported CE 47.02% and PE 50.96% - a 3.9 point gap at ONE strike, which
     put-call parity forbids. Its maths is fine; it is pricing a September option
     off the August future, which is 60 rupees away.
@@ -245,7 +245,7 @@ def _reprice(rows: list, expiry: str,
             leg["iv_bid"] = iv_calc.implied_vol(b, fwd, r["strike"], T, call)
             leg["iv_ask"] = iv_calc.implied_vol(a, fwd, r["strike"], T, call)
             if leg["iv"]:
-                # Greeks off OUR volatility. Dhan's were computed against the
+                # Greeks off OUR volatility. The vendor's were computed against the
                 # same wrong underlying, so delta and theta were off with the IV.
                 leg.update(iv_calc.greeks(fwd, r["strike"], T, leg["iv"] / 100.0,
                                           call))

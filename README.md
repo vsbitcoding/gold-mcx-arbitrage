@@ -131,8 +131,8 @@ deploy/                   deploy.sh, nginx config, systemd unit
 
 ## Setup
 
-Copy `.env.example` → `.env` and fill Dhan credentials
-(`DHAN_CLIENT_ID`, `DHAN_MPIN`, `DHAN_TOTP_SECRET`, `PUBLIC_API_KEYS`, …).
+Copy `.env.example` → `.env` and fill the Angel One credentials
+(`ANGEL_API_KEY`, `ANGEL_CLIENT_CODE`, `ANGEL_MPIN`, `ANGEL_TOTP_SECRET`, `PUBLIC_API_KEYS`, …).
 
 ```bash
 # Backend

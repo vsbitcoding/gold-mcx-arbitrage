@@ -4,7 +4,7 @@ Combines what the dashboard already streams:
   IBKR   : XAU/XAG spot, COMEX gold/silver futures, NYMEX crude future +
            CL option chain, Brent future  (the client's 6 international items)
   TwelveData: USD/INR (the only item IBKR cannot supply on an LLC account)
-  Dhan   : MCX gold/silver (for side-by-side comparison)
+  MCX    : gold/silver off the live socket (for side-by-side comparison)
 
 Everything here is a dict lookup — no database, no upstream call per request.
 """

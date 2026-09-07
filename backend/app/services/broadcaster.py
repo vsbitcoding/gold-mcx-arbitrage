@@ -1,6 +1,6 @@
 """WebSocket broadcaster for live spread updates.
 
-The Dhan feed thread calls `push_snapshot_async()` (via threadsafe wrapper)
+The feed thread calls `push_snapshot_async()` (via threadsafe wrapper)
 after each tick batch. The broadcaster fans out the latest spread snapshot
 to every connected browser WebSocket. Throttled to ~10 Hz to avoid flooding.
 """

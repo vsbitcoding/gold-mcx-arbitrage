@@ -152,7 +152,7 @@ export default function Header({
   }, [userMenu]);
 
   // Combined health: worst of (browser↔server WS) and (server↔market feed)
-  const dhanMode = feedStatus?.mode;
+  const feedMode = feedStatus?.mode;
   const tickAge = feedStatus?.last_tick_age_seconds;
   const tokenSecs = feedStatus?.token_expires_in_seconds;
   const marketOpen = feedStatus?.market_open;
@@ -167,10 +167,10 @@ export default function Header({
   } else if (!feedStatus) {
     label = "LOADING";
     cls = "health-warn";
-  } else if (dhanMode === "simulated") {
+  } else if (feedMode === "simulated") {
     label = "DEMO";
     cls = "health-poll";
-  } else if (dhanMode !== "live") {
+  } else if (feedMode !== "live") {
     label = "FEED DOWN";
     cls = "health-down";
   } else if (!marketOpen) {
@@ -190,7 +190,7 @@ export default function Header({
   const tooltip = feedStatus
     ? [
         `Browser ↔ Server: ${wsState}`,
-        `Server ↔ Angel One: ${dhanMode || "—"}`,
+        `Server ↔ Angel One: ${feedMode || "—"}`,
         `Market: ${marketOpen ? "OPEN" : "CLOSED"}`,
         `Client: ${feedStatus.client_name || "—"}`,
         `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,

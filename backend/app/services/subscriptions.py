@@ -4,7 +4,7 @@ One place for the list the old feed used to assemble inline: the pair
 registry, the calculator extras, Nifty/Sensex options, metals, other
 commodities, gold option spreads, electricity, the NSE-vs-MCX MCX strikes,
 the paper-trade symbols, and the price tab. Each service's own refresh() is
-called here, in the same order the Dhan loop used, so a contract roll walks
+called here, in one fixed order, so a contract roll walks
 through every screen at once.
 
 Returns {security_id: meta}. `meta["exch"]` names the exchange segment the

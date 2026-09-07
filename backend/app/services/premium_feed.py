@@ -6,9 +6,9 @@
   USD/INR           : TwelveData spot         (polled every ~2 min, free — barely moves)
   WTI + Brent crude : IBKR CL / BZ futures, also via ibkr_feed (for the
                       international CRUDE($) scrips on the app board)
-  MCX gold + silver : read from the EXISTING Dhan quote_store (no new subscription)
+  MCX gold + silver : read from the EXISTING quote_store (no new subscription)
 
-Nothing here touches the Dhan feed, its subscriptions, or the database. Three tiny
+Nothing here touches the live feed, its subscriptions, or the database. Three tiny
 daemon threads hold the latest values in memory; the route just reads them. If a
 source drops it reconnects on its own — it can never affect the live feed.
 

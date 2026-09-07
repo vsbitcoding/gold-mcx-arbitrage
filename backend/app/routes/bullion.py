@@ -32,7 +32,7 @@ def force_refresh(user: str = Depends(get_current_user)):
 
 @router.post("/backfill-spread")
 def backfill_spread(days: int = Query(185, ge=7, le=400), user: str = Depends(get_current_user)):
-    """One-time: rebuild ~6 months of daily %-spread history from Dhan closes
+    """One-time: rebuild ~6 months of daily %-spread history from daily closes
     (runs in a background thread using the live feed token; idempotent)."""
     started = spread_backfill.start(days)
     return {"started": started, "status": spread_backfill.status()}

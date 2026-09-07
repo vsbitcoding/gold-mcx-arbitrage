@@ -577,7 +577,7 @@ export default function NseMcxCrude() {
               onClick={() => setMonth(k)}>{l}</button>
           ))}
         </div>
-        {/* IV is computed here, not taken from a vendor - Dhan's MCX figure
+        {/* IV is computed here, not taken from a vendor - a vendor's MCX figure
             disagrees with itself between the call and the put at one strike,
             and nobody publishes NSE IV at all. */}
         <button type="button" aria-pressed={showIv}

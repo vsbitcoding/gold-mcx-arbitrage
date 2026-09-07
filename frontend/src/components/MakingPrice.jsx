@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { fmtNum } from "../utils/format.js";
 
-// Client "Making Charge" premium tab. Live from MCX bid rates (Dhan), computed
+// Client "Making Charge" premium tab. Live from MCX bid rates, computed
 // per the client's formula. Factor + making charges are editable (saved locally).
 //   Gold pairs : Gold Mini Bid × factor + (making charge × multiplier)
 //   Silver     : Silver Bid + making charge   (no factor, no multiplier)

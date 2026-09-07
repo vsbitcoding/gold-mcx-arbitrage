@@ -5,7 +5,7 @@ only two NSE commodities worth comparing: bullion and base metals are listed
 there but dead, bid 0 / ask 0 against a months-old LTP.
 
 NSE comes from Angel One (the only provider that carries NSE's commodity
-segment), MCX from the existing Dhan option-chain service. Both are in-memory
+segment), MCX from the option IV service off the live socket. Both are in-memory
 reads; nothing here calls upstream or touches the database.
 
 Honest caveats the screen has to carry:
@@ -99,7 +99,7 @@ def _forward(rows: list[dict], ex: str) -> tuple[float | None, int, float | None
     """The forward this exchange's own option prices imply, by put-call parity.
 
     NOT the future on the screen. That is the front month, and the chain is the
-    month after - the error that makes Dhan's published MCX IV disagree with
+    month after - the error that made a vendor's published MCX IV disagree with
     itself by 9.8 points at a single strike. Measured 18-Aug: NSE's front future
     was 60.8 away from where its own options said the forward was, MCX's 49.8.
 
@@ -214,7 +214,7 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
                          "diff": _diff(n_leg, m_leg, fresh)}
         rows.append(out)
 
-    # Implied volatility, computed here rather than taken from Dhan - whose
+    # Implied volatility, computed here rather than taken from a vendor - whose
     # figure is demonstrably wrong, and who has none for NSE at all. Two per leg,
     # off the bid and off the ask, per the client's choice on 18-Aug.
     #

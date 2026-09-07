@@ -897,7 +897,7 @@ def public_crude_iv(
     different vol. Greeks are scaled, not recomputed - delta invariant, gamma
     over the rate, vega and theta times it - which keeps IBKR's own model.
 
-    MCX refreshes every ~5 s (Dhan permits one option-chain call per 3 s); the
+    MCX recomputes every ~10 s off the live socket; the
     US side is live. Poll every 3-5 s - faster gains nothing.
     """
     from app.routes.crude_iv import _payload

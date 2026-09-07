@@ -179,7 +179,7 @@ def run(days: int = 185) -> None:
             for t in _walk(series):
                 all_trades.append((t, p))
 
-        # Persist the built 4H series → future sweeps run standalone (no Dhan,
+        # Persist the built 4H series → future sweeps run standalone (no feed,
         # no token, no deploy): /tmp/research_4h_series.json
         try:
             import json as _json

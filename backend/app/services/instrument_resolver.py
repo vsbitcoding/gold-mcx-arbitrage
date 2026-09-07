@@ -39,7 +39,7 @@ def _download_csv() -> str:
     """The scrip master every resolver reads, in the SEM_* shape (see
     angel_master.py). Cached there; cheap to call."""
     from app.services import angel_master
-    return angel_master.dhan_compat_csv()
+    return angel_master.compat_csv()
 
 
 def _parse_expiry(s: str) -> Optional[datetime]:

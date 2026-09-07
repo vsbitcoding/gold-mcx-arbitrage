@@ -8,8 +8,8 @@ Streams (real-time, subscription = COMEX L1 + NYMEX L1, USD 3.10/mo):
   BZ  NYMEX Brent future
 
 Design constraints (client's rules):
-  * NOTHING touches the Dhan feed — separate thread, separate TCP connection to
-    IB Gateway on localhost, its own clientId. Dhan cannot be affected.
+  * NOTHING touches the MCX feed — separate thread, separate TCP connection to
+    IB Gateway on localhost, its own clientId. The MCX feed cannot be affected.
   * ZERO database writes. All state is a small in-memory dict the route reads.
   * Only ~25 market-data lines are subscribed (3 futures + an ATM window of the
     option chain), never all 185 strikes — IBKR caps concurrent lines and each
@@ -156,7 +156,7 @@ def _px(t) -> dict:
 
 def _leg(t) -> dict:
     """One option leg with greeks. IV is converted to PERCENT so it lines up
-    with Dhan, which reports 64.89 where IBKR reports 0.6489."""
+    with MCX, which reports 64.89 where IBKR reports 0.6489."""
     def v(x):
         return float(x) if (x == x and x is not None and x > 0) else None
     def g(attr):

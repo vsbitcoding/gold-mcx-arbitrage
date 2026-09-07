@@ -6,7 +6,7 @@ leg in **rupees and percent**.
 | Side | Source |
 |------|--------|
 | NSE commodity | Angel One SmartAPI (the only provider that carries NSE's commodity segment) |
-| MCX | Dhan option chain, same feed the rest of the app already uses |
+| MCX | live socket option prices, same feed the rest of the app already uses |
 
 Only **crude oil** and **natural gas** are offered. NSE lists gold, silver and
 copper too, but they are dead: bid 0 / ask 0 all day against a months-old LTP
@@ -169,7 +169,7 @@ poll.
 ### Things to tell the user on this screen
 
 - A weekend or holiday simply has no snapshot; render the gap, do not retry.
-- **No exchange sells NSE commodity history.** Angel, Dhan and IBKR all refuse
+- **No exchange sells NSE commodity history.** Angel and IBKR both refuse
   it. Nothing before our first capture exists and nothing ever will, so the
   screen fills up going forward only.
 - A slot is skipped rather than stored if the feed was cold or the market shut,

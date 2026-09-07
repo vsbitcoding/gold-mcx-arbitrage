@@ -1,11 +1,10 @@
 """Hourly candles from Angel One, for the signals engine.
 
-The 4H %-spread model was built on Dhan's 60-minute candles. Angel serves the
-same bars (checked 07-Sep-2026: 320 days of ONE_HOUR for GOLDPETAL in one
-call, 3,200 rows, 0.1 s) with the SAME closes, so the model, its backtest and
-its rolling band come out identical. Angel allows a few calls a second on
-this endpoint; one every 0.4 s is well inside that and the daily model needs
-about twenty.
+The 4H %-spread model runs on 60-minute closes (checked 07-Sep-2026: 320
+days of ONE_HOUR for GOLDPETAL in one call, 3,200 rows, 0.1 s). Angel rates
+this endpoint together with the NSE poll's quote calls, so calls are paced
+and a 403 "exceeding access rate" is retried with backoff; the daily model
+needs about twenty calls.
 """
 from __future__ import annotations
 

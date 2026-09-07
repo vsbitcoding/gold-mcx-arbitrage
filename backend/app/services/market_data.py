@@ -4,7 +4,7 @@ dashboard never goes blank across service restarts or market holidays.
 Persistence is batched: live ticks only touch the in-memory dict (synchronous,
 under lock) and mark the security_id dirty. A single daemon writer thread
 flushes ALL dirty quotes in ONE transaction every 30s — keeping DB writes off
-the hot Dhan feed thread and collapsing ~6 inline writes/sec into 1 tx/30s.
+the hot feed thread and collapsing ~6 inline writes/sec into 1 tx/30s.
 """
 from __future__ import annotations
 
@@ -23,16 +23,14 @@ class Quote:
     ask: float = 0.0
     ltp: float = 0.0
     timestamp: float = 0.0
-    # Angel's snap-quote packet carries these; Dhan's Full packet does not
-    # (they stay 0 there). Read by the crude IV chain, which used to take
-    # them from a REST option-chain call.
+    # From Angel's snap-quote packet. Read by the crude IV chain.
     volume: float = 0.0
     oi: float = 0.0
 
 
-# Previous-day close per security_id, from Dhan's one-shot "Previous Close"
-# packet sent at (re)subscribe time. In-memory only; refreshed on every feed
-# reconnect. Used for day-change / index-divergence displays.
+# Previous-day close per security_id, from the feed's quote packets.
+# In-memory only; refreshed on every feed reconnect. Used for day-change /
+# index-divergence displays.
 prev_close_store: dict[str, float] = {}
 
 

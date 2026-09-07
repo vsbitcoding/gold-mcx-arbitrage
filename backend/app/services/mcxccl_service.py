@@ -10,7 +10,7 @@ Once a day (driven by the maintenance loop) `refresh()`:
      subprocess can't see) — building the spread history the correlation needs.
 
 Both steps are independent and fully wrapped: a failure NEVER touches the live
-Dhan feed or signals. Storage is idempotent (a PDF date already stored / today's
+live feed or signals. Storage is idempotent (a PDF date already stored / today's
 spread already snapped is skipped), so a restart after run-time is harmless.
 """
 from __future__ import annotations

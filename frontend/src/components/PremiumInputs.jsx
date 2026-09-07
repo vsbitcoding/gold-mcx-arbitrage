@@ -84,7 +84,7 @@ function MainTable({ v, cfg, setF }) {
       </div>
       <div className="pv-row">
         <span className="pv-param">{v.mcxLabel} <span className="pv-tag">Bid</span></span>
-        <span className="pv-val">{num(v.mcx, 0)} {v.mcx != null && <span className="live-dot" title="Dhan live" />}</span>
+        <span className="pv-val">{num(v.mcx, 0)} {v.mcx != null && <span className="live-dot" title="MCX live" />}</span>
       </div>
       <div className="pv-row pv-prem">
         <span className="pv-param">Premium — 999</span>

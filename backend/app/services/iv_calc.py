@@ -2,11 +2,11 @@
 
 Why we compute it (18-Aug-2026)
 ------------------------------
-Dhan ships an `implied_volatility` with its MCX chain and we were printing it.
-It is wrong, and provably so: at crude 8100, both legs heavily traded, Dhan said
+The vendor chain we once showed shipped an `implied_volatility` and we printed it.
+It was wrong, and provably so: at crude 8100, both legs heavily traded, it said
 CE 46.36% and PE 56.12%. Put-call parity makes a 9.8 point gap at one strike
-impossible. Solving each of Dhan's IVs back for the underlying it implies gives
-8146 and 8145 - so Dhan's maths is fine and its INPUT is not. It is pricing a
+impossible. Solving each of those IVs back for the underlying it implies gives
+8146 and 8145 - so the maths was fine and the INPUT was not. It was pricing a
 September option off the August future. IBKR, which resolves the right month,
 returns 48.71% for both legs of the US ATM - gap zero, which is what a correct
 calculation looks like.
@@ -22,7 +22,7 @@ option-price.com exactly, which is the client's reference.
 
 The one thing that must not be got wrong
 ----------------------------------------
-WHICH future. This is the entire Dhan bug. A September option rides the
+WHICH future. This was the entire vendor bug. A September option rides the
 September future, not the front month - and on this app the front month is what
 the screen shows. Measured 18-Aug in one simultaneous read of crude:
 

@@ -2,21 +2,19 @@
 
 Every resolver in this app (pair registry, metals, other commodities, option
 spreads, Nifty/Sensex, electricity, paper trades, crude IV) reads ONE thing:
-a CSV with Dhan's SEM_* columns, through instrument_resolver._download_csv().
-When the feed provider is Angel, that function hands out THIS module's CSV
-instead - the same columns, filled from Angel's OpenAPIScripMaster.json - and
-not one resolver changes.
+a CSV with SEM_* columns, through instrument_resolver._download_csv(). This
+module builds that CSV from Angel's OpenAPIScripMaster.json, so not one
+resolver knows or cares where the master came from.
 
-Why that is safe: Dhan and Angel both key instruments by the EXCHANGE token
-(GOLDPETAL 30-Sep-2026 is 568839 on both, GOLDBEES is 14428 on both, verified
-07-Sep-2026 against both masters), so quote_store keys, pair names, paper
-symbols and cached quotes all carry over. Only the three spot indices differ:
-Dhan numbers them 13/51/21, Angel 99926000/99919000/99926017 - INDEX_IDS.
+Instrument ids are the EXCHANGE tokens (GOLDPETAL 30-Sep-2026 is 568839,
+GOLDBEES is 14428), which is what every quote_store key, pair name and paper
+symbol has always been. The three spot indices are Angel's index tokens -
+INDEX_IDS.
 
-Trading symbols are rebuilt in Dhan's spelling ("GOLDPETAL-30Sep2026-FUT",
-"CRUDEOIL-17Sep2026-7000-CE") because the UI, the paper-trade rows and the
-pair labels all show that spelling; Angel's own "GOLDPETAL30SEP26FUT" would
-have changed what the client sees for no reason.
+Trading symbols are spelled the way the UI, the paper-trade rows and the pair
+labels show them ("GOLDPETAL-30Sep2026-FUT", "CRUDEOIL-17Sep2026-7000-CE");
+Angel's own "GOLDPETAL30SEP26FUT" would have changed what the client sees
+for no reason.
 
 What is emitted (only what the app subscribes, ~50k of Angel's 144k rows):
   MCX  FUTCOM + OPTFUT          exch MCX, segment M
@@ -59,23 +57,23 @@ def parse_expiry(s: str) -> date | None:
         return None
 
 
-def _dhan_expiry(d: date, hhmm: str) -> str:
+def _sem_expiry(d: date, hhmm: str) -> str:
     return f"{d.isoformat()} {hhmm}:00"
 
 
-def _dhan_symbol_fut(name: str, d: date) -> str:
+def _sem_symbol_fut(name: str, d: date) -> str:
     return f"{name}-{d.strftime('%d%b%Y')}-FUT"
 
 
-def _dhan_symbol_opt(name: str, d: date, strike: float, otype: str, weekly_index: bool) -> str:
-    # Dhan spells index options by month only ("SENSEX-Oct2026-84600-PE") and
+def _sem_symbol_opt(name: str, d: date, strike: float, otype: str, weekly_index: bool) -> str:
+    # Index options are spelled by month only ("SENSEX-Oct2026-84600-PE"),
     # commodity options with the day ("CRUDEOIL-17Sep2026-7000-CE").
     when = d.strftime("%b%Y") if weekly_index else d.strftime("%d%b%Y")
     return f"{name}-{when}-{strike:g}-{otype}"
 
 
 def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
-    """Dhan-shaped rows + {token: angel exchange segment}."""
+    """SEM_*-shaped rows + {token: angel exchange segment}."""
     out: list[dict] = []
     segment: dict[str, str] = {}
     for r in master:
@@ -91,9 +89,9 @@ def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
                 continue
             if typ == "FUTCOM":
                 out.append({"exch": "MCX", "seg": "M", "sid": token, "inst": "FUTCOM",
-                            "ts": _dhan_symbol_fut(name, d), "lot": "1.0",
+                            "ts": _sem_symbol_fut(name, d), "lot": "1.0",
                             "custom": f"{name} {d.strftime('%b').upper()} FUT",
-                            "expiry": _dhan_expiry(d, "23:30"), "strike": "0.00000",
+                            "expiry": _sem_expiry(d, "23:30"), "strike": "0.00000",
                             "otype": "XX", "tick": r.get("tick_size") or "", "name": name})
             else:
                 sym = r.get("symbol") or ""
@@ -102,9 +100,9 @@ def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
                     continue
                 strike = float(r.get("strike") or 0) / 100.0
                 out.append({"exch": "MCX", "seg": "M", "sid": token, "inst": "OPTFUT",
-                            "ts": _dhan_symbol_opt(name, d, strike, otype, False), "lot": "1.0",
+                            "ts": _sem_symbol_opt(name, d, strike, otype, False), "lot": "1.0",
                             "custom": f"{name} {d.strftime('%d %b').upper()} {strike:g} {'CALL' if otype == 'CE' else 'PUT'}",
-                            "expiry": _dhan_expiry(d, "23:30"), "strike": f"{strike:.5f}",
+                            "expiry": _sem_expiry(d, "23:30"), "strike": f"{strike:.5f}",
                             "otype": otype, "tick": r.get("tick_size") or "", "name": name})
             segment[token] = "MCX"
         elif seg in ("NFO", "BFO") and typ == "OPTIDX" and name in ("NIFTY", "SENSEX"):
@@ -116,10 +114,10 @@ def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
             strike = float(r.get("strike") or 0) / 100.0
             exch = "NSE" if seg == "NFO" else "BSE"
             out.append({"exch": exch, "seg": "D", "sid": token, "inst": "OPTIDX",
-                        "ts": _dhan_symbol_opt(name, d, strike, otype, True),
+                        "ts": _sem_symbol_opt(name, d, strike, otype, True),
                         "lot": r.get("lotsize") or "1",
                         "custom": f"{name} {d.strftime('%d %b').upper()} {strike:g} {'CALL' if otype == 'CE' else 'PUT'}",
-                        "expiry": _dhan_expiry(d, "15:30"), "strike": f"{strike:.5f}",
+                        "expiry": _sem_expiry(d, "15:30"), "strike": f"{strike:.5f}",
                         "otype": otype, "tick": r.get("tick_size") or "", "name": name})
             segment[token] = seg
         elif seg == "NSE" and r.get("symbol") in _ETF_SYMBOLS:
@@ -150,8 +148,8 @@ def build_csv(master: list[dict]) -> tuple[str, dict[str, str]]:
     return buf.getvalue(), segment
 
 
-def dhan_compat_csv(force: bool = False) -> str:
-    """The Dhan-shaped CSV, rebuilt from Angel's master at most every 6 hours."""
+def compat_csv(force: bool = False) -> str:
+    """The SEM_* CSV, rebuilt from Angel's master at most every 6 hours."""
     with _lock:
         if not force and _cache["csv"] and time.time() - _cache["ts"] < _CSV_TTL:
             return _cache["csv"]
@@ -169,5 +167,5 @@ def segment_of(token: str) -> str | None:
     """Angel exchange segment ('MCX', 'NFO', 'BFO', 'NSE', 'BSE') for a token
     the compat CSV emitted, or None for one it never saw."""
     if not _cache["segment"]:
-        dhan_compat_csv()
+        compat_csv()
     return _cache["segment"].get(str(token))

@@ -18,7 +18,7 @@ from app.services.instrument_resolver import _download_csv, _parse_expiry
 
 log = logging.getLogger("extra_instruments")
 
-# NSE security IDs (verified against Dhan scrip master — NIP IND ETF GOLD BEES / NETF SILVER)
+# NSE exchange tokens (NIP IND ETF GOLD BEES / NETF SILVER)
 GOLDBEES_NSE_SECURITY_ID = "14428"
 GOLDBEES_TRADING_SYMBOL = "GOLDBEES"
 

@@ -6,7 +6,7 @@ current numbers and hourly history.
 
 Sides
 -----
-MCX comes off our own Dhan socket: this service resolves the first two
+MCX comes off our own live socket: this service resolves the first two
 ELECDMBL months and hands them to the feed as extra subscriptions, the same
 hook the paper trades use. NSE comes from the Angel poll, which learned an
 "electricity" commodity for this (futures only - NSE lists no electricity
@@ -15,7 +15,7 @@ options, and the note asks for futures).
 History
 -------
 Hourly, recorded by US from the live feeds at the top of each hour. It cannot
-be backfilled: Dhan serves MCX hourly candles months back, but Angel's
+be backfilled: MCX hourly candles reach months back, but Angel's
 historical API does not carry the NCO segment at all (probed 02-Sep: the same
 request succeeds for MCX and answers HTTP 400 for NCO), and a difference with
 one side missing is not a difference. So the series starts the day this
