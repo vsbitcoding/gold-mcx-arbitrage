@@ -4,10 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    DHAN_CLIENT_ID: str = ""
-    DHAN_ACCESS_TOKEN: str = ""
-    DHAN_TOTP_SECRET: str = ""
-    DHAN_MPIN: str = ""
 
     APP_SECRET_KEY: str = "change-me"
     TRADING_MODE: str = "paper"
@@ -38,11 +34,6 @@ class Settings(BaseSettings):
     # such segment, IBKR does not list the contracts). Also supplies real-time
     # USD/INR. Credentials live in ~/.config/arbi-secrets/angelone.env.
     ANGEL_ENABLED: bool = True
-    # Live market data provider for the whole dashboard: "dhan" (WebSocket via
-    # dhanhq) or "angel" (Angel One SmartAPI WebSocket 2.0). Both code paths
-    # stay; this one line switches, so a bad day on one side is a one-line
-    # rollback (client, 07-Sep-2026: Dhan out, Angel in, Dhan kept as backup).
-    FEED_PROVIDER: str = "dhan"
     ANGEL_STATIC_IP: str = "34.180.20.239"   # Angel locks the key to this IP
     CRUDE_IV_ENABLED: bool = True
     IBKR_SPOTS_ENABLED: bool = True

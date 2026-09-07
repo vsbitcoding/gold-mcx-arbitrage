@@ -26,7 +26,7 @@ _lock = threading.Lock()
 _last_call = [0.0]
 
 
-def _pace(gap: float = 0.4) -> None:
+def _pace(gap: float = 1.0) -> None:
     with _lock:
         wait = _last_call[0] + gap - time.time()
         if wait > 0:
@@ -44,22 +44,34 @@ def candles(token: str, days: int, interval: str = "ONE_HOUR", exchange: str = "
     sess = requests.Session()
     while cur < to:
         end = min(cur + timedelta(days=chunk), to)
-        _pace()
-        try:
-            r = sess.post(_URL, headers=angel_feed._headers(creds, jwt), json={
-                "exchange": exchange, "symboltoken": str(token), "interval": interval,
-                "fromdate": cur.strftime("%Y-%m-%d %H:%M"), "todate": end.strftime("%Y-%m-%d %H:%M")},
-                timeout=45)
-            d = r.json()
-            if r.status_code == 401 or (not d.get("status") and angel_feed._is_auth_error(d)):
-                jwt, _feed, creds = angel_feed.get_session(force=True)
-                continue
-            if not d.get("status"):
-                log.warning("candles %s %s..%s: %s", token, cur.date(), end.date(), d.get("message"))
-            else:
-                out.extend(d.get("data") or [])
-        except Exception as e:  # noqa: BLE001
-            log.warning("candles %s %s..%s failed: %s", token, cur.date(), end.date(), e)
+        got = None
+        for attempt in range(4):
+            _pace()
+            try:
+                r = sess.post(_URL, headers=angel_feed._headers(creds, jwt), json={
+                    "exchange": exchange, "symboltoken": str(token), "interval": interval,
+                    "fromdate": cur.strftime("%Y-%m-%d %H:%M"), "todate": end.strftime("%Y-%m-%d %H:%M")},
+                    timeout=45)
+                # The NSE poll shares this client's rate budget; a burst answers
+                # 403 "exceeding access rate" as plain text. Back off and retry.
+                if r.status_code == 403 or "rate" in r.text[:120].lower():
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                d = r.json()
+                if r.status_code == 401 or (not d.get("status") and angel_feed._is_auth_error(d)):
+                    jwt, _feed, creds = angel_feed.get_session(force=True)
+                    continue
+                if not d.get("status"):
+                    log.warning("candles %s %s..%s: %s", token, cur.date(), end.date(), d.get("message"))
+                got = d.get("data") or [] if d.get("status") else []
+                break
+            except Exception as e:  # noqa: BLE001
+                log.warning("candles %s %s..%s attempt %d failed: %s", token, cur.date(), end.date(), attempt + 1, e)
+                time.sleep(1.0)
+        if got is None:
+            log.warning("candles %s %s..%s: gave up after retries", token, cur.date(), end.date())
+        else:
+            out.extend(got)
         cur = end + timedelta(minutes=1)
     return out
 

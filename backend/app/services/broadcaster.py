@@ -62,7 +62,7 @@ class Broadcaster:
                     self._clients.discard(ws)
 
     def push_threadsafe(self, payload: dict) -> None:
-        """Called from the Dhan feed thread (sync). Schedules broadcast on the loop."""
+        """Called from the feed thread (sync). Schedules broadcast on the loop."""
         if not self._loop:
             return
         self._latest_payload = payload

@@ -151,7 +151,7 @@ export default function Header({
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
   }, [userMenu]);
 
-  // Combined health: worst of (browser↔server WS) and (server↔Dhan feed)
+  // Combined health: worst of (browser↔server WS) and (server↔market feed)
   const dhanMode = feedStatus?.mode;
   const tickAge = feedStatus?.last_tick_age_seconds;
   const tokenSecs = feedStatus?.token_expires_in_seconds;
@@ -190,7 +190,7 @@ export default function Header({
   const tooltip = feedStatus
     ? [
         `Browser ↔ Server: ${wsState}`,
-        `Server ↔ ${feedStatus.provider === "angel" ? "Angel One" : "Dhan"}: ${dhanMode || "—"}`,
+        `Server ↔ Angel One: ${dhanMode || "—"}`,
         `Market: ${marketOpen ? "OPEN" : "CLOSED"}`,
         `Client: ${feedStatus.client_name || "—"}`,
         `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,

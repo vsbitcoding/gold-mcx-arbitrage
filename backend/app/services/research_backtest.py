@@ -2,8 +2,8 @@
 (A) % spread band alone vs (B) % band + warehouse-stock direction filter.
 
 READ-ONLY research: touches nothing live — no model changes, no signals, no
-schema. Pulls 60-min candles per leg via Dhan intraday REST (in-process live
-token, chunked + paced), builds 4H %-spread bars, walk-forward backtests the
+schema. Pulls 60-min candles per leg from Angel's candle API (paced),
+builds 4H %-spread bars, walk-forward backtests the
 SAME strategy as production (20-period mean ± 1.5σ entry, target = mean,
 stop = 3× reversion → 1:3), then re-scores the same trades with the stock
 filter: take a trade only when the warehouse-stock move agrees with the
@@ -20,9 +20,8 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-import requests
 
-from app.config import MULTIPLIERS, settings
+from app.config import MULTIPLIERS
 from app.database import SessionLocal
 from app.models import BullionStock
 
@@ -30,8 +29,6 @@ log = logging.getLogger("research_bt")
 
 _lock = threading.Lock()
 _result: dict = {"running": False, "msg": "never run", "at": None}
-
-_INTRA_URL = "https://api.dhan.co/v2/charts/intraday"
 
 WINDOW = 20        # 20 × 4H bars (same count as the daily strategy)
 ENTRY_K = 1.5
@@ -44,43 +41,11 @@ def status() -> dict:
 
 
 def _intraday_60(sid: str, token: str, days: int) -> dict[int, float]:
-    """epoch → 60-min close, chunked (Dhan caps ~90 days/request).
-
-    `token` is Dhan's REST token, or the word "angel" (live_feed.history_token)
-    when the feed provider is Angel - then the same hourly closes come from
-    Angel's candle API, in the same shape.
-    """
-    if token == "angel":
-        from app.services import angel_history
-        return angel_history.intraday_60(sid, days)
-    out: dict[int, float] = {}
-    to = datetime.now().date()
-    cur = to - timedelta(days=days)
-    while cur < to:
-        end = min(cur + timedelta(days=74), to)
-        try:
-            r = requests.post(
-                _INTRA_URL,
-                headers={"access-token": token, "client-id": settings.DHAN_CLIENT_ID,
-                         "Content-Type": "application/json"},
-                json={"securityId": str(sid), "exchangeSegment": "MCX_COMM",
-                      "instrument": "FUTCOM", "interval": "60",
-                      "fromDate": cur.isoformat(), "toDate": end.isoformat()},
-                timeout=45,
-            )
-            if r.status_code == 200:
-                d = r.json()
-                for ts, close in zip(d.get("timestamp") or [], d.get("close") or []):
-                    try:
-                        if close:
-                            out[int(ts)] = float(close)
-                    except (TypeError, ValueError):
-                        continue
-        except Exception as e:  # noqa: BLE001
-            log.warning("intraday pull %s %s→%s failed: %s", sid, cur, end, e)
-        cur = end + timedelta(days=1)
-        time.sleep(0.4)
-    return out
+    """epoch -> 60-min close from Angel's candle API. `token` is the
+    go-ahead from live_feed.history_token(), kept in the signature so the
+    signal engine's call sites read as before."""
+    from app.services import angel_history
+    return angel_history.intraday_60(sid, days)
 
 
 def _bars_4h(big: dict[int, float], small: dict[int, float], bm: float, sm: float):
@@ -154,16 +119,16 @@ def _summ(trades: list[dict]) -> dict:
 
 
 def run(days: int = 185) -> None:
-    from app.services import dhan_feed, mcxccl_service, pair_registry
+    from app.services import live_feed, mcxccl_service, pair_registry
     from app.services.signal_service import _pick_front  # same front-contract rule
 
     if not _lock.acquire(blocking=False):
         return
     _result.update(running=True, msg="running...", at=datetime.now().isoformat(timespec="seconds"))
     try:
-        token = dhan_feed.get_live_token()
+        token = live_feed.history_token()
         if not token:
-            _result.update(running=False, msg="no live token (feed not authenticated)")
+            _result.update(running=False, msg="no live session yet (feed not authenticated)")
             return
 
         # fronts — identical selection to the live signal engine

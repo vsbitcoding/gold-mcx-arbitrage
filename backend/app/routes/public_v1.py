@@ -1017,7 +1017,7 @@ def public_iv_calculator(
 
 @router.get("/premium-inputs")
 def public_premium_inputs(_key: str = Depends(require_api_key)):
-    """Live premium-calc inputs: XAU/USD (Deriv), USD/INR (TwelveData spot), MCX gold (Dhan)."""
+    """Live premium-calc inputs: XAU/USD, USD/INR (TwelveData spot), MCX gold (live feed)."""
     return premium_feed.get_inputs()
 
 

@@ -42,7 +42,6 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import (PaperAccount, PaperSignal, PaperState, PaperSymbol,
                         PaperTrade)
-from app.services import dhan_auth
 from app.services.extra_instruments import _resolve_front_month
 from app.services.market_data import quote_store
 
@@ -81,8 +80,6 @@ def _lot_units(symbol: str, master_value) -> float:
     if mv > 1:
         return mv
     return float(_MULTIPLIERS.get(symbol, mv or 1))
-
-_BASE = "https://api.dhan.co/v2"
 
 # --------------------------------------------------------------------------- #
 # Start / Stop (client, 21-Aug)
@@ -438,7 +435,7 @@ def refresh() -> None:
 
 
 def get_subscription_meta() -> dict[str, dict]:
-    """security_id -> meta, merged into the Dhan feed's subscription list."""
+    """security_id -> meta, merged into the live feed's subscription list."""
     if not _loaded:
         _load_symbols()
     return {rec["security_id"]: {"short": f"paper_{sym.lower()}",
@@ -566,33 +563,13 @@ def _ltp(rec: dict) -> tuple[float | None, float | None]:
 
 def _rest_ltp(rec: dict) -> float | None:
     """One REST quote, for the one moment a symbol is too new for the socket.
-
-    Reuses the cached token the live feed already holds - the same pattern as
-    the option-chain poller. NEVER mints a token; that would kill the feed's.
-    """
-    if settings.FEED_PROVIDER == "angel":
-        try:
-            from app.services import angel_feed
-            jwt, _feed, creds = angel_feed.get_session()
-            got = angel_feed._quote(requests.Session(), creds, jwt, {"MCX": [str(rec["security_id"])]})
-            row = got.get(str(rec["security_id"])) or {}
-            return float(row.get("ltp") or 0) or None
-        except Exception as e:  # noqa: BLE001
-            log.warning("paper: Angel REST ltp failed for %s: %s", rec.get("trading_symbol"), e)
-            return None
+    Rides the same daily Angel session the feed uses."""
     try:
-        tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
-                                  settings.DHAN_TOTP_SECRET).access_token
-        r = requests.post(f"{_BASE}/marketfeed/ltp",
-                          headers={"access-token": tok,
-                                   "client-id": settings.DHAN_CLIENT_ID,
-                                   "Content-Type": "application/json"},
-                          data=json.dumps({"MCX_COMM": [int(rec["security_id"])]}),
-                          timeout=8)
-        r.raise_for_status()
-        got = ((r.json() or {}).get("data") or {}).get("MCX_COMM") or {}
-        row = got.get(str(rec["security_id"])) or got.get(rec["security_id"]) or {}
-        return float(row.get("last_price") or 0) or None
+        from app.services import angel_feed
+        jwt, _feed, creds = angel_feed.get_session()
+        got = angel_feed._quote(requests.Session(), creds, jwt, {"MCX": [str(rec["security_id"])]})
+        row = got.get(str(rec["security_id"])) or {}
+        return float(row.get("ltp") or 0) or None
     except Exception as e:  # noqa: BLE001
         log.warning("paper: REST ltp failed for %s: %s", rec.get("trading_symbol"), e)
         return None

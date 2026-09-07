@@ -1,9 +1,8 @@
 """Angel One SmartAPI WebSocket 2.0 live feed - the whole dashboard's ticks.
 
-Drop-in for dhan_feed behind the live_feed facade (FEED_PROVIDER=angel):
-same state keys, same status shape, same resubscribe / expiry hooks, same
-quote_store keyed by exchange token, same broadcast cadence. What differs
-is only the wire:
+Behind the live_feed facade: state keys, status shape, resubscribe / expiry
+hooks, the quote_store keyed by exchange token, the broadcast cadence. The
+wire:
 
   * Angel caps a socket at 1000 tokens and a client at 3 sockets, so the
     ~1400 contracts are dealt across up to three connections, MCX first.
@@ -12,7 +11,7 @@ is only the wire:
     indices are streamed in LTP mode (1), as Angel serves indices.
   * Each connection is supervised here, not by the SDK: a closed or silent
     socket is reopened with backoff, and a silent BOARD during market hours
-    forces a full rebuild after 60 s (Dhan's watchdog waited 180 s, which the
+    forces a full rebuild after 60 s (the old feed waited 180 s, which the
     client saw as "feed down" on 04-Sep).
   * Angel's session is a daily login (angel_feed keeps it on disk); every
     rebuild takes the current one, so the 08:40 contract roll also carries
@@ -27,12 +26,52 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from app.config import settings
+from datetime import timedelta
+
 from app.services import angel_feed, subscriptions
-from app.services.dhan_feed import _eval_and_broadcast, _run_simulated_thread, is_market_open
+from app.services.broadcaster import broadcaster
 from app.services.market_data import prev_close_store, quote_store
+from app.services.snapshot import build_live_payload
 
 log = logging.getLogger("angel_ws_feed")
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def is_market_open() -> bool:
+    """MCX hours, Mon-Fri 09:00-23:30 IST - the one clock every screen uses."""
+    n = datetime.now(IST)
+    if n.weekday() >= 5:
+        return False
+    open_t = n.replace(hour=9, minute=0, second=0, microsecond=0)
+    close_t = n.replace(hour=23, minute=30, second=0, microsecond=0)
+    return open_t <= n <= close_t
+
+
+def _eval_and_broadcast() -> None:
+    """Push the live board to every browser socket (watch-only, no trading)."""
+    try:
+        if broadcaster.client_count > 0:
+            broadcaster.push_threadsafe({"type": "snapshot", "data": build_live_payload()})
+    except Exception as e:  # noqa: BLE001
+        log.exception("broadcast failed: %s", e)
+
+
+def _run_simulated_thread() -> None:
+    """No Angel credentials: jittered prices so the UI can be developed."""
+    import random
+    log.warning("SIMULATED feed (no Angel credentials).")
+    subs, _n = subscriptions.build()
+    _set_state(mode="simulated", instruments=subs)
+    base_by_short = {"petal": 122.0, "guinea": 968.0, "ten": 1218.0, "mini": 12180.0}
+    while True:
+        for sid, info in subs.items():
+            mid = base_by_short.get(info.get("short"), 100.0)
+            j = random.uniform(-0.5, 0.5)
+            quote_store.update(sid, bid=round(mid + j - 0.05, 2), ask=round(mid + j + 0.05, 2),
+                               ltp=round(mid + j, 2), ts=time.time())
+        _eval_and_broadcast()
+        _set_state(last_tick_epoch=time.time())
+        time.sleep(1.0)
 
 MAX_TOKENS_PER_CONN = 1000
 MAX_CONNS = 3
@@ -64,10 +103,6 @@ _last_rebuild_epoch = [0.0]
 def _set_state(**kw) -> None:
     with _state_lock:
         _state.update(kw)
-
-
-def get_live_token() -> str:
-    return ""       # Dhan-only REST callers; Angel REST goes through angel_feed
 
 
 def get_status() -> dict:
@@ -131,6 +166,7 @@ class _Conn:
         self.msgs = 0
         self.stopping = False
         self.attempt = 0
+        self.last_attempt = 0.0
         self.first_seen: set = set()
 
     @property
@@ -189,9 +225,8 @@ class _Conn:
                     else:
                         a = px if not a else min(a, px)      # best sell = lowest
                 # No depth = no buyer / no seller = dash (client rule, 31-Aug).
-                # Dhan's dead far months arrived with LTP 0 and so dashed on
-                # their own; Angel keeps sending the last trade from days ago,
-                # so falling back to it would resurrect exactly the ghosts
+                # Angel keeps sending a dead far month's last trade from days
+                # ago; falling back to it would resurrect exactly the ghosts
                 # the rule removed. Same for the LTP itself: it counts only
                 # once the contract has traded today.
                 bid, ask = b, a
@@ -233,8 +268,13 @@ class _Conn:
                               self.feed_token, max_retry_attempt=0)
         ws.on_open, ws.on_data, ws.on_error, ws.on_close = (
             self._on_open, self._on_data, self._on_error, self._on_close)
+        # websocket-client hands close three arguments; the SDK's own handler
+        # takes one and raises inside the callback (logged as an ERROR every
+        # close). Ours accepts any, so it goes straight on the socket.
+        ws._on_close = self._on_close
         self.ws = ws
         self.attempt += 1
+        self.last_attempt = time.time()
 
         def _run():
             try:
@@ -363,9 +403,14 @@ def _run_feed_thread() -> None:
                             c.close()
                             c.start()
                     elif not c.stopping and (c.thread is None or not c.thread.is_alive()):
+                        # Backoff from the last ATTEMPT, doubling to a minute.
+                        # Angel answers a fourth socket with 429 "Connection
+                        # Limit Exceeded"; retrying that every second would only
+                        # earn a ban, so a socket that never opened waits too.
                         wait = min(5 * (2 ** max(0, c.attempt - 1)), 60)
-                        if now - (c.last_msg or c.opened_at or 0) >= wait:
-                            log.warning("socket %d down - reconnecting (attempt %d)", c.idx, c.attempt + 1)
+                        if now - c.last_attempt >= wait:
+                            log.warning("socket %d down - reconnecting (attempt %d, next wait %ds)",
+                                        c.idx, c.attempt + 1, min(wait * 2, 60))
                             with _state_lock:
                                 _state["reconnect_count"] += 1
                             c.start()

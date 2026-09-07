@@ -228,11 +228,7 @@ export const api = {
     return request(`/api/pairs/bhav/series?${q.toString()}`);
   },
   // Pairs the history dialog can show - live plus remembered expired ones
-  historyPairs: () => request("/api/pairs/history-pairs"),
   // Daily spread history for one calendar/cross pair (History button)
-  spreadHistory: (pair, days = 120) =>
-    request(`/api/pairs/spread-history?pair=${encodeURIComponent(pair)}&days=${days}`),
-  // MCXCCL bullion warehouse stock + stock-vs-spread correlation
   bullionStock: () => request("/api/bullion-stock"),
   bullionStockStatus: () => request("/api/bullion-stock/status"),
   bullionPdf: (download = false) => requestBlob(`/api/bullion-stock/pdf${download ? "?download=1" : ""}`),

@@ -62,7 +62,7 @@ def refresh() -> None:
 
 
 def get_subscription_meta() -> dict:
-    """{security_id: meta} merged into the Dhan feed's subscription list."""
+    """{security_id: meta} merged into the live feed's subscription list."""
     return {c["security_id"]: {
         "short": "elec_fut",
         "trading_symbol": c["trading_symbol"],

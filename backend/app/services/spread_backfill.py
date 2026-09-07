@@ -1,4 +1,4 @@
-"""One-time spread-history backfill from Dhan daily closes (bullion pairs).
+"""One-time spread-history backfill from daily closes (bullion pairs).
 
 Client logic: % spread = spread ÷ small/near-leg value × 100, over the last
 ~6 months. There is no external source for our live bid/ask spread, so history
@@ -7,8 +7,8 @@ is reconstructed from each leg contract's DAILY CLOSE:
     spread(d) = close_big(d) × mult_big − close_small(d) × mult_small
     pct(d)    = spread(d) ÷ (close_small(d) × mult_small) × 100
 
-Runs IN-PROCESS only — it reuses the live feed's token via
-dhan_feed.get_live_token() (minting a standalone token would kill the feed).
+Closes come from Angel's candle API (ONE_DAY), paced, on the feed's own
+daily session.
 
 Load profile: ONE run of ~10-20 REST calls (one per unique contract, paced),
 then a single DB transaction. Existing live-snapshot rows are only "healed"
@@ -20,11 +20,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
-import requests
-
-from app.config import MULTIPLIERS, settings
+from app.config import MULTIPLIERS
 from app.database import SessionLocal
 from app.models import DailySpread
 
@@ -33,7 +31,6 @@ log = logging.getLogger("spread_backfill")
 _lock = threading.Lock()
 _status: dict = {"running": False, "msg": "never run", "at": None}
 
-_HIST_URL = "https://api.dhan.co/v2/charts/historical"
 _BULLION_KEYS = ("gold", "silver")
 
 
@@ -47,60 +44,35 @@ def _is_bullion(pair: dict) -> bool:
 
 
 def _hist_closes(sid: str, token: str, days: int) -> tuple[dict[str, float] | None, str | None]:
-    """date('YYYY-MM-DD') -> daily close for one MCX contract.
-
-    Dhan rejects (DH-905) windows starting before a contract was listed, so on
-    that error we retry with progressively shorter windows — a late-listed far
-    month then contributes whatever history it actually has."""
-    to = datetime.now().date()
-    windows = [w for w in (days, 90, 45, 21) if w <= days] or [days]
-    last_err = "no data"
-    for win in windows:
-        frm = to - timedelta(days=win + 7)
+    """date('YYYY-MM-DD') -> daily close for one MCX contract. A late-listed far
+    month simply returns the days it has."""
+    from app.services import angel_history
+    try:
+        rows = angel_history.candles(sid, days + 7, "ONE_DAY")
+    except Exception as e:  # noqa: BLE001
+        return None, f"request error: {e}"
+    out: dict[str, float] = {}
+    for row in rows:
         try:
-            r = requests.post(
-                _HIST_URL,
-                headers={"access-token": token, "client-id": settings.DHAN_CLIENT_ID,
-                         "Content-Type": "application/json"},
-                json={"securityId": str(sid), "exchangeSegment": "MCX_COMM",
-                      "instrument": "FUTCOM",
-                      "fromDate": frm.isoformat(), "toDate": to.isoformat()},
-                timeout=30,
-            )
-        except Exception as e:  # noqa: BLE001
-            return None, f"request error: {e}"
-        if r.status_code == 200:
-            d = r.json()
-            out: dict[str, float] = {}
-            for ts, close in zip(d.get("timestamp") or [], d.get("close") or []):
-                try:
-                    if close:
-                        out[datetime.fromtimestamp(ts).date().isoformat()] = float(close)
-                except (TypeError, ValueError, OSError):
-                    continue
-            if out:
-                return out, None
-            last_err = "empty response"
-        else:
-            last_err = f"http {r.status_code}: {r.text[:100]}"
-            if "DH-905" not in r.text:
-                return None, last_err   # real error — don't hammer retries
-        time.sleep(0.3)
-    return None, last_err
+            if row[4]:
+                out[str(row[0])[:10]] = float(row[4])
+        except (TypeError, ValueError, IndexError):
+            continue
+    return (out, None) if out else (None, "empty response")
 
 
 def run(days: int = 185) -> None:
     """Fetch leg closes and upsert DailySpread rows. Sets _status; never raises."""
-    from app.services import dhan_feed, mcxccl_service
+    from app.services import live_feed, mcxccl_service
     from app.services.pair_registry import get_pairs
 
     if not _lock.acquire(blocking=False):
         return
     _status.update(running=True, msg="running...", at=datetime.now().isoformat(timespec="seconds"))
     try:
-        token = dhan_feed.get_live_token()
+        token = live_feed.history_token()
         if not token:
-            _status.update(running=False, msg="no live token yet (feed not authenticated) - retry in a minute")
+            _status.update(running=False, msg="no live session yet (feed not authenticated) - retry in a minute")
             return
 
         pairs = [p for p in get_pairs() if _is_bullion(p)]

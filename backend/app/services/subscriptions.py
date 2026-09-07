@@ -1,6 +1,6 @@
 """Everything the live socket must carry, resolved fresh on every (re)connect.
 
-One place for the list that dhan_feed used to assemble inline: the pair
+One place for the list the old feed used to assemble inline: the pair
 registry, the calculator extras, Nifty/Sensex options, metals, other
 commodities, gold option spreads, electricity, the NSE-vs-MCX MCX strikes,
 the paper-trade symbols, and the price tab. Each service's own refresh() is
@@ -24,11 +24,6 @@ log = logging.getLogger("subscriptions")
 def build() -> tuple[dict[str, dict], int]:
     """(subs, pair_count). Raises when the pair registry resolves nothing."""
     n = pair_registry.refresh(min_days_ahead=1, max_per_instrument=6)
-    try:
-        from app.services.spread_close_history import record_pairs
-        record_pairs()
-    except Exception as e:  # noqa: BLE001
-        log.warning("pair-leg record failed: %s", e)
     if n == 0:
         raise RuntimeError("Pair registry empty - no active MCX gold contracts resolved.")
     subs: dict[str, dict] = dict(pair_registry.get_subscriptions())

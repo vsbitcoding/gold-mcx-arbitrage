@@ -40,19 +40,11 @@ from app.services.market_data import prev_close_store, quote_store
 log = logging.getLogger("options_service")
 
 # Spot index security IDs (from Dhan scrip master)
-# Spot index ids differ per provider: Dhan numbers them 13/51/21 on its IDX
-# segment, Angel uses the exchange tokens 99926000/99919000/99926017. Every
-# option contract, by contrast, carries the same exchange token on both.
-from app.config import settings as _settings  # noqa: E402
-if _settings.FEED_PROVIDER == "angel":
-    from app.services.angel_master import INDEX_IDS as _IDX  # noqa: E402
-    NIFTY_SPOT_ID = _IDX["NIFTY"]
-    SENSEX_SPOT_ID = _IDX["SENSEX"]
-    INDIA_VIX_ID = _IDX["INDIA VIX"]
-else:
-    NIFTY_SPOT_ID = "13"          # NSE IDX, "NIFTY"
-    SENSEX_SPOT_ID = "51"         # BSE IDX, "SENSEX"
-    INDIA_VIX_ID = "21"           # NSE IDX, "INDIA VIX"
+# Spot indices, as Angel's socket streams them (NSE / BSE index tokens).
+from app.services.angel_master import INDEX_IDS as _IDX  # noqa: E402
+NIFTY_SPOT_ID = _IDX["NIFTY"]
+SENSEX_SPOT_ID = _IDX["SENSEX"]
+INDIA_VIX_ID = _IDX["INDIA VIX"]
 
 # Strike step per index
 NIFTY_STEP = 50
@@ -304,41 +296,6 @@ def get_subscription_meta() -> dict[str, dict]:
             "exch": "NFO" if idx == "NIFTY" else "BFO",
         }
     return meta
-
-
-def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
-    """Return (instruments, metadata) tuples for Dhan feed.
-
-    Includes spot indices + all subscribed option contracts.
-    """
-    from dhanhq import marketfeed  # lazy import
-
-    instruments: list[tuple] = []
-    meta: dict[str, dict] = {}
-
-    # Spot indices (Ticker request code — indices have no depth/OI, just LTP)
-    instruments.append((marketfeed.MarketFeed.IDX, NIFTY_SPOT_ID, marketfeed.MarketFeed.Ticker))
-    meta[NIFTY_SPOT_ID] = {"short": "nifty_spot", "trading_symbol": "NIFTY", "kind": "index"}
-    instruments.append((marketfeed.MarketFeed.IDX, SENSEX_SPOT_ID, marketfeed.MarketFeed.Ticker))
-    meta[SENSEX_SPOT_ID] = {"short": "sensex_spot", "trading_symbol": "SENSEX", "kind": "index"}
-    instruments.append((marketfeed.MarketFeed.IDX, INDIA_VIX_ID, marketfeed.MarketFeed.Ticker))
-    meta[INDIA_VIX_ID] = {"short": "india_vix", "trading_symbol": "INDIA VIX", "kind": "index"}
-
-    # Option contracts
-    for (idx, wk_i, strike, opt_type), info in _state["options"].items():
-        sid = info["security_id"]
-        exch = marketfeed.MarketFeed.NSE_FNO if idx == "NIFTY" else marketfeed.MarketFeed.BSE_FNO
-        instruments.append((exch, sid, marketfeed.MarketFeed.Full))
-        meta[sid] = {
-            "short": f"{idx.lower()}_pe_{strike}_w{wk_i}",
-            "trading_symbol": info["trading_symbol"],
-            "kind": "option_pe",
-            "underlying": idx,
-            "week_index": wk_i,
-            "strike": strike,
-            "expiry": info["expiry"],
-        }
-    return instruments, meta
 
 
 def get_spread_table(side: str = "below") -> dict:

@@ -4,7 +4,7 @@ Real-time spread-monitoring and **paper-trading** dashboard for MCX commodity
 pair trading, with live Nifty/Sensex options spreads and base-metal calendar
 spreads. Live at **https://arbitrage.bitcoding.ai**.
 
-> Paper trading only — no real broker orders are ever placed. The Dhan
+> Paper trading only — no real broker orders are ever placed. The Angel One
 > connection is **market-data only**.
 
 ---
@@ -71,19 +71,17 @@ Read-only, API-key auth (`X-API-Key` header or `?api_key=`):
 
 ## Live feed & reliability
 
-- Dhan WebSocket MarketFeed; access token auto-generated via **TOTP + MPIN**
-  (refreshes daily, ~24h validity).
-- Watchdog: token-expiry refresh, silent-feed reconnect, daily post-open
-  re-subscription (~09:17 IST).
-- **429 / rate-limit backoff** — on Dhan rate-limit the SDK is force-closed and
-  a 15-min cool-down applied (avoids extending Dhan's ban by hammering it).
+- Angel One SmartAPI WebSocket 2.0 (up to three sockets of 1000 tokens); the
+  session is a daily TOTP + MPIN login cached on disk.
+- Watchdog: per-socket reconnect with backoff, a silent board rebuilds the
+  feed after 60 s in market hours, contract rolls at 08:40 and 23:00 IST.
+- **429 / rate-limit backoff** — a refused socket (Angel allows three per
+  client) is retried with doubling waits up to a minute, never hammered.
 - One wide static strike-subscription window per day (no mid-session
   re-subscription churn).
 
-> **Data API subscription required** — the live feed needs Dhan's *Data APIs*
-> plan (separate from the trading subscription, auto-renews ~₹499+GST/month). If
-> it lapses, the WS returns `806 Data APIs not Subscribed` and only the feed
-> breaks (trading account stays fine).
+> **Angel One API key required** — the SmartAPI key is locked to the server's
+> static IP; the daily session (TOTP + MPIN) is cached in `backend/.angel_session.json`.
 
 ---
 
@@ -92,7 +90,7 @@ Read-only, API-key auth (`X-API-Key` header or `?api_key=`):
 - **Backend:** FastAPI (Python 3.12), SQLAlchemy
 - **Database:** SQLite (WAL mode, `busy_timeout`, batched quote persistence)
 - **Frontend:** React + Vite
-- **Live data:** Dhan HQ WebSocket MarketFeed + REST
+- **Live data:** Angel One SmartAPI WebSocket 2.0 + REST (NSE commodity poll, candles)
 - **Reverse proxy:** Nginx + Let's Encrypt SSL
 - **Process:** systemd (`arbi-backend.service`), VPS at arbitrage.bitcoding.ai
 
@@ -109,9 +107,10 @@ backend/app/
   routes/                 auth, pairs, positions, history, ladders, activity,
                           calculator, options, metals, config, feed, ws, public_v1
   services/
-    dhan_auth.py          TOTP token generation
-    dhan_feed.py          WebSocket feed loop + watchdog + reconnect/backoff
-    instrument_resolver.py  resolves MCX contracts from Dhan scrip master
+    angel_master.py       Angel scrip master in the SEM_* shape every resolver reads
+    angel_ws_feed.py      WebSocket feed: sockets, supervision, watchdog
+    live_feed.py          the facade every caller imports
+    instrument_resolver.py  resolves MCX contracts from the scrip master
     pair_generator.py     builds cross + calendar pair configs
     pair_registry.py      live pair registry
     spread_engine.py      per-pair decrease/increase spread math

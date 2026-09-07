@@ -1,21 +1,17 @@
-"""Resolve all active MCX gold contracts (Petal/Guinea/Ten/Mini) from the
-Dhan scrip master CSV. Returns up to 6 future expiries per instrument."""
+"""Resolve all active MCX contracts (gold, silver, base metals, electricity)
+from the scrip master. Returns up to 6 future expiries per instrument.
+
+The master is Angel One's, served by angel_master in the SEM_* column shape
+every resolver in this app was written against."""
 from __future__ import annotations
 
 import csv
 import io
 import logging
-import os
-import time
-import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
 
 log = logging.getLogger("instrument_resolver")
-
-CSV_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
-CACHE_FILE = "/tmp/dhan-scrip-master.csv"
-CACHE_TTL_SECONDS = 6 * 3600
 
 SYMBOL_MAP = {
     "petal": "GOLDPETAL",
@@ -39,40 +35,11 @@ SYMBOL_MAP = {
 }
 
 
-def _cache_valid() -> bool:
-    try:
-        st = os.stat(CACHE_FILE)
-        return (time.time() - st.st_mtime) < CACHE_TTL_SECONDS
-    except FileNotFoundError:
-        return False
-
-
 def _download_csv() -> str:
-    """The scrip master every resolver reads, in Dhan's SEM_* shape.
-
-    Provider "angel": Angel's master rebuilt in this same shape (see
-    angel_master.py) - same exchange tokens, same trading-symbol spelling, so
-    nothing downstream knows the difference.
-    """
-    from app.config import settings
-    if settings.FEED_PROVIDER == "angel":
-        from app.services import angel_master
-        return angel_master.dhan_compat_csv()
-    if _cache_valid():
-        try:
-            with open(CACHE_FILE, "r") as f:
-                return f.read()
-        except Exception:
-            pass
-    log.info("Downloading Dhan scrip master CSV...")
-    with urllib.request.urlopen(CSV_URL, timeout=60) as resp:
-        body = resp.read().decode("utf-8", errors="ignore")
-    try:
-        with open(CACHE_FILE, "w") as f:
-            f.write(body)
-    except Exception as e:
-        log.warning("Could not cache CSV: %s", e)
-    return body
+    """The scrip master every resolver reads, in the SEM_* shape (see
+    angel_master.py). Cached there; cheap to call."""
+    from app.services import angel_master
+    return angel_master.dhan_compat_csv()
 
 
 def _parse_expiry(s: str) -> Optional[datetime]:

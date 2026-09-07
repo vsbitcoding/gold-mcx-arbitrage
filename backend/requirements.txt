@@ -11,7 +11,6 @@ bcrypt>=4.2.1
 PyJWT>=2.10.1
 cryptography>=42.0.0
 python-multipart>=0.0.18
-dhanhq>=2.0.2
 smartapi-python>=1.4.8
 logzero>=1.7
 pycryptodome>=3.20

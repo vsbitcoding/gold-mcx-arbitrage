@@ -1,5 +1,5 @@
 [Unit]
-Description=Gold MCX Arbitrage Backend (FastAPI + Dhan feed)
+Description=Gold MCX Arbitrage Backend (FastAPI + Angel One feed)
 After=network.target
 
 [Service]

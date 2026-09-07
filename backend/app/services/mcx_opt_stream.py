@@ -97,7 +97,7 @@ def refresh() -> None:
 
 
 def get_subscription_meta() -> dict:
-    """{security_id: meta} for the Dhan feed to subscribe."""
+    """{security_id: meta} for the live feed to subscribe."""
     meta: dict = {}
     for key, st in _state.items():
         for exp, legs in st.get("by_exp", {}).items():
