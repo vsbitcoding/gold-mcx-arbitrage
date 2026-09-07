@@ -131,7 +131,7 @@ PAGE_PREFIXES: dict[str, tuple[str, ...]] = {
     "intl": ("/api/international",),
     "ivcalc": ("/api/iv-calculator", "/api/nse-mcx"),
     "options": ("/api/options/",),
-    "autotrades": ("/api/paper/", "/api/v1/webhook/trade", "/api/scrips/"),
+    "autotrades": ("/api/paper/", "/api/v1/webhook/trade"),
 }
 BOARD_PAGES = ("cross", "calendar", "signals")     # the pages fed by /ws/live
 # Every login may reach these: its own session, the health pill, the feed pill.
