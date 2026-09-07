@@ -115,6 +115,12 @@ def expiries(commodity: str) -> list[str]:
     return (_state.get(commodity) or {}).get("expiries", [])
 
 
+def legs_for(commodity: str, expiry: str | None) -> dict:
+    """{(strike, 'CE'|'PE'): security_id} streamed for one expiry, or {}."""
+    st = _state.get(commodity) or {}
+    return dict((st.get("by_exp") or {}).get(expiry or "") or {})
+
+
 def get_chain(commodity: str, expiry: str | None) -> list[dict]:
     """Live rows for one expiry: [{strike, ce:{bid,ask}, pe:{bid,ask}}].
 

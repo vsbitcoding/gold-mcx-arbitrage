@@ -196,6 +196,26 @@ def _session_token(sess: requests.Session, c: dict, force: bool = False) -> str:
 
 
 # ── instrument master ────────────────────────────────────────────────────
+def get_session(force: bool = False) -> tuple[str, str, dict]:
+    """(jwt, feed_token, creds) for anything else that speaks to Angel - the
+    WebSocket feed and the history puller. One login per day, cached on disk,
+    exactly as the poll uses it; `force` re-logs after a rejected session."""
+    c = _creds()
+    if not (c.get("ANGEL_API_KEY") and c.get("ANGEL_CLIENT_CODE")):
+        raise RuntimeError("Angel credentials missing")
+    sess = requests.Session()
+    jwt = _session_token(sess, c, force=force)
+    feed = ""
+    try:
+        feed = json.loads(_SESSION_FILE.read_text()).get("feed", "")
+    except Exception:  # noqa: BLE001
+        pass
+    if not feed:
+        jwt = _login(sess, c)
+        feed = json.loads(_SESSION_FILE.read_text()).get("feed", "")
+    return jwt, feed, c
+
+
 def _expiry_date(s: str) -> date:
     """Angel writes DDMMMYYYY. A string sort puts DEC before SEP, which silently
     picks the wrong contract - always parse."""

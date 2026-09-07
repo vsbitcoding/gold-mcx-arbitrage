@@ -23,6 +23,11 @@ class Quote:
     ask: float = 0.0
     ltp: float = 0.0
     timestamp: float = 0.0
+    # Angel's snap-quote packet carries these; Dhan's Full packet does not
+    # (they stay 0 there). Read by the crude IV chain, which used to take
+    # them from a REST option-chain call.
+    volume: float = 0.0
+    oi: float = 0.0
 
 
 # Previous-day close per security_id, from Dhan's one-shot "Previous Close"
@@ -41,10 +46,15 @@ class QuoteStore:
         self._lock = Lock()
         self._writer_started = False
 
-    def update(self, security_id: str, bid: float, ask: float, ltp: float, ts: float) -> None:
+    def update(self, security_id: str, bid: float, ask: float, ltp: float, ts: float,
+               volume: float | None = None, oi: float | None = None) -> None:
         sid = str(security_id)
         with self._lock:
-            self._quotes[sid] = Quote(bid=bid, ask=ask, ltp=ltp, timestamp=ts)
+            prev = self._quotes.get(sid)
+            self._quotes[sid] = Quote(
+                bid=bid, ask=ask, ltp=ltp, timestamp=ts,
+                volume=volume if volume is not None else (prev.volume if prev else 0.0),
+                oi=oi if oi is not None else (prev.oi if prev else 0.0))
             if bid or ask or ltp:
                 self._dirty[sid] = (bid, ask, ltp)  # newest value wins
         self._ensure_writer()

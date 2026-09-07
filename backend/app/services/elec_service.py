@@ -96,8 +96,8 @@ def snapshot_hour() -> str:
     """
     now = datetime.now()
     hour_key = now.strftime("%Y-%m-%d %H:00")
-    from app.services import angel_feed, dhan_feed
-    if not dhan_feed.is_market_open():
+    from app.services import angel_feed, live_feed
+    if not live_feed.is_market_open():
         return "MCX closed; skipped"
     written = []
     with _lock:

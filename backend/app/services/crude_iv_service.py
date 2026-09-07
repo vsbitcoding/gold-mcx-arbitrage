@@ -30,6 +30,7 @@ from app.config import settings
 from app.services import iv_calc
 from app.services import dhan_auth
 from app.services.instrument_resolver import _download_csv, _parse_expiry
+from app.services.market_data import quote_store
 
 log = logging.getLogger("option_iv")
 
@@ -417,7 +418,131 @@ def _poll_once(sess: requests.Session, tok: str, key: str) -> None:
                                   "fwd_strikes": n2, "fwd_spread": sp2, "atm": atm2}
 
 
+def _expiries_from_master(underlying: str) -> list[str]:
+    """Listed option expiries (ISO, ascending, today or later) for one underlying."""
+    try:
+        rows = list(csv.DictReader(io.StringIO(_download_csv())))
+    except Exception as e:  # noqa: BLE001
+        log.warning("crude IV: scrip master unavailable (%s)", e)
+        return []
+    today = datetime.now().date()
+    out = set()
+    for r in rows:
+        if r.get("SEM_EXM_EXCH_ID") != "MCX" or r.get("SEM_INSTRUMENT_NAME") != "OPTFUT":
+            continue
+        if (r.get("SEM_TRADING_SYMBOL", "") or "").split("-", 1)[0] != underlying:
+            continue
+        exp = _parse_expiry(r.get("SEM_EXPIRY_DATE", ""))
+        if exp and exp.date() >= today:
+            out.add(exp.date().isoformat())
+    return sorted(out)
+
+
+def _stream_rows(commodity: str, expiry: str) -> tuple[list, float | None]:
+    """Chain rows straight from the socket's quote_store, in the shape the REST
+    chain used to give - bid/ask/ltp/oi/volume per leg, no vendor IV (ours is
+    computed by _reprice anyway). Returns (rows, newest_tick_epoch)."""
+    from app.services import mcx_opt_stream
+    from app.services.market_data import clean_sides
+    legs = mcx_opt_stream.legs_for(commodity, expiry)
+    rows: dict[float, dict] = {}
+    newest = 0.0
+    for (strike, side), sid in legs.items():
+        q = quote_store.get(sid)
+        if not (q.bid or q.ask or q.ltp):
+            continue
+        newest = max(newest, q.timestamp or 0)
+        bid, ask = clean_sides(q)
+        leg = {"ltp": q.ltp or None, "bid": bid, "ask": ask, "iv": None,
+               "delta": None, "theta": None, "gamma": None, "vega": None,
+               "oi": q.oi or None, "volume": q.volume or None, "prev_oi": None}
+        row = rows.setdefault(float(strike), {"strike": float(strike), "ce": None, "pe": None})
+        row["ce" if side == "CE" else "pe"] = leg
+    out = [rows[s] for s in sorted(rows) if rows[s]["ce"] or rows[s]["pe"]]
+    return out, (newest or None)
+
+
+def _stream_once(key: str) -> None:
+    """One round for one commodity on the Angel path: prices and chains from
+    the live socket, expiries from the master. No REST call at all."""
+    from app.services.market_data import clean_sides
+    st = _state[key]
+    cfg = COMMODITIES[key]
+    if not st["expiries"] or not st["expiry"]:
+        exps = _expiries_from_master(cfg["underlying"])
+        st["expiries"] = exps
+        st["expiry"] = exps[0] if exps else None
+        if len(exps) > 1 and exps[1] not in st["want"]:
+            st["want"].append(exps[1])
+        if not st["expiry"]:
+            raise RuntimeError(f"no {cfg['underlying']} option expiries in the master")
+
+    def px(sid):
+        q = quote_store.get(str(sid or ""))
+        bid, ask = clean_sides(q)
+        mid = round((bid + ask) / 2, 2) if (bid and ask) else (q.ltp or None)
+        return mid, bid, ask
+    spot, st["future_bid"], st["future_ask"] = px(st.get("underlying_id"))
+    st["next_price"], st["next_bid"], st["next_ask"] = px(st.get("next_id"))
+    if spot:
+        _LIVE_UNDERLYING[key] = spot
+
+    rows, ts = _stream_rows(key, st["expiry"])
+    if not rows:
+        raise RuntimeError(f"{cfg['underlying']} {st['expiry']}: no strikes ticking on the socket yet")
+    fwd, n_votes, vote_spread = _reprice(rows, st["expiry"], st.get("next_price"))
+    ref = fwd or spot
+    atm = _sticky_atm([r["strike"] for r in rows], ref, st.get("atm"))
+    st.update({"future_price": spot, "rows": rows, "atm": atm,
+               "forward": fwd, "fwd_strikes": n_votes, "fwd_spread": vote_spread,
+               "ts": ts or time.time(), "ok": True, "error": None})
+    listed = st.get("expiries") or []
+    wanted = [e for e in st.get("want") or [] if e and e != st["expiry"] and e in listed]
+    st["chains"] = {e: v for e, v in st["chains"].items() if e in wanted}
+    for pick in wanted:
+        rows2, ts2 = _stream_rows(key, pick)
+        if not rows2:
+            continue
+        fwd2, n2, sp2 = _reprice(rows2, pick, st.get("next_price"))
+        prev_atm = (st["chains"].get(pick) or {}).get("atm")
+        atm2 = _sticky_atm([r["strike"] for r in rows2], fwd2 or st.get("next_price") or spot, prev_atm)
+        st["chains"][pick] = {"rows": rows2, "ts": ts2 or time.time(), "forward": fwd2,
+                              "fwd_strikes": n2, "fwd_spread": sp2, "atm": atm2}
+
+
+def _loop_stream() -> None:
+    """Angel path: everything is already on the socket; recompute every round."""
+    last_resolve: dict[str, float] = {}
+    while not _stop.is_set():
+        for key, cfg in COMMODITIES.items():
+            st = _state[key]
+            try:
+                if not st["underlying_id"] or (time.time() - last_resolve.get(key, 0)) > 12 * 3600:
+                    months = _resolve_underlying(cfg["underlying"])
+                    sid, name = months[0] if months else (None, None)
+                    st["next_id"], st["next_name"] = months[1] if len(months) > 1 else (None, None)
+                    if not sid:
+                        raise RuntimeError(f"{cfg['underlying']} future not found in scrip master")
+                    if sid != st["underlying_id"]:
+                        st["expiry"] = None
+                    st["underlying_id"], st["underlying_name"] = sid, name
+                    last_resolve[key] = time.time()
+                    log.info("option IV: %s underlying %s (%s)", key, name, sid)
+                # a rolled-off front expiry is re-read from the master
+                if st["expiry"] and st["expiry"] < datetime.now().date().isoformat():
+                    st["expiry"] = None
+                _stream_once(key)
+            except Exception as e:  # noqa: BLE001
+                st["ok"] = False
+                st["error"] = str(e)[:160]
+                log.debug("option IV (socket) %s: %s", key, st["error"])
+        _stop.wait(_ROUND_SECONDS)
+
+
 def _loop() -> None:
+    if settings.FEED_PROVIDER == "angel":
+        _loop_stream()
+        return
     sess = requests.Session()
     last_resolve: dict[str, float] = {}
     while not _stop.is_set():
@@ -632,5 +757,6 @@ def start_in_background() -> None:
         log.info("option IV service disabled")
         return
     threading.Thread(target=_loop, daemon=True, name="crude-iv").start()
-    log.info("option IV service starting (Dhan MCX chains: %s, ~%ss round, in-memory)",
+    log.info("option IV service starting (%s MCX chains: %s, ~%ss round, in-memory)",
+             "socket" if settings.FEED_PROVIDER == "angel" else "Dhan REST",
              ", ".join(COMMODITIES), _ROUND_SECONDS)

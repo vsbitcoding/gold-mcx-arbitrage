@@ -310,8 +310,8 @@ def refresh_model() -> int:
     pairs = [pf for ps in groups.values() if (pf := _pick_front(ps))]
     log.info("Signal fronts (roll within %dd → next month): %s", ROLL_DAYS,
              ", ".join(f"{p.get('label')}={p.get('expiry_short')}" for p in pairs))
-    from app.services import dhan_feed
-    token = dhan_feed.get_live_token()
+    from app.services import live_feed
+    token = live_feed.history_token()
     if not token:
         log.info("signal model: feed token not ready yet — will retry")
         return 0
@@ -418,8 +418,8 @@ def refresh_band() -> int:
     """Light 4-hourly band update: re-pull ~12 days of 60-min data per contract
     and recompute just the rolling 20-bar % band (the probability model stays
     from the daily build). ~2 calls per pair → negligible load."""
-    from app.services import dhan_feed
-    token = dhan_feed.get_live_token()
+    from app.services import live_feed
+    token = live_feed.history_token()
     if not token or not _model:
         return 0
     updated = 0

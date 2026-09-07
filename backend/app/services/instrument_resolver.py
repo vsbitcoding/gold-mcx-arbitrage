@@ -48,6 +48,16 @@ def _cache_valid() -> bool:
 
 
 def _download_csv() -> str:
+    """The scrip master every resolver reads, in Dhan's SEM_* shape.
+
+    Provider "angel": Angel's master rebuilt in this same shape (see
+    angel_master.py) - same exchange tokens, same trading-symbol spelling, so
+    nothing downstream knows the difference.
+    """
+    from app.config import settings
+    if settings.FEED_PROVIDER == "angel":
+        from app.services import angel_master
+        return angel_master.dhan_compat_csv()
     if _cache_valid():
         try:
             with open(CACHE_FILE, "r") as f:

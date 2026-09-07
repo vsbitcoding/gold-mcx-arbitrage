@@ -58,7 +58,7 @@ def snapshot(slot: str) -> str:
     if not _lock.acquire(blocking=False):
         return "busy"
     try:
-        from app.services import dhan_feed, options_service
+        from app.services import live_feed, options_service
 
         now = datetime.now()  # server runs in Asia/Kolkata → IST
         hh, mm = _SLOTS[slot]
@@ -68,7 +68,7 @@ def snapshot(slot: str) -> str:
         # must NOT store 16:00 quotes labelled "10:00" — skip instead.
         if now < slot_start or now > slot_start + timedelta(minutes=window):
             return "outside capture window; skipped"
-        if not dhan_feed.is_market_open():
+        if not live_feed.is_market_open():
             return "market closed; skipped"
 
         below = options_service.get_spread_table("below")

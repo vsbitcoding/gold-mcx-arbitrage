@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.security import get_current_user
-from app.services.dhan_feed import get_status
+from app.services.live_feed import get_status
 
 router = APIRouter(prefix="/api/feed", tags=["feed"])
 

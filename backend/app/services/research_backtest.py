@@ -44,7 +44,15 @@ def status() -> dict:
 
 
 def _intraday_60(sid: str, token: str, days: int) -> dict[int, float]:
-    """epoch → 60-min close, chunked (Dhan caps ~90 days/request)."""
+    """epoch → 60-min close, chunked (Dhan caps ~90 days/request).
+
+    `token` is Dhan's REST token, or the word "angel" (live_feed.history_token)
+    when the feed provider is Angel - then the same hourly closes come from
+    Angel's candle API, in the same shape.
+    """
+    if token == "angel":
+        from app.services import angel_history
+        return angel_history.intraday_60(sid, days)
     out: dict[int, float] = {}
     to = datetime.now().date()
     cur = to - timedelta(days=days)

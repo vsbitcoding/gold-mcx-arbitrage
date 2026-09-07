@@ -40,9 +40,19 @@ from app.services.market_data import prev_close_store, quote_store
 log = logging.getLogger("options_service")
 
 # Spot index security IDs (from Dhan scrip master)
-NIFTY_SPOT_ID = "13"          # NSE IDX, "NIFTY"
-SENSEX_SPOT_ID = "51"         # BSE IDX, "SENSEX"
-INDIA_VIX_ID = "21"           # NSE IDX, "INDIA VIX"
+# Spot index ids differ per provider: Dhan numbers them 13/51/21 on its IDX
+# segment, Angel uses the exchange tokens 99926000/99919000/99926017. Every
+# option contract, by contrast, carries the same exchange token on both.
+from app.config import settings as _settings  # noqa: E402
+if _settings.FEED_PROVIDER == "angel":
+    from app.services.angel_master import INDEX_IDS as _IDX  # noqa: E402
+    NIFTY_SPOT_ID = _IDX["NIFTY"]
+    SENSEX_SPOT_ID = _IDX["SENSEX"]
+    INDIA_VIX_ID = _IDX["INDIA VIX"]
+else:
+    NIFTY_SPOT_ID = "13"          # NSE IDX, "NIFTY"
+    SENSEX_SPOT_ID = "51"         # BSE IDX, "SENSEX"
+    INDIA_VIX_ID = "21"           # NSE IDX, "INDIA VIX"
 
 # Strike step per index
 NIFTY_STEP = 50
@@ -274,6 +284,26 @@ def refresh(min_days_ahead: int = 0) -> None:
         "Options subscribed: %d PE contracts across %d weeks × 2 indices",
         len(options), len(nifty_weeks),
     )
+
+
+def get_subscription_meta() -> dict[str, dict]:
+    """Provider-neutral {security_id: meta} - spot indices + every subscribed
+    option. `exch` says which exchange the token lives on, which is all a feed
+    needs to route it (Angel: NSE/BSE/NFO/BFO)."""
+    meta: dict[str, dict] = {
+        NIFTY_SPOT_ID: {"short": "nifty_spot", "trading_symbol": "NIFTY", "kind": "index", "exch": "NSE"},
+        SENSEX_SPOT_ID: {"short": "sensex_spot", "trading_symbol": "SENSEX", "kind": "index", "exch": "BSE"},
+        INDIA_VIX_ID: {"short": "india_vix", "trading_symbol": "INDIA VIX", "kind": "index", "exch": "NSE"},
+    }
+    for (idx, wk_i, strike, opt_type), info in _state["options"].items():
+        meta[info["security_id"]] = {
+            "short": f"{idx.lower()}_pe_{strike}_w{wk_i}",
+            "trading_symbol": info["trading_symbol"],
+            "kind": "option_pe", "underlying": idx, "week_index": wk_i,
+            "strike": strike, "expiry": info["expiry"],
+            "exch": "NFO" if idx == "NIFTY" else "BFO",
+        }
+    return meta
 
 
 def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:

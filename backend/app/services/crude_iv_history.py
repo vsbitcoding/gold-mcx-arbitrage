@@ -167,14 +167,14 @@ def snapshot(slot: str, commodity: str, month: int = 0) -> str:
         return "busy"
     try:
         from app.routes.crude_iv import _payload
-        from app.services import dhan_feed
+        from app.services import live_feed
 
         now = datetime.now()                       # server runs in IST
         hh, mm = SLOTS[slot]
         start = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
         if now < start or now > start + timedelta(minutes=_window_min(slot)):
             return "outside capture window; skipped"
-        if not dhan_feed.is_market_open():
+        if not live_feed.is_market_open():
             return "MCX closed; skipped"
 
         # None, not 10 - the route's own per-month default (15 front, 7 next) is

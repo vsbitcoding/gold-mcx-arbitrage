@@ -190,7 +190,7 @@ export default function Header({
   const tooltip = feedStatus
     ? [
         `Browser ↔ Server: ${wsState}`,
-        `Server ↔ Dhan: ${dhanMode || "—"}`,
+        `Server ↔ ${feedStatus.provider === "angel" ? "Angel One" : "Dhan"}: ${dhanMode || "—"}`,
         `Market: ${marketOpen ? "OPEN" : "CLOSED"}`,
         `Client: ${feedStatus.client_name || "—"}`,
         `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,

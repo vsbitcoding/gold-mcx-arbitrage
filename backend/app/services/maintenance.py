@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import (activity, elec_service, crude_iv_history, dhan_feed, extra_instruments,
+from app.services import (activity, elec_service, crude_iv_history, live_feed, extra_instruments,
                           mcxccl_service, nse_mcx_history, options_history_service,
                           span_service)
 
@@ -272,16 +272,16 @@ def _loop() -> None:
             if last_expiry_roll != today_str and (now.hour, now.minute) >= (23, 0):
                 last_expiry_roll = today_str
                 try:
-                    if dhan_feed.has_expiring_today():
+                    if live_feed.has_expiring_today():
                         log.info("maintenance: 23:00 expiry-day roll -> resubscribe")
-                        dhan_feed.request_resubscribe("expiry-day 23:00 roll")
+                        live_feed.request_resubscribe("expiry-day 23:00 roll")
                 except Exception as e:  # noqa: BLE001
                     log.warning("maintenance: expiry roll failed: %s", e)
 
             if last_roll != today_str and (now.hour, now.minute) >= (8, 40):
                 try:
                     log.info("Daily contract roll: %s",
-                             dhan_feed.request_resubscribe("daily contract roll"))
+                             live_feed.request_resubscribe("daily contract roll"))
                 except Exception as e:
                     log.warning("Daily contract roll raised: %s", e)
                 last_roll = today_str

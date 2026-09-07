@@ -121,7 +121,7 @@ def snapshot(slot: str, commodity: str, month: int = 0) -> str:
         return "busy"
     try:
         from app.routes.nse_mcx import payload
-        from app.services import dhan_feed
+        from app.services import live_feed
 
         now = datetime.now()  # server runs in Asia/Kolkata -> IST
         hh, mm = SLOTS[slot]
@@ -130,7 +130,7 @@ def snapshot(slot: str, commodity: str, month: int = 0) -> str:
         # 16:00 quotes labelled "10:00" - skip instead.
         if now < slot_start or now > slot_start + timedelta(minutes=_window_min(slot)):
             return "outside capture window; skipped"
-        if not dhan_feed.is_market_open():
+        if not live_feed.is_market_open():
             return "market closed; skipped"
 
         board = payload(commodity, window=10, month=month)

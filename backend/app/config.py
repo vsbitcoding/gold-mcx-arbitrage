@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # such segment, IBKR does not list the contracts). Also supplies real-time
     # USD/INR. Credentials live in ~/.config/arbi-secrets/angelone.env.
     ANGEL_ENABLED: bool = True
+    # Live market data provider for the whole dashboard: "dhan" (WebSocket via
+    # dhanhq) or "angel" (Angel One SmartAPI WebSocket 2.0). Both code paths
+    # stay; this one line switches, so a bad day on one side is a one-line
+    # rollback (client, 07-Sep-2026: Dhan out, Angel in, Dhan kept as backup).
+    FEED_PROVIDER: str = "dhan"
     ANGEL_STATIC_IP: str = "34.180.20.239"   # Angel locks the key to this IP
     CRUDE_IV_ENABLED: bool = True
     IBKR_SPOTS_ENABLED: bool = True

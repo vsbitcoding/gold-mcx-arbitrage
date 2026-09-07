@@ -95,6 +95,24 @@ def get_full_silver() -> Optional[dict]:
     return _state.get("silver_full")
 
 
+def get_subscription_meta() -> dict[str, dict]:
+    """Provider-neutral {security_id: meta}: the two NSE ETFs plus the full
+    gold and silver front months."""
+    meta: dict[str, dict] = {
+        GOLDBEES_NSE_SECURITY_ID: {"short": "goldbees", "trading_symbol": GOLDBEES_TRADING_SYMBOL,
+                                   "kind": "etf", "exch": "NSE"},
+        SILVERBEES_NSE_SECURITY_ID: {"short": "silverbees", "trading_symbol": SILVERBEES_TRADING_SYMBOL,
+                                     "kind": "etf", "exch": "NSE"},
+    }
+    for key, short in (("gold_full", "gold_full"), ("silver_full", "silver_full")):
+        rec = _state.get(key)
+        if rec:
+            meta[rec["security_id"]] = {"short": short, "trading_symbol": rec["trading_symbol"],
+                                        "expiry": rec["expiry"].isoformat(), "kind": "mcx_future",
+                                        "exch": "MCX"}
+    return meta
+
+
 def get_extra_subscriptions() -> tuple[list[tuple], dict[str, dict]]:
     """Return (instruments, metadata) for Dhan feed.
 

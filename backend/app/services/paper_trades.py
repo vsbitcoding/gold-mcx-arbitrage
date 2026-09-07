@@ -295,8 +295,8 @@ def symbol_add(raw: str) -> dict:
     if err:
         return {"ok": False, "reason": err}
     if is_new:
-        from app.services import dhan_feed
-        threading.Thread(target=lambda: dhan_feed.request_resubscribe(
+        from app.services import live_feed
+        threading.Thread(target=lambda: live_feed.request_resubscribe(
             f"paper symbol {sym} added"), daemon=True).start()
     return {"ok": True, "symbol": sym, "contract": rec.get("trading_symbol"),
             "lot_units": rec.get("lot_units"), "existed": not is_new}
@@ -391,7 +391,10 @@ def refresh() -> None:
             # the whole calendar spread. Book it first at the old contract's
             # last known price - staleness accepted, it is that contract's
             # final truth - with exit_reason='roll' so History says why.
-            if prev and prev.get("security_id") != rec.get("security_id"):
+            # Compared on the contract (expiry + symbol), not the id: the id is the
+            # exchange token on both providers, but judging by the expiry keeps a
+            # provider switch from reading as a roll and booking every open trade.
+            if prev and (prev.get("expiry"), prev.get("trading_symbol")) != (rec.get("expiry"), rec.get("trading_symbol")):
                 with _lock:
                     db = SessionLocal()
                     try:
@@ -567,6 +570,16 @@ def _rest_ltp(rec: dict) -> float | None:
     Reuses the cached token the live feed already holds - the same pattern as
     the option-chain poller. NEVER mints a token; that would kill the feed's.
     """
+    if settings.FEED_PROVIDER == "angel":
+        try:
+            from app.services import angel_feed
+            jwt, _feed, creds = angel_feed.get_session()
+            got = angel_feed._quote(requests.Session(), creds, jwt, {"MCX": [str(rec["security_id"])]})
+            row = got.get(str(rec["security_id"])) or {}
+            return float(row.get("ltp") or 0) or None
+        except Exception as e:  # noqa: BLE001
+            log.warning("paper: Angel REST ltp failed for %s: %s", rec.get("trading_symbol"), e)
+            return None
     try:
         tok = dhan_auth.get_token(settings.DHAN_CLIENT_ID, settings.DHAN_MPIN,
                                   settings.DHAN_TOTP_SECRET).access_token
@@ -667,8 +680,8 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
     if not is_enabled():
         return _log("rejected", "system stopped - press Start on the dashboard to resume")
 
-    from app.services import dhan_feed
-    if not dhan_feed.is_market_open():
+    from app.services import live_feed
+    if not live_feed.is_market_open():
         return _log("rejected", "MCX closed")
 
     with _lock:
@@ -743,7 +756,7 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
     if is_new:
         # The feed learns the new contract in the background; the trade above
         # already has its price, so nothing waits on this.
-        threading.Thread(target=lambda: dhan_feed.request_resubscribe(
+        threading.Thread(target=lambda: live_feed.request_resubscribe(
             f"paper symbol {symbol} added"), daemon=True).start()
     return res
 
