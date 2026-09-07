@@ -31,7 +31,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from app.services.instrument_resolver import _download_csv, _parse_expiry

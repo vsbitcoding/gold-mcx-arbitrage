@@ -11,7 +11,6 @@ futures (verified against the 10.78X leverage shown for GOLDGUINEA).
 """
 from __future__ import annotations
 
-from typing import Optional
 
 from app.models import Position
 from app.services import pair_registry, span_service

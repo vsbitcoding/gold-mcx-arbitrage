@@ -16,9 +16,8 @@ from __future__ import annotations
 import logging
 import statistics
 import threading
-import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 from app.config import MULTIPLIERS

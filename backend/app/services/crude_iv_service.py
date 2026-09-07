@@ -18,11 +18,10 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import logging
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
 
 from app.config import settings

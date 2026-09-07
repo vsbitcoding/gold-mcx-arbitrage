@@ -38,7 +38,6 @@ from datetime import datetime
 
 import requests
 
-from app.config import settings
 from app.database import SessionLocal
 from app.models import (PaperAccount, PaperSignal, PaperState, PaperSymbol,
                         PaperTrade)

@@ -47,6 +47,20 @@ def is_market_open() -> bool:
     return open_t <= n <= close_t
 
 
+# NSE / BSE cash and F&O close at 15:30; MCX runs to 23:30. A socket carrying
+# only NSE/BSE tokens is rightly silent all evening - not stale.
+_EXCHANGE_HOURS = {1: (9, 15, 15, 30), 2: (9, 15, 15, 30), 3: (9, 15, 15, 30), 4: (9, 15, 15, 30),
+                   5: (9, 0, 23, 30), 13: (9, 0, 17, 0)}
+
+
+def _exchange_open(ex: int) -> bool:
+    n = datetime.now(IST)
+    if n.weekday() >= 5:
+        return False
+    h1, m1, h2, m2 = _EXCHANGE_HOURS.get(ex, (9, 0, 23, 30))
+    return n.replace(hour=h1, minute=m1, second=0, microsecond=0) <= n <= n.replace(hour=h2, minute=m2, second=0, microsecond=0)
+
+
 def _eval_and_broadcast() -> None:
     """Push the live board to every browser socket (watch-only, no trading)."""
     try:
@@ -173,6 +187,9 @@ class _Conn:
     @property
     def n_tokens(self) -> int:
         return sum(len(v) for v in self.groups.values()) + sum(len(v) for v in self.index_tokens.values())
+
+    def any_exchange_open(self) -> bool:
+        return any(_exchange_open(ex) for ex in set(self.groups) | set(self.index_tokens))
 
     def describe(self) -> dict:
         return {"idx": self.idx, "tokens": self.n_tokens,
@@ -411,7 +428,7 @@ def _run_feed_thread() -> None:
                     alive = c.thread is not None and c.thread.is_alive() and c.connected
                     if alive:
                         any_up = True
-                        if is_market_open() and c.last_msg and now - c.last_msg > STALE_CONN_SECONDS:
+                        if c.any_exchange_open() and c.last_msg and now - c.last_msg > STALE_CONN_SECONDS:
                             log.warning("socket %d silent for %.0fs - reopening it", c.idx, now - c.last_msg)
                             c.close()
                             c.start()

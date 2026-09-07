@@ -29,7 +29,7 @@ import io
 import logging
 import threading
 import time
-from datetime import date, datetime
+from datetime import date
 
 log = logging.getLogger("angel_master")
 
