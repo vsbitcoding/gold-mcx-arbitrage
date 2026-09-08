@@ -6212,3 +6212,18 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bsc-modal .bsc-table th { padding: 8px 12px; }
 .bsc-modal .bsc-table td { padding: 6px 12px; line-height: 18px; }
 .bsc-modal .bsc-foot { margin-top: auto; padding: 8px 12px; }
+
+/* ---------- Every table value centred (client, 08-Sep) ----------
+   Real tables everywhere, plus the grid-style boards (Cross / Calendar rows,
+   Metal Price, Metal Spread, Other Commodity). Headers follow their columns. */
+.container table th, .container table td,
+.pt-modal table th, .pt-modal table td,
+.pt-overlay table th, .pt-overlay table td { text-align: center !important; vertical-align: middle; }
+.sc-row .sc-c, .sc-row .sc-pair, .sc-row .sc-dec, .sc-row .sc-inc, .sc-row .sc-pct, .sc-row .sc-exp,
+.sc-colhead .sc-c { text-align: center !important; justify-content: center !important; }
+.sc-row .sc-c > *, .sc-histcell { justify-content: center; }
+.price-row .pr-month, .price-row .pr-buy, .price-row .pr-sell,
+.price-head-row .pr-month, .price-head-row .pr-buy, .price-head-row .pr-sell { text-align: center !important; }
+.metal-row .mr-month, .metal-row .mr-pct { text-align: center !important; }
+.metal-row .mr-diff { align-items: center !important; }
+.bsc-table td.bsc-date, .bsc-table th:first-child { text-align: center !important; }
