@@ -13,6 +13,11 @@ const dmy = (iso) => (iso ? `${iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]}
 const num = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
 const signed = (v, d = 2) => (v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + fmtNum(Math.abs(v), d));
 const PAGE = 20;
+// A leg counts as traded when both exchanges printed volume that day. Deep
+// wings settle at 0.10 without a trade, and a % against 0.10 is not a number
+// anyone should read - so the % needs both premiums to be at least 1.
+const traded = (leg) => leg && leg.nse_vol > 0 && leg.mcx_vol > 0;
+const pctOf = (leg) => (leg && leg.nse != null && leg.mcx != null && leg.nse >= 1 && leg.mcx >= 1 ? leg.diff_pct : null);
 
 function DiffChart({ rows, strike }) {
   const box = useRef(null);
@@ -64,6 +69,19 @@ function DiffChart({ rows, strike }) {
   );
 }
 
+function Leg({ leg, dec }) {
+  const dim = !traded(leg);
+  const pct = pctOf(leg);
+  return (
+    <>
+      <td className={dim ? "nmd-dim" : ""} title={dim ? "not traded on both exchanges that day" : ""}>{num(leg.nse, dec)}</td>
+      <td className={dim ? "nmd-dim" : ""}>{num(leg.mcx, dec)}</td>
+      <td className={`${dim ? "nmd-dim " : ""}${leg.diff > 0 ? "pos" : leg.diff < 0 ? "neg" : ""}`}>{signed(leg.diff, dec)}</td>
+      <td className={`${dim ? "nmd-dim " : ""}${pct > 0 ? "pos" : pct < 0 ? "neg" : ""}`}>{pct == null ? "—" : signed(pct, 2) + "%"}</td>
+    </>
+  );
+}
+
 export default function NseMcxDaily({ product, cfg }) {
   const [exps, setExps] = useState(null);
   const [expiry, setExpiry] = useState("");
@@ -75,6 +93,7 @@ export default function NseMcxDaily({ product, cfg }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [page, setPage] = useState(1);
+  const [tradedOnly, setTradedOnly] = useState(true);
   const dec = cfg?.decimals ?? 2;
 
   useEffect(() => {
@@ -101,7 +120,12 @@ export default function NseMcxDaily({ product, cfg }) {
   }, [product, expiry, start, end, type, strike]);
 
   const pair = exps?.expiries?.find((e) => e.nse === expiry);
-  const rows = data?.rows || [];
+  const allRows = data?.rows || [];
+  // Traded only: keep a row when at least one shown side traded on both exchanges.
+  const rows = useMemo(() => (tradedOnly
+    ? allRows.filter((r) => (type !== "PE" && traded(r.ce)) || (type !== "CE" && traded(r.pe)))
+    : allRows), [allRows, tradedOnly, type]);
+  useEffect(() => { setPage(1); }, [tradedOnly]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const safe = Math.min(page, pages);
   const shown = rows.slice((safe - 1) * PAGE, safe * PAGE);
@@ -111,7 +135,7 @@ export default function NseMcxDaily({ product, cfg }) {
   function downloadCsv() {
     const head = ["Date", "NSE expiry", "MCX expiry", "Strike", "NSE call", "MCX call", "Call diff", "Call diff %", "NSE put", "MCX put", "Put diff", "Put diff %"];
     const lines = [head.join(",")];
-    rows.forEach((r) => lines.push([r.date, data.nse_expiry, data.mcx_expiry, r.strike, r.ce.nse ?? "", r.ce.mcx ?? "", r.ce.diff ?? "", r.ce.diff_pct ?? "", r.pe.nse ?? "", r.pe.mcx ?? "", r.pe.diff ?? "", r.pe.diff_pct ?? ""].join(",")));
+    rows.forEach((r) => lines.push([r.date, data.nse_expiry, data.mcx_expiry, r.strike, r.ce.nse ?? "", r.ce.mcx ?? "", r.ce.diff ?? "", pctOf(r.ce) ?? "", r.pe.nse ?? "", r.pe.mcx ?? "", r.pe.diff ?? "", pctOf(r.pe) ?? ""].join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -141,6 +165,9 @@ export default function NseMcxDaily({ product, cfg }) {
             <option value="">All strikes</option>
             {strikes.map((s) => <option key={s} value={s}>{fmtNum(s, 0)}</option>)}
           </select></label>
+        <button type="button" aria-pressed={tradedOnly} className={`oh-chip ${tradedOnly ? "on" : ""}`}
+          title="Only days and strikes where BOTH exchanges traded; untraded wings settle at 0.10 and mean nothing"
+          onClick={() => setTradedOnly((v) => !v)}>Traded only</button>
         <button type="button" className="oh-chip nmd-dl" disabled={!rows.length} onClick={downloadCsv}>⬇ CSV</button>
       </div>
 
@@ -152,7 +179,7 @@ export default function NseMcxDaily({ product, cfg }) {
       {data && (
         <>
           <div className="nmd-sub">
-            <b>{cfg?.label || product}</b> · NSE {dmy(data.nse_expiry)} vs MCX {dmy(data.mcx_expiry)} · {data.days} trading days {data.from ? `(${dmy(data.from)} to ${dmy(data.to)})` : ""} · {strikes.length} strikes on the ladder · closing premiums, difference = NSE − MCX
+            <b>{cfg?.label || product}</b> · NSE {dmy(data.nse_expiry)} vs MCX {dmy(data.mcx_expiry)} · {data.days} trading days {data.from ? `(${dmy(data.from)} to ${dmy(data.to)})` : ""} · {strikes.length} strikes on the ladder · closing premiums, difference = NSE − MCX{tradedOnly ? " · traded on both exchanges only" : ""}
           </div>
           {strike && rows.length > 1 && <DiffChart rows={rows} strike={Number(strike)} />}
           {rows.length === 0 ? (
@@ -176,8 +203,8 @@ export default function NseMcxDaily({ product, cfg }) {
                     <tr key={r.date + r.strike} className={i > 0 && shown[i - 1].date !== r.date ? "nmd-daystart" : ""}>
                       <td className="nmd-date">{i === 0 || shown[i - 1].date !== r.date ? dmy(r.date) : ""}</td>
                       <td className="nmd-strike">{fmtNum(r.strike, 0)}</td>
-                      {showCE && <><td>{num(r.ce.nse, dec)}</td><td>{num(r.ce.mcx, dec)}</td><td className={r.ce.diff > 0 ? "pos" : r.ce.diff < 0 ? "neg" : ""}>{signed(r.ce.diff, dec)}</td><td className={r.ce.diff_pct > 0 ? "pos" : r.ce.diff_pct < 0 ? "neg" : ""}>{r.ce.diff_pct == null ? "—" : signed(r.ce.diff_pct, 2) + "%"}</td></>}
-                      {showPE && <><td>{num(r.pe.nse, dec)}</td><td>{num(r.pe.mcx, dec)}</td><td className={r.pe.diff > 0 ? "pos" : r.pe.diff < 0 ? "neg" : ""}>{signed(r.pe.diff, dec)}</td><td className={r.pe.diff_pct > 0 ? "pos" : r.pe.diff_pct < 0 ? "neg" : ""}>{r.pe.diff_pct == null ? "—" : signed(r.pe.diff_pct, 2) + "%"}</td></>}
+                      {showCE && <Leg leg={r.ce} dec={dec} />}
+                      {showPE && <Leg leg={r.pe} dec={dec} />}
                     </tr>
                   ))}
                 </tbody>

@@ -6281,3 +6281,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 
 .nm-head-left .nm-head-right { margin-left: 4px; }
 .nm-histkind { margin-left: 0; }
+
+.nmd-table td.nmd-dim { color: var(--text-muted); font-weight: 400; }
