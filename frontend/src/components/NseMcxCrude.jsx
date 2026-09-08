@@ -562,8 +562,14 @@ export default function NseMcxCrude() {
           title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
           {live ? "● Live" : "○ Feed issue"}
         </span>
-        {/* History has two sources; the choice sits up here beside the title,
-            in the room the header had, not as a row of its own. */}
+        <Futures f={d?.future} cfg={cfg} />
+      </div>
+
+      {/* Rendered in BOTH views. The futures are the current market whichever
+          tab is open, and taking them away on the way to History was most of
+          what made switching feel like a different page loading. */}
+      <div className="nm-head-end">
+        {/* History has two sources; the choice sits with the other controls. */}
         {view === "history" && (
           <div className="oh-group nm-histkind" role="tablist" aria-label="History source">
             {[["snap", "Saved boards"], ["daily", "Daily since Apr 2024"]].map(([k, l]) => (
@@ -573,13 +579,6 @@ export default function NseMcxCrude() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Rendered in BOTH views. The futures are the current market whichever
-          tab is open, and taking them away on the way to History was most of
-          what made switching feel like a different page loading. */}
-      <div className="nm-head-end">
-        <Futures f={d?.future} cfg={cfg} />
         <div className="oh-group" role="tablist" aria-label="Commodity">
           {PRODUCTS.map((p) => (
             <button key={p.key} type="button" role="tab" aria-selected={product === p.key}

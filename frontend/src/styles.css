@@ -6278,3 +6278,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-head-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: flex-end; }
 .nm-head-end .nm-head-right { justify-self: auto; }
 @media (max-width: 1300px) { .nm-head { grid-template-columns: 1fr !important; } .nm-head-end { justify-content: flex-start; } }
+
+.nm-head-left .nm-head-right { margin-left: 4px; }
+.nm-histkind { margin-left: 0; }
