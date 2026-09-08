@@ -134,9 +134,9 @@ function CorrChart({ series, hover, setHover }) {
 }
 
 // Every point of the chart as a row, newest first, with the day's change.
-const CORR_PAGE = 15;
-function CorrTable({ series, hover, setHover, unit, expiry }) {
+function CorrTable({ series, hover, setHover, unit, expiry, pageSize = 15 }) {
   const [page, setPage] = useState(1);
+  const CORR_PAGE = Math.max(5, pageSize);
   useEffect(() => { setPage(1); }, [series]);
   const rows = useMemo(() => {
     const out = [];
@@ -204,6 +204,22 @@ export default function BullionStock() {
   const [histPage, setHistPage] = useState(1); // Daily History pagination (6-month backfill → many rows)
   const [corrHover, setCorrHover] = useState(null);   // shared between the chart and its table
   const [corrOpen, setCorrOpen] = useState(false);     // the chart + data popup
+  const corrBodyRef = useRef(null);
+  const [corrRows, setCorrRows] = useState(12);        // table rows that fit the popup without a scrollbar
+  useEffect(() => {
+    if (!corrOpen) return undefined;
+    const el = corrBodyRef.current;
+    if (!el) return undefined;
+    const fit = () => {
+      // body height minus summary (78) + legend (26) + chart (250) + table head (34) + footer (40)
+      const free = el.clientHeight - 78 - 26 - 250 - 34 - 40 - 12;
+      setCorrRows(Math.max(5, Math.floor(free / 30)));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [corrOpen]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -520,7 +536,7 @@ export default function BullionStock() {
                         </div>
                         <button type="button" className="pt-modal-x" onClick={() => setCorrOpen(false)} aria-label="Close">×</button>
                       </div>
-                      <div className="bsc-body">
+                      <div className="bsc-body" ref={corrBodyRef}>
                         <div className="bsc-summary bsc-summary-modal">
                           <div className="bsc-stat"><span>Link</span><b style={{ color: col }}>{r.toFixed(2)}</b><small>{corrStrength(r)}</small></div>
                           <div className="bsc-stat"><span>Reads as</span><b style={{ color: col }}>Stock ↑ → Spread {r < 0 ? "↓" : "↑"}</b><small>{selectedCorr.n} days</small></div>
@@ -535,7 +551,7 @@ export default function BullionStock() {
                               <span className="bs-muted">Move over the chart for a day's numbers</span>
                             </div>
                             <CorrChart series={corrSeries} hover={corrHover} setHover={setCorrHover} />
-                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} expiry={exp} />
+                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} expiry={exp} pageSize={corrRows} />
                           </>
                         ) : (
                           <div className="bs-note bs-slim">Not enough days for this pair yet.</div>
