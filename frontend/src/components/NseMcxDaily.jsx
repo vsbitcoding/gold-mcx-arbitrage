@@ -116,15 +116,19 @@ export default function NseMcxDaily({ product, cfg }) {
     if (!expiry) return undefined;
     let alive = true;
     setLoading(true);
-    api.nseMcxDaily({ commodity: product, expiry, start: start || null, end: end || null, type: type || null, strike: strike || null })
+    // The strike is filtered here, not on the server, so the strike list
+    // stays complete after one is chosen (choosing 4,200 used to leave the
+    // dropdown with only 4,200 in it).
+    api.nseMcxDaily({ commodity: product, expiry, start: start || null, end: end || null, type: type || null })
       .then((r) => { if (alive) { setData(r); setErr(null); setPage(1); } })
       .catch((e) => { if (alive) setErr(e.message); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [product, expiry, start, end, type, strike]);
+  }, [product, expiry, start, end, type]);
+  useEffect(() => { setPage(1); }, [strike]);
 
   const pair = exps?.expiries?.find((e) => e.nse === expiry);
-  const allRows = data?.rows || [];
+  const allRows = useMemo(() => (data?.rows || []).filter((r) => !strike || r.strike === Number(strike)), [data, strike]);
   // Traded only: keep a row when at least one shown side traded on both exchanges.
   const rows = useMemo(() => (tradedOnly
     ? allRows.filter((r) => (type !== "PE" && traded(r.ce)) || (type !== "CE" && traded(r.pe)))
