@@ -6317,3 +6317,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmd-actions { margin-left: auto; }
 .nmd-table th.nmd-futh { color: var(--accent); }
 .nmd-table td.nmd-fut { font-weight: 700; background: rgba(201,162,78,.06); }
+
+.nmd-controls { align-items: stretch !important; }
+.nmd-row { justify-content: flex-start; width: 100%; }
+.nmd-table th, .nmd-table td { padding-left: 14px !important; padding-right: 14px !important; }

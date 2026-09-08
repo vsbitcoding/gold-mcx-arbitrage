@@ -187,11 +187,11 @@ export default function NseMcxDaily({ product, cfg }) {
           <div className="nmd-f"><span>Rows</span>
             <button type="button" aria-pressed={tradedOnly} className={`oh-chip ${tradedOnly ? "on" : ""}`}
               title="Only days and strikes where BOTH exchanges traded; untraded wings settle at 0.10 and mean nothing"
-              onClick={() => setTradedOnly((v) => !v)}>{tradedOnly ? "✓ Traded on both only" : "All strikes, traded or not"}</button></div>
+              onClick={() => setTradedOnly((v) => !v)}>{tradedOnly ? "Traded on both only" : "All strikes, traded or not"}</button></div>
           <div className="nmd-f nmd-actions"><span>&nbsp;</span>
             <div className="nmd-actbtns">
               <button type="button" className="oh-chip" title="Clear every filter" onClick={() => { setType(""); setStrike(""); setStart(""); setEnd(""); setTradedOnly(true); }}>Reset</button>
-              <button type="button" className="btn btn-primary btn-sm" disabled={!rows.length} onClick={downloadCsv}>⬇ Download CSV</button>
+              <button type="button" className="btn btn-primary btn-sm" disabled={!rows.length} onClick={downloadCsv}>Download CSV</button>
             </div></div>
         </div>
       </div>
