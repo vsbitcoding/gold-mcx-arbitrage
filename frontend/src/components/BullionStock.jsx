@@ -57,6 +57,14 @@ function StockTrend({ series }) {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dmy = (iso) => iso ? `${iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(2, 4)}` : "";
 const signed = (v, d = 2) => (v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + fmtNum(Math.abs(v), d));
+// The contract months behind a pair, from its name: "Petal-Mini@2026-09-30"
+// (cross, both legs on that expiry) or "Petal@2026-09-30/2026-10-30"
+// (calendar, near / far). The client asked which expiry the data is for.
+const expiryOf = (pairName) => {
+  const tag = String(pairName || "").split("@")[1] || "";
+  if (!tag) return "";
+  return tag.split("/").map((d) => dmy(d.slice(0, 10))).join(" → ");
+};
 
 // Stock (left axis) against spread % (right axis) at real pixel size, with a
 // hover readout - the client reads numbers off this chart, so it has axes.
@@ -126,7 +134,7 @@ function CorrChart({ series, hover, setHover }) {
 }
 
 // Every point of the chart as a row, newest first, with the day's change.
-function CorrTable({ series, hover, setHover, unit }) {
+function CorrTable({ series, hover, setHover, unit, expiry }) {
   const rows = useMemo(() => {
     const out = [];
     for (let i = series.length - 1; i >= 0; i--) {
@@ -159,7 +167,7 @@ function CorrTable({ series, hover, setHover, unit }) {
           ))}
         </tbody>
       </table>
-      <div className="bsc-foot">{rows.length} days · {dmy(series[0].date)} to {dmy(series[series.length - 1].date)} · stock is the exchange's eligible deliverable units on that day (the day's last published figure)</div>
+      <div className="bsc-foot">{rows.length} days · {dmy(series[0].date)} to {dmy(series[series.length - 1].date)}{expiry ? ` · spread of the ${expiry} contract` : ""} · stock is the exchange's eligible deliverable units on that day (the day's last published figure)</div>
     </div>
   );
 }
@@ -457,6 +465,7 @@ export default function BullionStock() {
                           <div className="bsc-title">
                             <span className="bsc-comm">{selectedCorr.commodity}</span>
                             <span className="bsc-pair">{selectedCorr.pair}</span>
+                            <span className="bsc-exp">Contract expiry {expiryOf(selectedCorr.pair_name)}</span>
                           </div>
                           <div className="bsc-stat"><span>Link</span><b style={{ color: col }}>{r.toFixed(2)}</b><small>{corrStrength(r)}</small></div>
                           <div className="bsc-stat"><span>Reads as</span><b style={{ color: col }}>Stock ↑ → Spread {r < 0 ? "↓" : "↑"}</b><small>{selectedCorr.n} days</small></div>
@@ -471,7 +480,7 @@ export default function BullionStock() {
                               <span className="bs-muted">Move over the chart for a day's numbers</span>
                             </div>
                             <CorrChart series={corrSeries} hover={corrHover} setHover={setCorrHover} />
-                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} />
+                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} expiry={expiryOf(selectedCorr.pair_name)} />
                           </>
                         ) : (
                           <div className="bs-note bs-slim">Not enough days for this pair yet.</div>
@@ -492,7 +501,7 @@ export default function BullionStock() {
                           <button key={c.pair_name + c.commodity} className={`ci-row ${seln ? "sel" : ""}`} onClick={() => { setSelected(`${c.pair_name}|${c.commodity}`); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
                             <span className="ci-info">
                               <span className="ci-name">{c.commodity}</span>
-                              <span className="ci-pair">{c.pair}</span>
+                              <span className="ci-pair">{c.pair} · exp {expiryOf(c.pair_name)}</span>
                             </span>
                             <span className="ci-stmt" style={{ color: col }}>
                               <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
