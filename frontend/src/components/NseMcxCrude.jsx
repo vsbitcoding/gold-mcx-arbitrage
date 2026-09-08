@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
+import NseMcxDaily from "./NseMcxDaily.jsx";
 import { fmtNum } from "../utils/format.js";
 import NseMcxGraph from "./NseMcxGraph.jsx";
 
@@ -485,6 +486,12 @@ export default function NseMcxCrude() {
     try { return localStorage.getItem("arbi_nsemcx_iv") !== "0"; } catch { return true; }
   });
   const [slot, setSlot] = useState("all");
+  // History has two sources: our own 10:00 / 12:00 / 3:00 boards (since
+  // 13-Aug) and the exchanges' daily closes (since April 2024).
+  const [histKind, setHistKind] = useState(() => {
+    try { return localStorage.getItem("arbi_nsemcx_histkind") === "daily" ? "daily" : "snap"; } catch { return "snap"; }
+  });
+  useEffect(() => { try { localStorage.setItem("arbi_nsemcx_histkind", histKind); } catch {} }, [histKind]);
   const [days, setDays] = useState(7);
   const [d, setD] = useState(null);
   const [hist, setHist] = useState(null);
@@ -522,7 +529,7 @@ export default function NseMcxCrude() {
   // History rows never change once written, so this fetches on a control change
   // and never polls. The old boards stay on screen while the new ones load.
   useEffect(() => {
-    if (view !== "history" || product === "electricity") return undefined;
+    if (view !== "history" || product === "electricity" || histKind !== "snap") return undefined;
     let alive = true;
     setLoadingHist(true);
     (async () => {
@@ -533,7 +540,7 @@ export default function NseMcxCrude() {
       finally { if (alive) setLoadingHist(false); }
     })();
     return () => { alive = false; };
-  }, [view, product, slot, days, month]);
+  }, [view, product, slot, days, month, histKind]);
 
   if (product === "electricity") {
     return (
@@ -611,6 +618,17 @@ export default function NseMcxCrude() {
     return (
       <div className={`cru-page ${loadingHist && hist ? "nm-busy" : ""}`}>
         {head}
+        <div className="oh-controls nm-hist-controls nm-hist-kind">
+          <div className="oh-group" role="tablist" aria-label="History source">
+            {[["snap", "Saved boards (10:00 / 12:00 / 3:00)"], ["daily", "Daily closes since Apr 2024"]].map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={histKind === k}
+                className={`oh-chip ${histKind === k ? "on" : ""}`}
+                onClick={() => setHistKind(k)}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {histKind === "daily" && <NseMcxDaily product={product} cfg={cfg} />}
+        {histKind === "snap" && (<>
         <div className="oh-controls nm-hist-controls">
           <div className="oh-group" role="tablist" aria-label="Time">
             {SLOTS.map((s) => (
@@ -650,6 +668,7 @@ export default function NseMcxCrude() {
             <ChainTable o={s.board?.options} cfg={cfg} iv={showIv} />
           </section>
         ))}
+        </>)}
       </div>
     );
   }

@@ -185,6 +185,16 @@ export const api = {
     request(`/api/nse-mcx/graph?commodity=${encodeURIComponent(commodity)}` +
             `&side=${side}&month=${month}&days=${days}` +
             (strike == null ? "" : `&strike=${strike}`)),
+  nseMcxDailyExpiries: (commodity = "crude") => request(`/api/nse-mcx/daily/expiries?commodity=${commodity}`),
+  nseMcxDaily: ({ commodity = "crude", expiry, mcxExpiry = null, start = null, end = null, type = null, strike = null } = {}) => {
+    const q = new URLSearchParams({ commodity, expiry });
+    if (mcxExpiry) q.set("mcx_expiry", mcxExpiry);
+    if (start) q.set("start", start);
+    if (end) q.set("end", end);
+    if (type) q.set("type", type);
+    if (strike != null && strike !== "") q.set("strike", strike);
+    return request(`/api/nse-mcx/daily?${q.toString()}`);
+  },
   nseMcxHistory: ({ commodity = "crude", slot = "all", days = 7, month = 0 } = {}) =>
     request(`/api/nse-mcx/history?commodity=${encodeURIComponent(commodity)}` +
             `&slot=${encodeURIComponent(slot)}&days=${days}&month=${month}`),

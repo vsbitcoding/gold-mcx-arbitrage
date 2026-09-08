@@ -509,3 +509,30 @@ Index("ix_dailyspread_date_pair", DailySpread.snap_date, DailySpread.pair_name, 
 Index("ix_optsnap_date_slot", OptionsSnapshot.snap_date, OptionsSnapshot.slot, unique=True)
 Index("ix_nmsnap_date_slot_comm", NseMcxSnapshot.snap_date, NseMcxSnapshot.slot,
       NseMcxSnapshot.commodity, unique=True)
+
+
+class NseMcxOptDaily(Base):
+    """One option contract's day, on one exchange - the raw material of the
+    NSE-vs-MCX daily premium comparison (client, 08-Sep-2026: history from
+    April 2024). NSE rows come from the exchange's historical data service,
+    MCX rows from the daily bhavcopy; both are closing figures, which is all
+    either exchange publishes for the past."""
+    __tablename__ = "nse_mcx_opt_daily"
+    id = Column(Integer, primary_key=True)
+    exchange = Column(String(4), nullable=False)          # NSE | MCX
+    commodity = Column(String(12), nullable=False)        # crude | natgas
+    trade_date = Column(String(10), nullable=False)       # YYYY-MM-DD
+    expiry = Column(String(10), nullable=False)           # YYYY-MM-DD
+    option_type = Column(String(2), nullable=False)       # CE | PE
+    strike = Column(Float, nullable=False)
+    close = Column(Float, nullable=True)
+    settle = Column(Float, nullable=True)                 # NSE only
+    ltp = Column(Float, nullable=True)                    # NSE only
+    prev_close = Column(Float, nullable=True)
+    volume = Column(Float, nullable=True)                 # lots / contracts
+    oi = Column(Float, nullable=True)
+
+
+Index("ix_nmopt_key", NseMcxOptDaily.exchange, NseMcxOptDaily.commodity, NseMcxOptDaily.trade_date,
+      NseMcxOptDaily.expiry, NseMcxOptDaily.option_type, NseMcxOptDaily.strike, unique=True)
+Index("ix_nmopt_lookup", NseMcxOptDaily.commodity, NseMcxOptDaily.exchange, NseMcxOptDaily.expiry, NseMcxOptDaily.trade_date)

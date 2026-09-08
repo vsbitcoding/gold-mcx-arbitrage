@@ -125,7 +125,13 @@ def _parse_trade_date(s: str) -> str | None:
 
 
 def ingest_csv(text: str) -> int:
-    """Upsert our symbols' FUTCOM rows from one bhavcopy CSV. Returns rows written."""
+    """Upsert our symbols' FUTCOM rows from one bhavcopy CSV. Returns rows written.
+    The same file's crude / gas OPTFUT rows go to the NSE-vs-MCX daily table."""
+    try:
+        from app.services import nse_opt_history
+        nse_opt_history.ingest_mcx_csv(text)
+    except Exception as e:  # noqa: BLE001 - the futures must still land
+        log.warning("bhav option rows: %s", e)
     rows = list(csv.DictReader(io.StringIO(text)))
     keep = []
     for r in rows:

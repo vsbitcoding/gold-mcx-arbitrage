@@ -247,8 +247,10 @@ def _loop() -> None:
             if last_bhav != today_str and (now.hour, now.minute) >= (7, 15):
                 last_bhav = today_str
                 try:
-                    from app.services import bhav_history
+                    from app.services import bhav_history, nse_opt_history
                     threading.Thread(target=bhav_history.refresh_recent, daemon=True).start()
+                    # NSE's side of the daily option comparison, same morning
+                    threading.Thread(target=nse_opt_history.refresh_nse_recent, daemon=True).start()
                 except Exception as e:  # noqa: BLE001
                     log.warning("maintenance: bhav refresh failed: %s", e)
 

@@ -20,7 +20,9 @@ Honest caveats the screen has to carry:
 """
 from datetime import date, datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from app.security import get_current_user
 
 from app.services import (angel_feed, crude_iv_service, iv_calc, mcx_opt_stream,
                           nse_mcx_history)
@@ -355,6 +357,38 @@ def nse_mcx_graph(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
     """
     return nse_mcx_history.series(commodity=commodity, strike=_strike_arg(strike),
                                   side=side, days=days, month=month)
+
+
+# --------------------------------------------------------------------------- #
+# Daily closing premiums since April 2024 (client, 08-Sep-2026)
+# --------------------------------------------------------------------------- #
+@router.get("/nse-mcx/daily/expiries")
+def nse_mcx_daily_expiries(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                           user: str = Depends(get_current_user)):
+    from app.services import nse_opt_history
+    return {**nse_opt_history.expiries(commodity), "status": nse_opt_history.status()}
+
+
+@router.get("/nse-mcx/daily")
+def nse_mcx_daily(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                  expiry: str = Query(..., description="NSE expiry YYYY-MM-DD"),
+                  mcx_expiry: str | None = Query(None, description="override the paired MCX expiry"),
+                  start: str | None = Query(None), end: str | None = Query(None),
+                  type: str | None = Query(None, pattern="^(CE|PE)$"),
+                  strike: float | None = Query(None),
+                  user: str = Depends(get_current_user)):
+    """Close against close, per strike per day, NSE expiry against the MCX
+    expiry nearest to it (or the one named)."""
+    from app.services import nse_opt_history
+    return nse_opt_history.compare(commodity, expiry, start, end, type, strike, mcx_expiry)
+
+
+@router.post("/nse-mcx/daily/backfill")
+def nse_mcx_daily_backfill(user: str = Depends(get_current_user)):
+    from app.security import require_admin
+    require_admin(user)
+    from app.services import nse_opt_history
+    return {"started": nse_opt_history.start_backfill(), "status": nse_opt_history.status()}
 
 
 @router.get("/nse-mcx/history")
