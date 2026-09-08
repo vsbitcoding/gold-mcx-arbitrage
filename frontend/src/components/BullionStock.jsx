@@ -134,7 +134,10 @@ function CorrChart({ series, hover, setHover }) {
 }
 
 // Every point of the chart as a row, newest first, with the day's change.
+const CORR_PAGE = 15;
 function CorrTable({ series, hover, setHover, unit, expiry }) {
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [series]);
   const rows = useMemo(() => {
     const out = [];
     for (let i = series.length - 1; i >= 0; i--) {
@@ -147,6 +150,9 @@ function CorrTable({ series, hover, setHover, unit, expiry }) {
     return out;
   }, [series]);
   if (!rows.length) return null;
+  const pages = Math.max(1, Math.ceil(rows.length / CORR_PAGE));
+  const safe = Math.min(page, pages);
+  const shown = rows.slice((safe - 1) * CORR_PAGE, safe * CORR_PAGE);
   return (
     <div className="bsc-tablewrap">
       <table className="bsc-table">
@@ -154,7 +160,7 @@ function CorrTable({ series, hover, setHover, unit, expiry }) {
           <th>Date</th><th>Stock ({unit})</th><th>Stock change</th><th>Spread (pts)</th><th>Change</th><th>Spread %</th><th>Change</th>
         </tr></thead>
         <tbody>
-          {rows.map((r) => (
+          {shown.map((r) => (
             <tr key={r.date} className={hover === r.i ? "hl" : ""} onMouseEnter={() => setHover(r.i)} onMouseLeave={() => setHover(null)}>
               <td className="bsc-date">{dmy(r.date)}</td>
               <td>{fmtNum(r.stock, 0)}</td>
@@ -167,7 +173,16 @@ function CorrTable({ series, hover, setHover, unit, expiry }) {
           ))}
         </tbody>
       </table>
-      <div className="bsc-foot">{rows.length} days · {dmy(series[0].date)} to {dmy(series[series.length - 1].date)}{expiry ? ` · spread of the ${expiry} contract` : ""} · stock is the exchange's eligible deliverable units on that day (the day's last published figure)</div>
+      <div className="bsc-foot">
+        <span className="bsc-foot-txt">{rows.length} days · {dmy(series[0].date)} to {dmy(series[series.length - 1].date)}{expiry ? ` · ${expiry} contract` : ""} · stock = exchange's eligible deliverable units that day</span>
+        <span className="bsc-pager">
+          <button type="button" className="oh-chip" disabled={safe <= 1} onClick={() => setPage(1)}>«</button>
+          <button type="button" className="oh-chip" disabled={safe <= 1} onClick={() => setPage(safe - 1)}>‹</button>
+          <b>{safe} / {pages}</b>
+          <button type="button" className="oh-chip" disabled={safe >= pages} onClick={() => setPage(safe + 1)}>›</button>
+          <button type="button" className="oh-chip" disabled={safe >= pages} onClick={() => setPage(pages)}>»</button>
+        </span>
+      </div>
     </div>
   );
 }
@@ -188,6 +203,7 @@ export default function BullionStock() {
   const [showWeak, setShowWeak] = useState(false);
   const [histPage, setHistPage] = useState(1); // Daily History pagination (6-month backfill → many rows)
   const [corrHover, setCorrHover] = useState(null);   // shared between the chart and its table
+  const [corrOpen, setCorrOpen] = useState(false);     // the chart + data popup
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -447,26 +463,65 @@ export default function BullionStock() {
           </>
           )}
 
-          {/* Spread Correlation view (client, 08-Sep): the selected link's summary,
-              its chart with axes and hover, every point as a table, then the
-              ranked links to pick from. */}
+          {/* Spread Correlation view (client, 08-Sep): the ranked links first;
+              a link opens a popup with its summary, chart and paged data. */}
           {view === "corr" && (
             <div className="bsc-view">
               {!data.correlation?.length ? (
                 <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
               ) : (
-                <>
-                  {selectedCorr && (() => {
-                    const r = selectedCorr.r, col = corrColor(r), last = corrSeries[corrSeries.length - 1];
-                    const unit = (data.latest || []).find((x) => x.commodity === selectedCorr.commodity)?.unit || "units";
-                    return (
-                      <div className="bs-card bsc-card">
-                        <div className="bsc-summary">
-                          <div className="bsc-title">
-                            <span className="bsc-comm">{selectedCorr.commodity}</span>
-                            <span className="bsc-pair">{selectedCorr.pair}</span>
-                            <span className="bsc-exp">Contract expiry {expiryOf(selectedCorr.pair_name)}</span>
-                          </div>
+                <div className="bs-card bsc-card">
+                  <div className="bs-card-h">Stock ↔ Spread links · strongest first</div>
+                  <div className="ci-list">
+                    <div className="ci-hint">Does warehouse stock move the spread? Spread measured as <b>% of price</b> (spread ÷ price × 100), last ~6 months. Tap a link for its chart and day-wise data.</div>
+                    {corrShown.map((c) => {
+                      const neg = c.r < 0;
+                      const pct = Math.max(-1, Math.min(1, c.r));
+                      const col = corrColor(c.r);
+                      return (
+                        <button key={c.pair_name + c.commodity} className="ci-row" onClick={() => { setSelected(`${c.pair_name}|${c.commodity}`); setCorrHover(null); setCorrOpen(true); }}>
+                          <span className="ci-info">
+                            <span className="ci-name">{c.commodity}</span>
+                            <span className="ci-pair">{c.pair} · exp {expiryOf(c.pair_name)}</span>
+                          </span>
+                          <span className="ci-stmt" style={{ color: col }}>
+                            <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
+                            <span className="ci-strength">{corrStrength(c.r)} · {c.n} days</span>
+                          </span>
+                          <span className="ci-bar" title={`correlation ${c.r.toFixed(2)}`}>
+                            <span className="ci-bar-mid" />
+                            <span className="ci-bar-fill" style={{ [neg ? "right" : "left"]: "50%", width: `${(Math.abs(pct) * 50).toFixed(1)}%`, background: col }} />
+                            <span className="ci-bar-dot" style={{ left: `${(50 + pct * 50).toFixed(1)}%`, background: col }} />
+                          </span>
+                          <span className="ci-r" style={{ color: col }}>{c.r.toFixed(2)}</span>
+                          <span className="ci-go">Chart + data</span>
+                        </button>
+                      );
+                    })}
+                    {corrWeakCount > 0 && (
+                      <button className="ci-more" onClick={() => setShowWeak((v) => !v)}>
+                        {showWeak ? "Hide weaker links" : `Show ${corrWeakCount} weaker link${corrWeakCount > 1 ? "s" : ""}`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {corrOpen && selectedCorr && (() => {
+                const r = selectedCorr.r, col = corrColor(r), last = corrSeries[corrSeries.length - 1];
+                const unit = (data.latest || []).find((x) => x.commodity === selectedCorr.commodity)?.unit || "units";
+                const exp = expiryOf(selectedCorr.pair_name);
+                return (
+                  <div className="pt-overlay bsc-overlay" onClick={(e) => { if (e.target === e.currentTarget) setCorrOpen(false); }}>
+                    <div className="pt-modal bsc-modal" role="dialog" aria-label="Stock and spread data">
+                      <div className="pt-modal-head">
+                        <div className="bsc-title">
+                          <span className="bsc-comm">{selectedCorr.commodity} <span className="bsc-pair-inl">· {selectedCorr.pair}</span></span>
+                          <span className="bsc-exp">Contract expiry {exp}</span>
+                        </div>
+                        <button type="button" className="pt-modal-x" onClick={() => setCorrOpen(false)} aria-label="Close">×</button>
+                      </div>
+                      <div className="bsc-body">
+                        <div className="bsc-summary bsc-summary-modal">
                           <div className="bsc-stat"><span>Link</span><b style={{ color: col }}>{r.toFixed(2)}</b><small>{corrStrength(r)}</small></div>
                           <div className="bsc-stat"><span>Reads as</span><b style={{ color: col }}>Stock ↑ → Spread {r < 0 ? "↓" : "↑"}</b><small>{selectedCorr.n} days</small></div>
                           {last && <div className="bsc-stat"><span>Latest stock</span><b>{fmtNum(last.stock, 0)}</b><small>{unit} · {dmy(last.date)}</small></div>}
@@ -480,52 +535,16 @@ export default function BullionStock() {
                               <span className="bs-muted">Move over the chart for a day's numbers</span>
                             </div>
                             <CorrChart series={corrSeries} hover={corrHover} setHover={setCorrHover} />
-                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} expiry={expiryOf(selectedCorr.pair_name)} />
+                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} expiry={exp} />
                           </>
                         ) : (
                           <div className="bs-note bs-slim">Not enough days for this pair yet.</div>
                         )}
                       </div>
-                    );
-                  })()}
-                  <div className="bs-card bsc-card">
-                    <div className="bs-card-h">All links · strongest first</div>
-                    <div className="ci-list">
-                      <div className="ci-hint">Does warehouse stock move the spread? Spread measured as <b>% of price</b> (spread ÷ price × 100), last ~6 months. Tap a link to see its chart and data above.</div>
-                      {corrShown.map((c) => {
-                        const neg = c.r < 0;
-                        const pct = Math.max(-1, Math.min(1, c.r));
-                        const col = corrColor(c.r);
-                        const seln = selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity;
-                        return (
-                          <button key={c.pair_name + c.commodity} className={`ci-row ${seln ? "sel" : ""}`} onClick={() => { setSelected(`${c.pair_name}|${c.commodity}`); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-                            <span className="ci-info">
-                              <span className="ci-name">{c.commodity}</span>
-                              <span className="ci-pair">{c.pair} · exp {expiryOf(c.pair_name)}</span>
-                            </span>
-                            <span className="ci-stmt" style={{ color: col }}>
-                              <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
-                              <span className="ci-strength">{corrStrength(c.r)} · {c.n} days</span>
-                            </span>
-                            <span className="ci-bar" title={`correlation ${c.r.toFixed(2)}`}>
-                              <span className="ci-bar-mid" />
-                              <span className="ci-bar-fill" style={{ [neg ? "right" : "left"]: "50%", width: `${(Math.abs(pct) * 50).toFixed(1)}%`, background: col }} />
-                              <span className="ci-bar-dot" style={{ left: `${(50 + pct * 50).toFixed(1)}%`, background: col }} />
-                            </span>
-                            <span className="ci-r" style={{ color: col }}>{c.r.toFixed(2)}</span>
-                            <span className="ci-go">{seln ? "Showing" : "View data"}</span>
-                          </button>
-                        );
-                      })}
-                      {corrWeakCount > 0 && (
-                        <button className="ci-more" onClick={() => setShowWeak((v) => !v)}>
-                          {showWeak ? "Hide weaker links" : `Show ${corrWeakCount} weaker link${corrWeakCount > 1 ? "s" : ""}`}
-                        </button>
-                      )}
                     </div>
                   </div>
-                </>
-              )}
+                );
+              })()}
             </div>
           )}
         </>
