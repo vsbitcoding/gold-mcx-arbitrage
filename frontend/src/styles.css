@@ -6255,3 +6255,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmd-table td.neg { color: var(--red); font-weight: 600; }
 .nmd .bsc-foot { position: static; }
 @media (max-width: 900px) { .nmd-dl { margin-left: 0; } .nmd-tablewrap { overflow-x: auto; } }
+
+.nm-histkind { margin-left: 6px; }
+.nm-histkind .oh-chip { white-space: nowrap; }
+@media (max-width: 1100px) { .nm-head-left { flex-wrap: wrap; } }

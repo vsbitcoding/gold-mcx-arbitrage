@@ -562,6 +562,17 @@ export default function NseMcxCrude() {
           title={live ? "" : [d?.nse?.error, d?.mcx?.error].filter(Boolean).join(" · ")}>
           {live ? "● Live" : "○ Feed issue"}
         </span>
+        {/* History has two sources; the choice sits up here beside the title,
+            in the room the header had, not as a row of its own. */}
+        {view === "history" && (
+          <div className="oh-group nm-histkind" role="tablist" aria-label="History source">
+            {[["snap", "Saved boards"], ["daily", "Daily since Apr 2024"]].map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={histKind === k}
+                className={`oh-chip ${histKind === k ? "on" : ""}`}
+                onClick={() => setHistKind(k)}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Rendered in BOTH views. The futures are the current market whichever
@@ -618,15 +629,6 @@ export default function NseMcxCrude() {
     return (
       <div className={`cru-page ${loadingHist && hist ? "nm-busy" : ""}`}>
         {head}
-        <div className="oh-controls nm-hist-controls nm-hist-kind">
-          <div className="oh-group" role="tablist" aria-label="History source">
-            {[["snap", "Saved boards (10:00 / 12:00 / 3:00)"], ["daily", "Daily closes since Apr 2024"]].map(([k, l]) => (
-              <button key={k} type="button" role="tab" aria-selected={histKind === k}
-                className={`oh-chip ${histKind === k ? "on" : ""}`}
-                onClick={() => setHistKind(k)}>{l}</button>
-            ))}
-          </div>
-        </div>
         {histKind === "daily" && <NseMcxDaily product={product} cfg={cfg} />}
         {histKind === "snap" && (<>
         <div className="oh-controls nm-hist-controls">
