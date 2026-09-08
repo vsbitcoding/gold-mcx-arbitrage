@@ -151,31 +151,28 @@ export default function NseMcxDaily({ product, cfg }) {
   return (
     <div className={`nmd ${loading && data ? "nm-busy" : ""}`}>
       <div className="nmd-controls">
-        <label className="nmd-f"><span>NSE expiry</span>
+        <label className="nmd-f nmd-w-exp"><span>NSE expiry</span>
           <select className="oh-weeks" value={expiry} onChange={(e) => { setExpiry(e.target.value); setStrike(""); setStart(""); setEnd(""); }}>
-            {(exps?.expiries || []).map((e) => <option key={e.nse} value={e.nse}>{dmy(e.nse)}{e.mcx ? `  (MCX ${dmy(e.mcx)})` : ""}</option>)}
+            {(exps?.expiries || []).map((e) => <option key={e.nse} value={e.nse}>{dmy(e.nse)}</option>)}
           </select></label>
-        <div className="nmd-f nmd-pair"><span>Compared with MCX expiry</span><b>{pair?.mcx ? dmy(pair.mcx) : "—"}</b><small>{pair?.gap_days != null ? `${pair.gap_days} days from the NSE expiry` : ""}</small></div>
+        <div className="nmd-f nmd-w-mcx"><span>MCX expiry</span><div className="nmd-static"><b>{pair?.mcx ? dmy(pair.mcx) : "—"}</b><small>{pair?.gap_days != null ? `${pair.gap_days} days apart` : ""}</small></div></div>
         <div className="nmd-f"><span>Period</span>
-          <div className="nmd-dates">
-            <div className="oh-group" role="tablist">
-              {[["all", "Whole contract"], ["30", "Last 30 days"], ["7", "Last 7 days"]].map(([k, l]) => {
-                const on = k === "all" ? (!start && !end) : (start === quick(k) && !end);
-                return <button key={k} type="button" role="tab" aria-selected={on} className={`oh-chip ${on ? "on" : ""}`}
-                  onClick={() => { if (k === "all") { setStart(""); setEnd(""); } else { setStart(quick(k)); setEnd(""); } }}>{l}</button>;
-              })}
-            </div>
-            <input type="date" className="oh-weeks" value={start} min={data?.from || ""} max={data?.to || ""} title="From" onChange={(e) => setStart(e.target.value)} />
-            <span className="nmd-to">to</span>
-            <input type="date" className="oh-weeks" value={end} min={data?.from || ""} max={data?.to || ""} title="To" onChange={(e) => setEnd(e.target.value)} />
+          <div className="oh-group" role="tablist">
+            {[["all", "Whole contract"], ["30", "Last 30 days"], ["7", "Last 7 days"]].map(([k, l]) => {
+              const on = k === "all" ? (!start && !end) : (start === quick(k) && !end);
+              return <button key={k} type="button" role="tab" aria-selected={on} className={`oh-chip ${on ? "on" : ""}`}
+                onClick={() => { if (k === "all") { setStart(""); setEnd(""); } else { setStart(quick(k)); setEnd(""); } }}>{l}</button>;
+            })}
           </div></div>
+        <label className="nmd-f nmd-w-date"><span>From</span><input type="date" className="oh-weeks" value={start} min={data?.from || ""} max={data?.to || ""} onChange={(e) => setStart(e.target.value)} /></label>
+        <label className="nmd-f nmd-w-date"><span>To</span><input type="date" className="oh-weeks" value={end} min={data?.from || ""} max={data?.to || ""} onChange={(e) => setEnd(e.target.value)} /></label>
         <div className="nmd-f"><span>Show</span>
           <div className="oh-group" role="tablist">
-            {[["", "Call + Put"], ["CE", "Call only"], ["PE", "Put only"]].map(([k, l]) => (
+            {[["", "Call + Put"], ["CE", "Call"], ["PE", "Put"]].map(([k, l]) => (
               <button key={k} type="button" role="tab" aria-selected={type === k} className={`oh-chip ${type === k ? "on" : ""}`} onClick={() => setType(k)}>{l}</button>
             ))}
           </div></div>
-        <label className="nmd-f"><span>Strike</span>
+        <label className="nmd-f nmd-w-strike"><span>Strike</span>
           <select className="oh-weeks" value={strike} onChange={(e) => setStrike(e.target.value)}>
             <option value="">All strikes</option>
             {strikes.map((s) => <option key={s} value={s}>{fmtNum(s, 0)}</option>)}
@@ -186,7 +183,7 @@ export default function NseMcxDaily({ product, cfg }) {
               title="Only days and strikes where BOTH exchanges traded; untraded wings settle at 0.10 and mean nothing"
               onClick={() => setTradedOnly((v) => !v)}>Traded only</button>
             <button type="button" className="oh-chip" title="Clear every filter" onClick={() => { setType(""); setStrike(""); setStart(""); setEnd(""); setTradedOnly(true); }}>Reset</button>
-            <button type="button" className="btn btn-primary btn-sm" disabled={!rows.length} onClick={downloadCsv}>Download CSV</button>
+            <button type="button" className="btn btn-primary btn-sm nmd-csv" disabled={!rows.length} onClick={downloadCsv}>Download CSV</button>
           </div></div>
       </div>
 
