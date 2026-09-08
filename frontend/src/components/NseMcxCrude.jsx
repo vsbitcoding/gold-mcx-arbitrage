@@ -578,9 +578,8 @@ export default function NseMcxCrude() {
       {/* Rendered in BOTH views. The futures are the current market whichever
           tab is open, and taking them away on the way to History was most of
           what made switching feel like a different page loading. */}
-      <Futures f={d?.future} cfg={cfg} />
-
       <div className="nm-head-end">
+        <Futures f={d?.future} cfg={cfg} />
         <div className="oh-group" role="tablist" aria-label="Commodity">
           {PRODUCTS.map((p) => (
             <button key={p.key} type="button" role="tab" aria-selected={product === p.key}

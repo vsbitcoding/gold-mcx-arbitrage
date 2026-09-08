@@ -6272,3 +6272,9 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-head-left { flex-wrap: nowrap !important; }
 .nm-head-end { justify-self: end; }
 @media (max-width: 1300px) { .nm-head { grid-template-columns: 1fr !important; } .nm-head-end { justify-self: start; } }
+
+/* header = [title · live · source] left, [futures · controls] right */
+.nm-head { grid-template-columns: auto 1fr !important; }
+.nm-head-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: flex-end; }
+.nm-head-end .nm-head-right { justify-self: auto; }
+@media (max-width: 1300px) { .nm-head { grid-template-columns: 1fr !important; } .nm-head-end { justify-content: flex-start; } }
