@@ -97,23 +97,28 @@ def _upsert(rows: list[dict]) -> int:
         return 0
     db = SessionLocal()
     try:
-        keys = {(r["exchange"], r["commodity"], r["trade_date"], r["expiry"], r["option_type"], r["strike"]) for r in rows}
+        # One bhavcopy carries BOTH commodities, so the existing rows are
+        # loaded per (exchange, commodity) - loading only the first batch's
+        # commodity let the other one insert duplicates (08-Sep backfill).
+        groups = {(r["exchange"], r["commodity"]) for r in rows}
         dates = {r["trade_date"] for r in rows}
-        exch = rows[0]["exchange"]; comm = rows[0]["commodity"]
-        have = {(x.exchange, x.commodity, x.trade_date, x.expiry, x.option_type, x.strike): x
-                for x in db.query(NseMcxOptDaily).filter(
+        have = {}
+        for exch, comm in groups:
+            for x in db.query(NseMcxOptDaily).filter(
                     NseMcxOptDaily.exchange == exch, NseMcxOptDaily.commodity == comm,
-                    NseMcxOptDaily.trade_date.in_(list(dates))).all()}
+                    NseMcxOptDaily.trade_date.in_(list(dates))).all():
+                have[(x.exchange, x.commodity, x.trade_date, x.expiry, x.option_type, x.strike)] = x
         n = 0
         for r in rows:
             k = (r["exchange"], r["commodity"], r["trade_date"], r["expiry"], r["option_type"], r["strike"])
             row = have.get(k)
-            if row:
+            if row is None:
+                row = NseMcxOptDaily(**r)
+                db.add(row)
+                have[k] = row
+            else:
                 for f in ("close", "settle", "ltp", "prev_close", "volume", "oi"):
                     setattr(row, f, r.get(f))
-            else:
-                db.add(NseMcxOptDaily(**r))
-                have[k] = True
             n += 1
         db.commit()
         return n
@@ -211,13 +216,67 @@ def nse_pull_expiry(s: requests.Session, commodity: str, expiry: str, otype: str
     return n
 
 
-def _nse_stored_span(commodity: str, expiry: str) -> tuple[str | None, str | None]:
+def nse_fut_expiries_seen(s: requests.Session, symbol: str, since: date, until: date) -> set[str]:
+    """Futures expiries listed on NSE between two dates, from the monthly boards."""
+    seen: set[str] = set()
+    cur = date(since.year, since.month, 1)
+    while cur <= until:
+        for off in range(0, 6):
+            d = cur + timedelta(days=off)
+            if d > until or d.weekday() >= 5:
+                continue
+            try:
+                r = _nse_get(s, symbol, {"instrumentType": "FUTENR", "from": d.strftime("%d-%m-%Y"), "to": d.strftime("%d-%m-%Y")})
+                data = r.json().get("data") or []
+            except Exception as e:  # noqa: BLE001
+                log.warning("nse fut expiries %s %s: %s", symbol, d, e)
+                data = []
+            exps = {_iso(x.get("COM_EXPIRY_DT")) for x in data if x.get("COM_INSTRUMENT") == "FUTENR"}
+            exps.discard(None)
+            if exps:
+                seen |= exps
+                break
+        cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return {e for e in seen if e >= since.isoformat()}
+
+
+def nse_pull_future(s: requests.Session, commodity: str, expiry: str, start: date | None = None) -> int:
+    """One future contract's daily closes (option_type FUT, strike 0)."""
+    symbol = SYMBOLS[commodity]
+    exp = datetime.strptime(expiry, "%Y-%m-%d").date()
+    frm = start or (exp - timedelta(days=130))
+    to = min(exp, date.today())
+    if frm > to:
+        return 0
+    r = _nse_get(s, symbol, {"instrumentType": "FUTENR", "year": str(exp.year), "expiryDate": exp.strftime("%d-%b-%Y"),
+                            "from": frm.strftime("%d-%m-%Y"), "to": to.strftime("%d-%m-%Y")}, csv_form=True)
+    if r.status_code != 200 or "text/csv" not in (r.headers.get("content-type") or ""):
+        raise RuntimeError(f"NSE {symbol} FUT {expiry}: http {r.status_code} {r.text[:80]!r}")
+    rows = []
+    for rec in csv.DictReader(io.StringIO(r.content.decode("utf-8-sig", "ignore"))):
+        rec = {k.strip(): v for k, v in rec.items() if k}
+        td = _iso(rec.get("DATE")); ex = _iso(rec.get("EXPIRY DATE"))
+        if not td or not ex or not _keep(commodity, td, ex, 0.0):
+            continue
+        rows.append({"exchange": "NSE", "commodity": commodity, "trade_date": td, "expiry": ex,
+                     "option_type": "FUT", "strike": 0.0,
+                     "close": _num(rec.get("CLOSE PRICE")), "settle": _num(rec.get("SETTLE PRICE")),
+                     "ltp": _num(rec.get("LAST PRICE")), "prev_close": None,
+                     "volume": _num(rec.get("Volume")), "oi": _num(rec.get("OPEN INTEREST"))})
+    n = _upsert(rows)
+    _status["rows"] += n
+    return n
+
+
+def _nse_stored_span(commodity: str, expiry: str, kind: str = "OPT") -> tuple[str | None, str | None]:
     from sqlalchemy import func
     db = SessionLocal()
     try:
-        lo, hi = db.query(func.min(NseMcxOptDaily.trade_date), func.max(NseMcxOptDaily.trade_date)).filter(
+        q = db.query(func.min(NseMcxOptDaily.trade_date), func.max(NseMcxOptDaily.trade_date)).filter(
             NseMcxOptDaily.exchange == "NSE", NseMcxOptDaily.commodity == commodity,
-            NseMcxOptDaily.expiry == expiry).one()
+            NseMcxOptDaily.expiry == expiry)
+        q = q.filter(NseMcxOptDaily.option_type == "FUT") if kind == "FUT" else q.filter(NseMcxOptDaily.option_type != "FUT")
+        lo, hi = q.one()
         return lo, hi
     finally:
         db.close()
@@ -251,6 +310,21 @@ def backfill_nse(since: date = SINCE, commodities: tuple = ("crude", "natgas")) 
                     out["errors"].append(f"{commodity} {exp} {otype}")
             out["expiries"] += 1
             _status["msg"] = f"NSE {commodity} {exp} done ({out['rows']} rows)"
+        for fexp in sorted(nse_fut_expiries_seen(s, symbol, since, today)):
+            lo, hi = _nse_stored_span(commodity, fexp, "FUT")
+            if hi and hi >= min(fexp, today.isoformat()):
+                continue
+            for attempt in range(3):
+                try:
+                    out["rows"] += nse_pull_future(s, commodity, fexp)
+                    break
+                except Exception as e:  # noqa: BLE001
+                    log.warning("nse %s FUT %s attempt %d: %s", commodity, fexp, attempt + 1, e)
+                    time.sleep(5 * (attempt + 1))
+                    s = _nse_session(symbol)
+            else:
+                out["errors"].append(f"{commodity} FUT {fexp}")
+            _status["msg"] = f"NSE {commodity} future {fexp} done ({out['rows']} rows)"
     return out
 
 
@@ -273,6 +347,11 @@ def refresh_nse_recent(days: int = 7) -> dict:
                     out["rows"] += nse_pull_expiry(s, commodity, exp, otype, start=today - timedelta(days=days))
                 except Exception as e:  # noqa: BLE001
                     out["errors"].append(f"{commodity} {exp} {otype}: {e}")
+        try:
+            for fexp in sorted(nse_fut_expiries_seen(s, symbol, today - timedelta(days=days), today))[:3]:
+                out["rows"] += nse_pull_future(s, commodity, fexp, start=today - timedelta(days=days))
+        except Exception as e:  # noqa: BLE001
+            out["errors"].append(f"{commodity} futures: {e}")
     return out
 
 
@@ -288,15 +367,20 @@ def ingest_mcx_csv(text: str) -> int:
     from app.services.bhav_history import _parse_expiry, _parse_trade_date
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
-        if (r.get("INSTRUMENTNAME") or "").strip() != "OPTFUT":
+        inst = (r.get("INSTRUMENTNAME") or "").strip()
+        if inst not in ("OPTFUT", "FUTCOM"):
             continue
         sym = (r.get("SYMBOL") or "").strip().upper()
         if sym not in _MCX_SYMBOLS:
             continue
-        ot = (r.get("OPTIONTYPE") or "").strip().upper()
         td = _parse_trade_date(r.get("DATE", "")); ex = _parse_expiry(r.get("EXPIRY_DATE", ""))
-        strike = _num(r.get("STRIKEPRICE"))
-        if ot not in ("CE", "PE") or not td or not ex or strike is None or not _keep(_MCX_SYMBOLS[sym], td, ex, strike):
+        if inst == "FUTCOM":
+            # the underlying future's close, one row per contract-day (strike 0)
+            ot, strike = "FUT", 0.0
+        else:
+            ot = (r.get("OPTIONTYPE") or "").strip().upper()
+            strike = _num(r.get("STRIKEPRICE"))
+        if ot not in ("CE", "PE", "FUT") or not td or not ex or strike is None or not _keep(_MCX_SYMBOLS[sym], td, ex, strike):
             continue
         rows.append({"exchange": "MCX", "commodity": _MCX_SYMBOLS[sym], "trade_date": td, "expiry": ex,
                      "option_type": ot, "strike": strike,
@@ -306,10 +390,14 @@ def ingest_mcx_csv(text: str) -> int:
     return _upsert(rows)
 
 
-def mcx_have_dates() -> set[str]:
+def mcx_have_dates(kind: str = "FUT") -> set[str]:
+    """Days already holding MCX rows of `kind` (FUT = futures, the newer part;
+    a day with futures stored has its options too)."""
     db = SessionLocal()
     try:
-        return {d for (d,) in db.query(NseMcxOptDaily.trade_date).filter(NseMcxOptDaily.exchange == "MCX").distinct()}
+        q = db.query(NseMcxOptDaily.trade_date).filter(NseMcxOptDaily.exchange == "MCX")
+        q = q.filter(NseMcxOptDaily.option_type == "FUT") if kind == "FUT" else q.filter(NseMcxOptDaily.option_type != "FUT")
+        return {d for (d,) in q.distinct()}
     finally:
         db.close()
 
@@ -369,13 +457,22 @@ def start_backfill(since: date = SINCE) -> bool:
 # --------------------------------------------------------------------------- #
 # reads
 # --------------------------------------------------------------------------- #
-def _expiries(commodity: str, exchange: str) -> list[str]:
+def _expiries(commodity: str, exchange: str, kind: str = "OPT") -> list[str]:
     db = SessionLocal()
     try:
-        return sorted(e for (e,) in db.query(NseMcxOptDaily.expiry).filter(
-            NseMcxOptDaily.commodity == commodity, NseMcxOptDaily.exchange == exchange).distinct())
+        q = db.query(NseMcxOptDaily.expiry).filter(NseMcxOptDaily.commodity == commodity, NseMcxOptDaily.exchange == exchange)
+        q = q.filter(NseMcxOptDaily.option_type == "FUT") if kind == "FUT" else q.filter(NseMcxOptDaily.option_type != "FUT")
+        return sorted(e for (e,) in q.distinct())
     finally:
         db.close()
+
+
+def _underlying_future(commodity: str, exchange: str, opt_expiry: str) -> str | None:
+    """The future an option month rides: the first future expiring on or after
+    the option's expiry (NSE crude 10-Sep option -> 21-Sep future; MCX 17-Sep
+    option -> 21-Sep future)."""
+    later = [e for e in _expiries(commodity, exchange, "FUT") if e >= opt_expiry]
+    return later[0] if later else None
 
 
 def _nearest(target: str, pool: list[str]) -> str | None:
@@ -388,7 +485,7 @@ def _nearest(target: str, pool: list[str]) -> str | None:
 def expiries(commodity: str) -> dict:
     """NSE expiries with the MCX expiry each is compared against, newest first,
     plus the day span each pairing has data for."""
-    nse = _expiries(commodity, "NSE"); mcx = _expiries(commodity, "MCX")
+    nse = _expiries(commodity, "NSE", "OPT"); mcx = _expiries(commodity, "MCX", "OPT")
     out = []
     for e in sorted(nse, reverse=True):
         m = _nearest(e, mcx)
@@ -405,7 +502,7 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
     days both exchanges traded. A leg with no close on one side is left None
     and the difference with it; a dash is truer than a number from one side.
     """
-    mcx_exp = mcx_expiry or _nearest(nse_expiry, _expiries(commodity, "MCX"))
+    mcx_exp = mcx_expiry or _nearest(nse_expiry, _expiries(commodity, "MCX", "OPT"))
     step = STEP[commodity]
     db = SessionLocal()
     try:
@@ -423,6 +520,16 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
             return q.all()
         nse_rows = fetch("NSE", nse_expiry)
         mcx_rows = fetch("MCX", mcx_exp) if mcx_exp else []
+        nse_fut_exp = _underlying_future(commodity, "NSE", nse_expiry)
+        mcx_fut_exp = _underlying_future(commodity, "MCX", mcx_exp) if mcx_exp else None
+
+        def fut(exchange, exp):
+            if not exp:
+                return {}
+            q = db.query(NseMcxOptDaily).filter(NseMcxOptDaily.commodity == commodity, NseMcxOptDaily.exchange == exchange,
+                                                 NseMcxOptDaily.expiry == exp, NseMcxOptDaily.option_type == "FUT")
+            return {r.trade_date: (r.close or r.settle) for r in q.all()}
+        nse_fut = fut("NSE", nse_fut_exp); mcx_fut = fut("MCX", mcx_fut_exp)
     finally:
         db.close()
 
@@ -430,14 +537,18 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
         # NSE: the close, else the settle (an untraded strike still settles);
         # MCX: the bhavcopy close.
         return r.close if r.close else (r.settle if r.exchange == "NSE" else None)
-    nse = {(r.trade_date, r.strike, r.option_type): r for r in nse_rows if r.strike % step == 0}
-    mcx = {(r.trade_date, r.strike, r.option_type): r for r in mcx_rows if r.strike % step == 0}
+    nse = {(r.trade_date, r.strike, r.option_type): r for r in nse_rows if r.option_type != "FUT" and r.strike % step == 0}
+    mcx = {(r.trade_date, r.strike, r.option_type): r for r in mcx_rows if r.option_type != "FUT" and r.strike % step == 0}
     days = sorted({k[0] for k in nse} & {k[0] for k in mcx}, reverse=True)
     strikes = sorted({k[1] for k in nse} & {k[1] for k in mcx})
     rows = []
+    futures = {}
     for d in days:
+        nf, mf = nse_fut.get(d), mcx_fut.get(d)
+        futures[d] = {"nse": nf, "mcx": mf, "diff": round(nf - mf, 2) if (nf is not None and mf is not None) else None,
+                      "diff_pct": round((nf - mf) / mf * 100, 2) if (nf is not None and mf) else None}
         for k in strikes:
-            entry = {"date": d, "strike": k}
+            entry = {"date": d, "strike": k, "fut": futures[d]}
             any_leg = False
             for ot in ("CE", "PE"):
                 n, m = nse.get((d, k, ot)), mcx.get((d, k, ot))
@@ -453,5 +564,6 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
             if any_leg:
                 rows.append(entry)
     return {"commodity": commodity, "nse_expiry": nse_expiry, "mcx_expiry": mcx_exp, "step": step,
+            "nse_future_expiry": nse_fut_exp, "mcx_future_expiry": mcx_fut_exp, "futures": futures,
             "strikes": strikes, "days": len(days), "from": days[-1] if days else None, "to": days[0] if days else None,
             "rows": rows}
