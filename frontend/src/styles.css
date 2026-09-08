@@ -6259,3 +6259,16 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-histkind { margin-left: 6px; }
 .nm-histkind .oh-chip { white-space: nowrap; }
 @media (max-width: 1100px) { .nm-head-left { flex-wrap: wrap; } }
+
+/* NSE vs MCX header: compact future chips so the title keeps one line (08-Sep) */
+.nm-chip { padding: 6px 12px !important; gap: 10px !important; min-width: 0 !important; border-radius: 10px !important; }
+.nm-chip-name { font-size: 9.5px !important; letter-spacing: .05em !important; }
+.nm-chip-exp { font-size: 10px !important; }
+.nm-chip b { font-size: 18px !important; }
+.nm-chip i { font-size: 10.5px !important; }
+.nm-head-right { gap: 8px !important; }
+.nm-head { grid-template-columns: auto auto 1fr !important; gap: 12px !important; }
+.nm-head h2 { white-space: nowrap; font-size: 17px !important; }
+.nm-head-left { flex-wrap: nowrap !important; }
+.nm-head-end { justify-self: end; }
+@media (max-width: 1300px) { .nm-head { grid-template-columns: 1fr !important; } .nm-head-end { justify-self: start; } }
