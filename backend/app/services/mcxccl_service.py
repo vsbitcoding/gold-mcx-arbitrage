@@ -351,7 +351,10 @@ def report() -> dict:
         v = sp.decrease_pct if sp.decrease_pct is not None else sp.increase_pct
         if v is None:
             continue
-        spread_hist.setdefault(sp.pair_name, []).append({"date": sp.snap_date, "spread": v})
+        spread_hist.setdefault(sp.pair_name, []).append({
+            "date": sp.snap_date, "spread": v,
+            # the point value too, for the date-wise table under the chart (client, 08-Sep)
+            "value": sp.decrease_spread if sp.decrease_spread is not None else sp.increase_spread})
 
     stale = None
     if latest_date:

@@ -71,7 +71,8 @@ export default function Header({
   const userMenuRef = useRef(null);
   const tabsRef = useRef(null);
   const moreRef = useRef(null);
-  const widthsRef = useRef(null);
+  const widthsRef = useRef(null);      // { key: px } measured once per font load
+  const availRef = useRef(0);          // px the tab strip may use, from the last measure
   const [visibleCount, setVisibleCount] = useState(NAV_ITEMS.length);
 
   // Fourteen tabs do not fit on one row even at 1920px. Rather than scrolling
@@ -85,9 +86,9 @@ export default function Header({
       if (!widthsRef.current) {
         const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
         if (btns.length !== NAV.length) return;      // still hidden, retry next resize
-        widthsRef.current = btns.map((b) => b.getBoundingClientRect().width);
+        widthsRef.current = Object.fromEntries(btns.map((b) => [b.dataset.key, b.getBoundingClientRect().width]));
       }
-      const widths = widthsRef.current;
+      const widths = NAV.map((it) => widthsRef.current[it.key] || 90);
       const gap = parseFloat(getComputedStyle(nav).columnGap || "4") || 4;
       // Measure the ROW's free space rather than the nav box: the strip hugs its
       // tabs now (so More sits right beside them instead of drifting to the far
@@ -102,6 +103,7 @@ export default function Header({
       // reserve room for More whenever it is not already in the row
       const hasMore = kids.some((k) => k.classList.contains("nav-more"));
       const avail = row.clientWidth - taken - (hasMore ? 0 : 86) - 2;
+      availRef.current = avail;
 
       let used = 0, n = 0;
       for (let i = 0; i < widths.length; i++) {
@@ -210,6 +212,22 @@ export default function Header({
       const dropped = shownItems[shownItems.length - 1];
       shownItems = [...shownItems.slice(0, -1), cur];
       overflowItems = [dropped, ...overflowItems.filter((i) => i.key !== cur.key)];
+    }
+  }
+  // The swapped-in tab may be wider than the one it replaced ("Bullion Stock"
+  // for "Premium") and then painted half under More. Trim from the end until
+  // the strip fits the measured room again; the current page always stays.
+  if (widthsRef.current && availRef.current > 0 && overflowItems.length) {
+    const w = (it) => (widthsRef.current[it.key] || 90) + 4;
+    let total = shownItems.reduce((s, it) => s + w(it), 0) + 6;
+    while (total > availRef.current && shownItems.length > 1) {
+      const idx = [...shownItems].reverse().findIndex((it) => it.key !== page);
+      if (idx < 0) break;
+      const at = shownItems.length - 1 - idx;
+      const [gone] = shownItems.splice(at, 1);
+      shownItems = [...shownItems];
+      overflowItems = [gone, ...overflowItems];
+      total -= w(gone);
     }
   }
 

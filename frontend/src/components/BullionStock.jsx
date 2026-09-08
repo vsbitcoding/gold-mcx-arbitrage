@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -29,7 +29,7 @@ function buildSeries(spreadHist, stockSeries) {
   for (const sp of spreadHist) {
     let stk = null;
     for (const r of stockSeries) { if (r.date <= sp.date) stk = r.units; else break; }
-    if (stk != null) out.push({ date: sp.date, stock: stk, spread: sp.spread });
+    if (stk != null) out.push({ date: sp.date, stock: stk, spread: sp.spread, value: sp.value ?? null });
   }
   return out;
 }
@@ -54,21 +54,113 @@ function StockTrend({ series }) {
   );
 }
 
-function MiniChart({ series }) {
-  if (series.length < 2) return null;
-  const norm = (vals) => {
-    const mn = Math.min(...vals), mx = Math.max(...vals), sp = mx - mn;
-    return vals.map((v) => (sp === 0 ? 50 : 100 - ((v - mn) / sp) * 90 - 5));
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dmy = (iso) => iso ? `${iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(2, 4)}` : "";
+const signed = (v, d = 2) => (v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + fmtNum(Math.abs(v), d));
+
+// Stock (left axis) against spread % (right axis) at real pixel size, with a
+// hover readout - the client reads numbers off this chart, so it has axes.
+function CorrChart({ series, hover, setHover }) {
+  const box = useRef(null);
+  const [W, setW] = useState(900);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(() => setW(Math.max(320, el.clientWidth)));
+    ro.observe(el);
+    setW(Math.max(320, el.clientWidth));
+    return () => ro.disconnect();
+  }, []);
+  const H = 300, padL = 64, padR = 58, padT = 14, padB = 28;
+  const n = series.length;
+  const geo = useMemo(() => {
+    if (n < 2) return null;
+    const sv = series.map((d) => d.stock), pv = series.map((d) => d.spread);
+    const rng = (vals) => { let lo = Math.min(...vals), hi = Math.max(...vals); if (hi === lo) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.08; return [lo - pad, hi + pad]; };
+    const [sLo, sHi] = rng(sv), [pLo, pHi] = rng(pv);
+    const x = (i) => padL + (i / (n - 1)) * (W - padL - padR);
+    const ys = (v) => padT + (1 - (v - sLo) / (sHi - sLo)) * (H - padT - padB);
+    const yp = (v) => padT + (1 - (v - pLo) / (pHi - pLo)) * (H - padT - padB);
+    const path = (vals, y) => vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const ticks = (lo, hi, k = 4) => Array.from({ length: k + 1 }, (_, i) => lo + ((hi - lo) * i) / k);
+    const xt = []; let lastM = "";
+    series.forEach((d, i) => { const m = d.date.slice(0, 7); if (m !== lastM) { lastM = m; xt.push({ x: x(i), label: `${MONTHS[+d.date.slice(5, 7) - 1]} ${d.date.slice(2, 4)}` }); } });
+    return { x, ys, yp, sPath: path(sv, ys), pPath: path(pv, yp), sTicks: ticks(sLo, sHi), pTicks: ticks(pLo, pHi), xt };
+  }, [series, W, n]);
+  if (!geo) return null;
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - r.left;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.abs(geo.x(i) - px); if (d < bd) { bd = d; best = i; } }
+    setHover(best);
   };
-  const sN = norm(series.map((d) => d.stock));
-  const pN = norm(series.map((d) => d.spread));
-  const X = (i) => (i / (series.length - 1)) * 100;
-  const path = (arr) => arr.map((y, i) => `${i ? "L" : "M"}${X(i).toFixed(2)},${y.toFixed(2)}`).join(" ");
+  const hv = hover != null ? series[hover] : null;
+  const tipLeft = hv ? Math.min(Math.max(geo.x(hover) - 90, padL), W - padR - 180) : 0;
   return (
-    <svg className="bs-trend" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Stock vs spread">
-      <path d={path(sN)} fill="none" stroke="var(--yellow)" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      <path d={path(pN)} fill="none" stroke="#4da3ff" strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
+    <div className="bsc-box" ref={box}>
+      <svg className="bsc-svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Warehouse stock against spread percent">
+        {geo.sTicks.map((v, i) => <line key={i} x1={padL} x2={W - padR} y1={geo.ys(v)} y2={geo.ys(v)} className="bsc-grid" />)}
+        {geo.sTicks.map((v, i) => <text key={"l" + i} x={padL - 8} y={geo.ys(v) + 4} className="bsc-ax bsc-ax-l">{fmtNum(v, 0)}</text>)}
+        {geo.pTicks.map((v, i) => <text key={"r" + i} x={W - padR + 8} y={geo.yp(v) + 4} className="bsc-ax bsc-ax-r">{fmtNum(v, 2)}%</text>)}
+        {geo.xt.map((tk, i) => <text key={"x" + i} x={tk.x} y={H - 8} className="bsc-ax bsc-ax-x">{tk.label}</text>)}
+        <path d={geo.sPath} className="bsc-line bsc-stock" />
+        <path d={geo.pPath} className="bsc-line bsc-spread" />
+        {hv && (
+          <g>
+            <line x1={geo.x(hover)} x2={geo.x(hover)} y1={padT} y2={H - padB} className="bsc-cursor" />
+            <circle cx={geo.x(hover)} cy={geo.ys(hv.stock)} r="4.5" className="bsc-dot bsc-stock" />
+            <circle cx={geo.x(hover)} cy={geo.yp(hv.spread)} r="4.5" className="bsc-dot bsc-spread" />
+          </g>
+        )}
+      </svg>
+      {hv && (
+        <div className="bsc-tip" style={{ left: tipLeft }}>
+          <b>{dmy(hv.date)}</b>
+          <span><i className="bsc-sw bsc-stock" /> Stock {fmtNum(hv.stock, 0)}</span>
+          <span><i className="bsc-sw bsc-spread" /> Spread {fmtNum(hv.spread, 2)}%{hv.value != null ? ` · ${fmtNum(hv.value, 2)} pts` : ""}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Every point of the chart as a row, newest first, with the day's change.
+function CorrTable({ series, hover, setHover, unit }) {
+  const rows = useMemo(() => {
+    const out = [];
+    for (let i = series.length - 1; i >= 0; i--) {
+      const d = series[i], prev = series[i - 1];
+      out.push({ i, ...d,
+        dStock: prev ? d.stock - prev.stock : null,
+        dSpread: prev ? d.spread - prev.spread : null,
+        dValue: prev && d.value != null && prev.value != null ? d.value - prev.value : null });
+    }
+    return out;
+  }, [series]);
+  if (!rows.length) return null;
+  return (
+    <div className="bsc-tablewrap">
+      <table className="bsc-table">
+        <thead><tr>
+          <th>Date</th><th>Stock ({unit})</th><th>Stock change</th><th>Spread (pts)</th><th>Change</th><th>Spread %</th><th>Change</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.date} className={hover === r.i ? "hl" : ""} onMouseEnter={() => setHover(r.i)} onMouseLeave={() => setHover(null)}>
+              <td className="bsc-date">{dmy(r.date)}</td>
+              <td>{fmtNum(r.stock, 0)}</td>
+              <td className={r.dStock > 0 ? "pos" : r.dStock < 0 ? "neg" : "flat"}>{signed(r.dStock, 0)}</td>
+              <td>{r.value == null ? "—" : fmtNum(r.value, 2)}</td>
+              <td className={r.dValue > 0 ? "pos" : r.dValue < 0 ? "neg" : "flat"}>{signed(r.dValue, 2)}</td>
+              <td className="bsc-strong">{fmtNum(r.spread, 2)}%</td>
+              <td className={r.dSpread > 0 ? "pos" : r.dSpread < 0 ? "neg" : "flat"}>{signed(r.dSpread, 2)}{r.dSpread != null ? "%" : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="bsc-foot">{rows.length} days · {dmy(series[0].date)} to {dmy(series[series.length - 1].date)} · stock is the exchange's eligible deliverable units on that day (the day's last published figure)</div>
+    </div>
   );
 }
 
@@ -87,13 +179,14 @@ export default function BullionStock() {
   useEffect(() => { try { localStorage.setItem("arbi_bs_view", view); } catch {} }, [view]);
   const [showWeak, setShowWeak] = useState(false);
   const [histPage, setHistPage] = useState(1); // Daily History pagination (6-month backfill → many rows)
+  const [corrHover, setCorrHover] = useState(null);   // shared between the chart and its table
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
       const d = await api.bullionStock();
       setData(d);
-      if (d?.correlation?.length) setSelected((s) => s || d.correlation[0].pair_name);
+      if (d?.correlation?.length) setSelected((s) => s || `${d.correlation[0].pair_name}|${d.correlation[0].commodity}`);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -170,7 +263,8 @@ export default function BullionStock() {
   }, [data]);
 
   const selectedCorr = useMemo(
-    () => data?.correlation?.find((c) => c.pair_name === selected) || data?.correlation?.[0],
+    () => data?.correlation?.find((c) => `${c.pair_name}|${c.commodity}` === selected)
+      || data?.correlation?.find((c) => c.pair_name === selected) || data?.correlation?.[0],
     [data, selected]
   );
   const corrSeries = useMemo(() => {
@@ -345,58 +439,83 @@ export default function BullionStock() {
           </>
           )}
 
-          {/* Spread Correlation view — chart on top, table below (full width) */}
+          {/* Spread Correlation view (client, 08-Sep): the selected link's summary,
+              its chart with axes and hover, every point as a table, then the
+              ranked links to pick from. */}
           {view === "corr" && (
-            <div className="bs-card bs-corr-card">
-              <div className="bs-card-h">Stock ↔ Spread Correlation</div>
+            <div className="bsc-view">
               {!data.correlation?.length ? (
                 <div className="bs-note bs-slim">Building automatically — appears after a few days of history once the warehouse stock has changed. No action needed.</div>
               ) : (
-                <div className="bs-corr-grid">
-                  {corrSeries.length >= 2 && (
-                    <div className="bs-corr-chart">
-                      <div className="bs-legend">
-                        <span><i className="dot" style={{ background: "var(--yellow)" }} /> Stock</span>
-                        <span><i className="dot" style={{ background: "#4da3ff" }} /> Spread %</span>
-                        <span className="bs-muted">{selectedCorr.pair}</span>
+                <>
+                  {selectedCorr && (() => {
+                    const r = selectedCorr.r, col = corrColor(r), last = corrSeries[corrSeries.length - 1];
+                    const unit = (data.latest || []).find((x) => x.commodity === selectedCorr.commodity)?.unit || "units";
+                    return (
+                      <div className="bs-card bsc-card">
+                        <div className="bsc-summary">
+                          <div className="bsc-title">
+                            <span className="bsc-comm">{selectedCorr.commodity}</span>
+                            <span className="bsc-pair">{selectedCorr.pair}</span>
+                          </div>
+                          <div className="bsc-stat"><span>Link</span><b style={{ color: col }}>{r.toFixed(2)}</b><small>{corrStrength(r)}</small></div>
+                          <div className="bsc-stat"><span>Reads as</span><b style={{ color: col }}>Stock ↑ → Spread {r < 0 ? "↓" : "↑"}</b><small>{selectedCorr.n} days</small></div>
+                          {last && <div className="bsc-stat"><span>Latest stock</span><b>{fmtNum(last.stock, 0)}</b><small>{unit} · {dmy(last.date)}</small></div>}
+                          {last && <div className="bsc-stat"><span>Latest spread</span><b>{fmtNum(last.spread, 2)}%</b><small>{last.value != null ? `${fmtNum(last.value, 2)} pts` : ""}</small></div>}
+                        </div>
+                        {corrSeries.length >= 2 ? (
+                          <>
+                            <div className="bs-legend bsc-legend">
+                              <span><i className="bsc-sw bsc-stock" /> Warehouse stock ({unit}, left axis)</span>
+                              <span><i className="bsc-sw bsc-spread" /> Spread % of price (right axis)</span>
+                              <span className="bs-muted">Move over the chart for a day's numbers</span>
+                            </div>
+                            <CorrChart series={corrSeries} hover={corrHover} setHover={setCorrHover} />
+                            <CorrTable series={corrSeries} hover={corrHover} setHover={setCorrHover} unit={unit} />
+                          </>
+                        ) : (
+                          <div className="bs-note bs-slim">Not enough days for this pair yet.</div>
+                        )}
                       </div>
-                      <MiniChart series={corrSeries} />
-                      <div className="bs-axis"><span>{corrSeries[0].date}</span><span>{corrSeries[corrSeries.length - 1].date}</span></div>
-                    </div>
-                  )}
-                  <div className="ci-list">
-                    <div className="ci-hint">Does warehouse stock move the spread? Spread measured as <b>% of price</b> (spread ÷ price × 100), last ~6 months. Strongest links first — tap one to see its chart above.</div>
-                    {corrShown.map((c) => {
-                      const neg = c.r < 0;
-                      const pct = Math.max(-1, Math.min(1, c.r));
-                      const col = corrColor(c.r);
-                      const seln = selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity;
-                      return (
-                        <button key={c.pair_name + c.commodity} className={`ci-row ${seln ? "sel" : ""}`} onClick={() => setSelected(c.pair_name)}>
-                          <span className="ci-info">
-                            <span className="ci-name">{c.commodity}</span>
-                            <span className="ci-pair">{c.pair}</span>
-                          </span>
-                          <span className="ci-stmt" style={{ color: col }}>
-                            <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
-                            <span className="ci-strength">{corrStrength(c.r)} · {c.n} days</span>
-                          </span>
-                          <span className="ci-bar" title={`correlation ${c.r.toFixed(2)}`}>
-                            <span className="ci-bar-mid" />
-                            <span className="ci-bar-fill" style={{ [neg ? "right" : "left"]: "50%", width: `${(Math.abs(pct) * 50).toFixed(1)}%`, background: col }} />
-                            <span className="ci-bar-dot" style={{ left: `${(50 + pct * 50).toFixed(1)}%`, background: col }} />
-                          </span>
-                          <span className="ci-r" style={{ color: col }}>{c.r.toFixed(2)}</span>
+                    );
+                  })()}
+                  <div className="bs-card bsc-card">
+                    <div className="bs-card-h">All links · strongest first</div>
+                    <div className="ci-list">
+                      <div className="ci-hint">Does warehouse stock move the spread? Spread measured as <b>% of price</b> (spread ÷ price × 100), last ~6 months. Tap a link to see its chart and data above.</div>
+                      {corrShown.map((c) => {
+                        const neg = c.r < 0;
+                        const pct = Math.max(-1, Math.min(1, c.r));
+                        const col = corrColor(c.r);
+                        const seln = selectedCorr && c.pair_name === selectedCorr.pair_name && c.commodity === selectedCorr.commodity;
+                        return (
+                          <button key={c.pair_name + c.commodity} className={`ci-row ${seln ? "sel" : ""}`} onClick={() => { setSelected(`${c.pair_name}|${c.commodity}`); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                            <span className="ci-info">
+                              <span className="ci-name">{c.commodity}</span>
+                              <span className="ci-pair">{c.pair}</span>
+                            </span>
+                            <span className="ci-stmt" style={{ color: col }}>
+                              <span>Stock ↑ → Spread {neg ? "↓" : "↑"}</span>
+                              <span className="ci-strength">{corrStrength(c.r)} · {c.n} days</span>
+                            </span>
+                            <span className="ci-bar" title={`correlation ${c.r.toFixed(2)}`}>
+                              <span className="ci-bar-mid" />
+                              <span className="ci-bar-fill" style={{ [neg ? "right" : "left"]: "50%", width: `${(Math.abs(pct) * 50).toFixed(1)}%`, background: col }} />
+                              <span className="ci-bar-dot" style={{ left: `${(50 + pct * 50).toFixed(1)}%`, background: col }} />
+                            </span>
+                            <span className="ci-r" style={{ color: col }}>{c.r.toFixed(2)}</span>
+                            <span className="ci-go">{seln ? "Showing" : "View data"}</span>
+                          </button>
+                        );
+                      })}
+                      {corrWeakCount > 0 && (
+                        <button className="ci-more" onClick={() => setShowWeak((v) => !v)}>
+                          {showWeak ? "Hide weaker links" : `Show ${corrWeakCount} weaker link${corrWeakCount > 1 ? "s" : ""}`}
                         </button>
-                      );
-                    })}
-                    {corrWeakCount > 0 && (
-                      <button className="ci-more" onClick={() => setShowWeak((v) => !v)}>
-                        {showWeak ? "Hide weaker links" : `Show ${corrWeakCount} weaker link${corrWeakCount > 1 ? "s" : ""}`}
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
