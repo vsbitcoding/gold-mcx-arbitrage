@@ -6294,7 +6294,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-head-left .nm-head-right { gap: 10px !important; }
 
 /* daily view filter bar: one row of even fields, actions at the end */
-.nmd-controls { display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(150px, .9fr) minmax(360px, 2fr) minmax(200px, 1fr) minmax(120px, .7fr) auto; gap: 14px; align-items: end; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
+.nmd-controls { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(140px, .8fr) minmax(140px, .8fr) minmax(340px, 1.8fr) minmax(200px, 1fr) minmax(120px, .7fr) auto; gap: 14px; align-items: end; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
 .nmd-f { min-width: 0; }
 .nmd-f .oh-weeks { width: 100%; }
 .nmd-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -6305,19 +6305,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 1400px) { .nmd-controls { grid-template-columns: 1fr 1fr 1fr; } .nmd-actions { grid-column: 1 / -1; } .nmd-actbtns { justify-content: flex-end; } }
 @media (max-width: 800px) { .nmd-controls { grid-template-columns: 1fr; } }
 
-/* daily view filter bar v2: two aligned rows */
-.nmd-controls { display: flex !important; flex-direction: column; gap: 12px; padding: 12px 16px; }
-.nmd-row { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
-.nmd-f-exp .oh-weeks { min-width: 180px; }
-.nmd-f-strike .oh-weeks { min-width: 150px; }
-.nmd-f-grow { flex: 1; }
-.nmd-static { display: flex; flex-direction: column; justify-content: center; min-height: 34px; }
-.nmd-static b { font-size: 13.5px; font-weight: 800; line-height: 1.2; }
-.nmd-static small { font-size: 10.5px; color: var(--text-muted); }
-.nmd-actions { margin-left: auto; }
 .nmd-table th.nmd-futh { color: var(--accent); }
 .nmd-table td.nmd-fut { font-weight: 700; background: rgba(201,162,78,.06); }
 
-.nmd-controls { align-items: stretch !important; }
-.nmd-row { justify-content: flex-start; width: 100%; }
 .nmd-table th, .nmd-table td { padding-left: 14px !important; padding-right: 14px !important; }
