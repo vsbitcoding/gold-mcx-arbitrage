@@ -6283,3 +6283,12 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nm-histkind { margin-left: 0; }
 
 .nmd-table td.nmd-dim { color: var(--text-muted); font-weight: 400; }
+
+/* future chips: a little larger, using the header's free room (08-Sep) */
+.nm-chip { padding: 8px 18px !important; gap: 14px !important; }
+.nm-chip-name { font-size: 10.5px !important; }
+.nm-chip-exp { font-size: 11px !important; }
+.nm-chip b { font-size: 22px !important; }
+.nm-chip i { font-size: 11.5px !important; }
+.nm-head-left { gap: 14px !important; }
+.nm-head-left .nm-head-right { gap: 10px !important; }
