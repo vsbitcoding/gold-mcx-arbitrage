@@ -6261,7 +6261,7 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 @media (max-width: 1100px) { .nm-head-left { flex-wrap: wrap; } }
 
 /* NSE vs MCX header: compact future chips so the title keeps one line (08-Sep) */
-.nm-chip { padding: 6px 12px !important; gap: 10px !important; min-width: 0 !important; border-radius: 10px !important; }
+.nm-chip { padding: 6px 12px !important; gap: 10px !important; width: auto !important; min-width: 0 !important; border-radius: 10px !important; }
 .nm-chip-name { font-size: 9.5px !important; letter-spacing: .05em !important; }
 .nm-chip-exp { font-size: 10px !important; }
 .nm-chip b { font-size: 18px !important; }
