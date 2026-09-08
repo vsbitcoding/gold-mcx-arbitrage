@@ -124,6 +124,23 @@ export default function Header({
     return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
   }, []);
 
+  // Counts (61, 38, ...) arrive after the first paint and widen the tabs, so
+  // the widths measured before them are short and the last tab paints half
+  // under More. After every render: refresh the measured widths from the DOM
+  // and, if the strip actually overflows its box, move one more tab to More.
+  useLayoutEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+    const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
+    if (btns.length) {
+      widthsRef.current = { ...(widthsRef.current || {}) };
+      btns.forEach((b) => { widthsRef.current[b.dataset.key] = b.getBoundingClientRect().width; });
+    }
+    if (nav.scrollWidth > nav.clientWidth + 1 && visibleCount > 1) {
+      setVisibleCount((v) => Math.max(1, v - 1));
+    }
+  });
+
   // Close the overflow menu on outside-click / Escape.
   useEffect(() => {
     if (!moreOpen) return;
