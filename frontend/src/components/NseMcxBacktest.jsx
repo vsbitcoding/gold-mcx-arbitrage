@@ -141,8 +141,11 @@ export default function NseMcxBacktest({ product, cfg }) {
   const [sortKey, setSortKey] = useState("entry_date");
   const [sortDir, setSortDir] = useState(1);
   const [detail, setDetail] = useState(null);
-  useEffect(() => { try { localStorage.setItem(keyFor(product), JSON.stringify(p)); } catch {} }, [p, product]);
-  useEffect(() => { setP(loadParams(product)); setRes(null); api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
+  // Which product the current params belong to: on a switch the save below must
+  // not write the old product's settings under the new product's key first.
+  const loadedFor = useRef(product);
+  useEffect(() => { if (loadedFor.current !== product) return; try { localStorage.setItem(keyFor(product), JSON.stringify(p)); } catch {} }, [p, product]);
+  useEffect(() => { loadedFor.current = product; setP(loadParams(product)); setRes(null); api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
   const set = (k) => (e) => setP((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
   async function run() {
