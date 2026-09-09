@@ -87,7 +87,7 @@ export default function NseMcxBacktest({ product, cfg }) {
   async function run() {
     setBusy(true); setErr(null);
     try {
-      const body = { ...p, commodity: product, end: p.end || null, expiry: p.expiry || null, max_rolls: p.max_rolls === "" ? null : p.max_rolls };
+      const body = { ...p, commodity: product, end: p.end || null, expiry: p.expiry || null, max_rolls: p.max_rolls === "" ? 0 : p.max_rolls };
       const r = await api.nseMcxBacktest(body);
       setRes(r); setPage(1);
     } catch (e) { setErr(e.message); }
@@ -151,7 +151,7 @@ export default function NseMcxBacktest({ product, cfg }) {
           </div>
           <Field label="Shift (days before)" hint="A losing leg shifts to its next expiry this many days before its own expiry (NSE leg at NSE expiry, MCX leg at MCX expiry)"><input type="number" min="0" className="oh-weeks bt-num" value={p.roll_days} onChange={set("roll_days")} disabled={!p.loss_roll} /></Field>
           <Field label="Shift legs"><select className="oh-weeks" value={p.roll_legs} onChange={set("roll_legs")} disabled={!p.loss_roll}><option value="both">NSE and MCX</option><option value="NSE">NSE only</option><option value="MCX">MCX only</option></select></Field>
-          <Field label="Max shifts" hint="How many times one trade may shift. 0 = never shift (a loss squares off too), blank = no limit"><input type="number" min="0" placeholder="no limit" className="oh-weeks bt-num" value={p.max_rolls} onChange={set("max_rolls")} disabled={!p.loss_roll} /></Field>
+          <Field label="Max shifts" hint="How many times one trade may shift. 0 = never shift (a loss squares off too)"><input type="number" min="0" className="oh-weeks bt-num" value={p.max_rolls} onChange={set("max_rolls")} onBlur={() => { if (p.max_rolls === "") setP((s) => ({ ...s, max_rolls: 0 })); }} disabled={!p.loss_roll} /></Field>
           <div className="bt-actions">
             <button type="button" className="oh-chip" onClick={() => setP({ ...DEFAULTS })}>Defaults</button>
             <button type="button" className="btn btn-primary" disabled={busy} onClick={run}>{busy ? "Running…" : "Run backtest"}</button>
