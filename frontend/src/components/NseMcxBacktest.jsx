@@ -219,7 +219,9 @@ export default function NseMcxBacktest({ product, cfg }) {
                       <td>{signed(t.diff)}</td>
                       <td>{num(t.entry_future, 0)}</td>
                       <td className="bt-why">{t.reason === "adjust" ? `adjusted from ${t.parent}` : "signal"}
-                        {t.rolls > 0 && <small className="bt-sub">{t.roll_log.map((r) => `${r.exch} ${dmy(r.date)} → ${dmy(r.to)}`).join(", ")}</small>}</td>
+                        {t.rolls > 0 && <small className="bt-sub bt-shifts" title={t.roll_log.map((r) => `${r.exch} ${dmy(r.date)} → ${dmy(r.to)}`).join("\n")}>
+                          {t.roll_log.slice(0, 3).map((r, j) => <span key={j}>{r.exch} {dmy(r.date)} → {dmy(r.to)}</span>)}
+                          {t.rolls > 3 && <span>+{t.rolls - 3} more shifts</span>}</small>}</td>
                       <td>{dmy(t.exit_date)}<small className="bt-sub">{EXIT_LABEL[t.exit_reason] || t.exit_reason}{t.rolls > 0 ? ` · ${t.rolls} shift${t.rolls > 1 ? "s" : ""}` : ""}</small></td>
                       <td>{num(t.buy_exit)} / {num(t.sell_exit)}</td>
                       <td className={t.pnl_points > 0 ? "pos" : t.pnl_points < 0 ? "neg" : ""}>{signed(t.pnl_points)}</td>
