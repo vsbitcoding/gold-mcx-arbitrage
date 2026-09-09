@@ -545,10 +545,15 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
     futures = {}
     for d in days:
         nf, mf = nse_fut.get(d), mcx_fut.get(d)
+        # The day's ATM: the ladder strike nearest the future's close (NSE's,
+        # else MCX's). The client reads the day-wise ATM premium off this row.
+        ref = nf if nf is not None else mf
+        atm = min(strikes, key=lambda k: abs(k - ref)) if (strikes and ref) else None
         futures[d] = {"nse": nf, "mcx": mf, "diff": round(nf - mf, 2) if (nf is not None and mf is not None) else None,
-                      "diff_pct": round((nf - mf) / mf * 100, 2) if (nf is not None and mf) else None}
+                      "diff_pct": round((nf - mf) / mf * 100, 2) if (nf is not None and mf) else None,
+                      "atm": atm}
         for k in strikes:
-            entry = {"date": d, "strike": k, "fut": futures[d]}
+            entry = {"date": d, "strike": k, "fut": futures[d], "atm": k == futures[d]["atm"]}
             any_leg = False
             for ot in ("CE", "PE"):
                 n, m = nse.get((d, k, ot)), mcx.get((d, k, ot))
