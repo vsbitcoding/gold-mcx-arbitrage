@@ -187,7 +187,7 @@ export default function NseMcxBacktest({ product, cfg }) {
           <Field label="NSE expiry" hint="One contract, or every expiry in the range">
             <select className="oh-weeks" value={p.expiry} onChange={set("expiry")}>
               <option value="">All expiries in range</option>
-              {exps.map((e) => <option key={e.nse} value={e.nse}>{dmy(e.nse)} (MCX {dmy(e.mcx)})</option>)}
+              {exps.filter((e) => e.nse_traded_days == null || e.nse_traded_days > 0).map((e) => <option key={e.nse} value={e.nse}>{dmy(e.nse)} (MCX {dmy(e.mcx)})</option>)}
             </select></Field>
           <Field label="Side"><select className="oh-weeks" value={p.sides} onChange={set("sides")}><option value="both">Call + Put</option><option value="CE">Call only</option><option value="PE">Put only</option></select></Field>
           <Field label="Mode" hint="hold = run to expiry; roll = on a move close the old strike and take the new one; add = keep the old and add the new">
@@ -203,7 +203,6 @@ export default function NseMcxBacktest({ product, cfg }) {
           <Field label="₹ per point"><input type="number" step="any" className="oh-weeks bt-num" value={p.point_value} onChange={set("point_value")} /></Field>
           <Field label="Pick" hint="Which strike when several qualify"><select className="oh-weeks" value={p.pick} onChange={set("pick")}><option value="max">Widest difference</option><option value="near">Nearest to ATM</option></select></Field>
           <div className="bt-checks">
-            <label className="pt-symtick"><input type="checkbox" checked={!!p.liquid_only} onChange={set("liquid_only")} /> Traded on both exchanges</label>
             <label className="pt-symtick"><input type="checkbox" checked={!!p.multi} onChange={set("multi")} /> Several strikes per side</label>
           </div>
         </div>
@@ -227,11 +226,11 @@ export default function NseMcxBacktest({ product, cfg }) {
       {err && <div className="settings-banner danger">⚠ {err}</div>}
       {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both before the first expiry when in profit, or shift a losing trade to the next expiry.</div>}
       {detail && <TradeDetail t={detail} pointValue={+p.point_value || 100} onClose={() => setDetail(null)} />}
-      {res && s.trades === 0 && p.liquid_only && (
+      {res && s.trades === 0 && (
         <div className="oh-note">
           <b>No trade fired.</b> Entry needs the option traded on both exchanges that day, and NSE traded {product === "natgas" ? "natural gas" : "crude"} options on{" "}
           {res.by_expiry.reduce((a, e) => a + (e.nse_traded_days || 0), 0)} of {res.by_expiry.reduce((a, e) => a + (e.days || 0), 0)} days in this range
-          (see the NSE traded column below). The <b>Best diff seen</b> column shows the widest premium difference each expiry reached inside the entry window; when it is below the diff rule, nothing could fire. Lower the diff rule, untick <b>Traded on both exchanges</b> to test on settlement prices, or widen the date range.
+          (see the NSE traded column below). The <b>Best diff seen</b> column shows the widest premium difference each expiry reached inside the entry window; when it is below the diff rule, nothing could fire. Lower the diff rule or widen the date range.
         </div>
       )}
       {res && (

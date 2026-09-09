@@ -57,7 +57,7 @@ DEFAULTS = {
     "move_points": 500.0,
     "point_value": 100.0,
     "multi": False,                 # several open strikes per side per expiry
-    "liquid_only": True,            # entry needs volume on BOTH exchanges that day
+    "liquid_only": True,            # entry needs volume on BOTH exchanges that day (always; the client removed the switch 09-Sep)
     "pick": "max",                  # max = widest difference among candidates, near = nearest to ATM
     "entry_days": 30,               # entries only this many calendar days before the first expiry (0 = any day)
     "exit_days": 10,                # square off this many calendar days before the first expiry (0 = on expiry)
@@ -534,19 +534,24 @@ def run(params: dict) -> dict:
         p[k] = max(0, int(float(p[k])))
     mr = (params or {}).get("max_rolls")
     p["max_rolls"] = 0 if mr in (None, "") else max(0, int(float(mr)))
-    p["multi"] = bool(p["multi"]); p["liquid_only"] = bool(p["liquid_only"]); p["loss_roll"] = bool(p["loss_roll"])
+    p["multi"] = bool(p["multi"]); p["liquid_only"] = True; p["loss_roll"] = bool(p["loss_roll"])
     if p["roll_legs"] not in ("both", "NSE", "MCX"):
         p["roll_legs"] = "both"
     commodity = p["commodity"]
     pairs = hist.expiries(commodity)["expiries"]          # newest first
-    chosen = [e for e in pairs if e["mcx"] and (not p["expiry"] or e["nse"] == p["expiry"])
-              and (not p["start"] or e["nse"] >= p["start"]) and (not p["end"] or e["nse"] <= p["end"])]
+    # Only expiries NSE actually traded (client, 09-Sep). The "To" date limits the
+    # days walked, not which expiries qualify: the running contract stays in even
+    # when "To" is today and its expiry is next week.
+    chosen = [e for e in pairs if e["mcx"] and e.get("nse_traded_days", 1) > 0 and (not p["expiry"] or e["nse"] == p["expiry"])
+              and (not p["start"] or e["nse"] >= p["start"])]
     chosen.sort(key=lambda e: e["nse"])
     ds = _dataset(commodity)
     per_expiry = []
     trades: list[dict] = []
     for e in chosen:
         res = run_expiry(ds, e["nse"], e["mcx"], p)
+        if res["days"] == 0:
+            continue                                   # nothing inside the date range
         pts = sum(t["pnl_points"] or 0 for t in res["trades"])
         wins = sum(1 for t in res["trades"] if (t["pnl_points"] or 0) > 0)
         per_expiry.append({"nse_expiry": e["nse"], "mcx_expiry": e["mcx"], "gap_days": res["gap_days"], "threshold": res["threshold"],
