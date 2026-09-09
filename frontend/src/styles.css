@@ -6358,4 +6358,10 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bt-sub { display: block; font-size: 10px; color: var(--text-muted); }
 .bt-shifts { display: flex; flex-direction: column; align-items: center; gap: 1px; white-space: nowrap; cursor: help; }
 .bt-table tr.nmd-dim td { color: var(--text-muted); }
+.bt-table tr.bt-trow { cursor: pointer; }
+.bt-table tr.bt-trow:hover td { background: var(--bg-hover, rgba(201,162,78,.08)); }
+.bt-modal { width: min(1100px, 96vw); }
+.bt-modal .bsc-body { overflow: auto; display: block; }
+.bt-daily { margin-top: 10px; }
+.bt-daily tr.bt-daily-note td { font-weight: 700; }
 @media (max-width: 1200px) { .bt-tiles { grid-template-columns: repeat(3, 1fr); } .bt-actions { margin-left: 0; } }
