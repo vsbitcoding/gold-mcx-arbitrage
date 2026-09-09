@@ -16,7 +16,7 @@ first expiry. Rules from the notebook, every number a parameter:
           leg is shifted to its exchange's next expiry `roll_days` before its
           own expiry (NSE leg first when NSE expires first, MCX leg later), the
           same strike, and the check repeats at the new first expiry. `max_rolls`
-          caps the shifts (0 = never shift, blank = no cap); `roll_legs` limits which leg may shift.
+          caps the shifts (0 = never shift); `roll_legs` limits which leg may shift.
   modes   hold        - nothing between entry and exit
           roll (b1)   - future moves `move_points` against a side (down hurts
                         the CE, up hurts the PE): close that strike, open the
@@ -63,7 +63,7 @@ DEFAULTS = {
     "loss_roll": True,              # a losing trade is not squared: each leg shifts to the next expiry
     "roll_days": 1,                 # shift a leg this many calendar days before its own expiry
     "roll_legs": "both",            # both | NSE | MCX
-    "max_rolls": 0,                 # 0 = never shift (a loss squares off too), None/blank = no cap
+    "max_rolls": 0,                 # 0 = never shift (a loss squares off too); a big number = practically no cap
 }
 
 
@@ -345,7 +345,7 @@ def _manage(pos: Position, book: _Book, day: str, p: dict) -> bool:
     # a contract expired without a close to act on: settle at the latest prices
     if any(leg.exp < day for leg in pos.legs.values()):
         return _close(pos, book, day, "last price", fallback=True)
-    can_roll = p["loss_roll"] and (p["max_rolls"] is None or pos.rolls < p["max_rolls"])
+    can_roll = p["loss_roll"] and pos.rolls < p["max_rolls"]
     # 1. the square-off date for the current legs: profit closes, loss carries
     if not pos.sq_done and pos.sq_due and day >= pos.sq_due:
         pnl = _mark(pos, book, day)
@@ -479,8 +479,8 @@ def run(params: dict) -> dict:
         p[k] = float(p[k])
     for k in ("entry_days", "exit_days", "roll_days"):
         p[k] = max(0, int(float(p[k])))
-    mr = (params or {}).get("max_rolls", 0)
-    p["max_rolls"] = None if mr in (None, "") else max(0, int(float(mr)))
+    mr = (params or {}).get("max_rolls")
+    p["max_rolls"] = 0 if mr in (None, "") else max(0, int(float(mr)))
     p["multi"] = bool(p["multi"]); p["liquid_only"] = bool(p["liquid_only"]); p["loss_roll"] = bool(p["loss_roll"])
     if p["roll_legs"] not in ("both", "NSE", "MCX"):
         p["roll_legs"] = "both"
