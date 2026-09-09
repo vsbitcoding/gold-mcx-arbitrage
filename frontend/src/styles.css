@@ -6324,3 +6324,5 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .nmd-actbtns { display: flex; gap: 8px; align-items: center; }
 .nmd-csv { white-space: nowrap; }
 .nmd-controls .oh-chip { white-space: nowrap; }
+
+.nmd-atm { margin-left: 6px; font-size: 9px; font-weight: 900; letter-spacing: .06em; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: var(--on-accent); vertical-align: middle; }

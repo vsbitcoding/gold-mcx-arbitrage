@@ -93,7 +93,8 @@ export default function NseMcxDaily({ product, cfg }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [page, setPage] = useState(1);
-  const [tradedOnly, setTradedOnly] = useState(true);
+  const [rowMode, setRowMode] = useState("atm");     // atm | traded | all
+  const tradedOnly = rowMode === "traded";
   const dec = cfg?.decimals ?? 2;
   const quick = (days) => { const d = new Date(); d.setDate(d.getDate() - Number(days)); return d.toISOString().slice(0, 10); };
 
@@ -130,10 +131,15 @@ export default function NseMcxDaily({ product, cfg }) {
   const pair = exps?.expiries?.find((e) => e.nse === expiry);
   const allRows = useMemo(() => (data?.rows || []).filter((r) => !strike || r.strike === Number(strike)), [data, strike]);
   // Traded only: keep a row when at least one shown side traded on both exchanges.
-  const rows = useMemo(() => (tradedOnly
-    ? allRows.filter((r) => (type !== "PE" && traded(r.ce)) || (type !== "CE" && traded(r.pe)))
-    : allRows), [allRows, tradedOnly, type]);
-  useEffect(() => { setPage(1); }, [tradedOnly]);
+  // ATM only = one row per day, the strike nearest that day's future close
+  // (the client's "ATM premium day-wise"). Traded only = both exchanges
+  // printed volume. All = every ladder strike.
+  const rows = useMemo(() => {
+    if (rowMode === "atm") return allRows.filter((r) => r.atm);
+    if (rowMode === "traded") return allRows.filter((r) => (type !== "PE" && traded(r.ce)) || (type !== "CE" && traded(r.pe)));
+    return allRows;
+  }, [allRows, rowMode, type]);
+  useEffect(() => { setPage(1); }, [rowMode]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const safe = Math.min(page, pages);
   const shown = rows.slice((safe - 1) * PAGE, safe * PAGE);
@@ -141,9 +147,9 @@ export default function NseMcxDaily({ product, cfg }) {
   const showCE = type !== "PE", showPE = type !== "CE";
 
   function downloadCsv() {
-    const head = ["Date", "NSE expiry", "MCX expiry", "NSE future", "MCX future", "Future diff", "Strike", "NSE call", "MCX call", "Call diff", "Call diff %", "NSE put", "MCX put", "Put diff", "Put diff %"];
+    const head = ["Date", "NSE expiry", "MCX expiry", "NSE future", "MCX future", "Future diff", "Strike", "ATM", "NSE call", "MCX call", "Call diff", "Call diff %", "NSE put", "MCX put", "Put diff", "Put diff %"];
     const lines = [head.join(",")];
-    rows.forEach((r) => lines.push([r.date, data.nse_expiry, data.mcx_expiry, r.fut?.nse ?? "", r.fut?.mcx ?? "", r.fut?.diff ?? "", r.strike, r.ce.nse ?? "", r.ce.mcx ?? "", r.ce.diff ?? "", pctOf(r.ce) ?? "", r.pe.nse ?? "", r.pe.mcx ?? "", r.pe.diff ?? "", pctOf(r.pe) ?? ""].join(",")));
+    rows.forEach((r) => lines.push([r.date, data.nse_expiry, data.mcx_expiry, r.fut?.nse ?? "", r.fut?.mcx ?? "", r.fut?.diff ?? "", r.strike, r.atm ? "ATM" : "", r.ce.nse ?? "", r.ce.mcx ?? "", r.ce.diff ?? "", pctOf(r.ce) ?? "", r.pe.nse ?? "", r.pe.mcx ?? "", r.pe.diff ?? "", pctOf(r.pe) ?? ""].join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -183,10 +189,15 @@ export default function NseMcxDaily({ product, cfg }) {
           </select></label>
         <div className="nmd-f nmd-actions"><span>&nbsp;</span>
           <div className="nmd-actbtns">
-            <button type="button" aria-pressed={tradedOnly} className={`oh-chip ${tradedOnly ? "on" : ""}`}
-              title="Only days and strikes where BOTH exchanges traded; untraded wings settle at 0.10 and mean nothing"
-              onClick={() => setTradedOnly((v) => !v)}>Traded only</button>
-            <button type="button" className="oh-chip" title="Clear every filter" onClick={() => { setType(""); setStrike(""); setStart(""); setEnd(""); setTradedOnly(true); }}>Reset</button>
+            <div className="oh-group" role="tablist" aria-label="Rows">
+              {[["atm", "ATM only", "One row per day: the strike nearest that day's future close"],
+                ["traded", "Traded only", "Only strikes where BOTH exchanges traded that day"],
+                ["all", "All strikes", "Every strike on the ladder"]].map(([k, l, tip]) => (
+                <button key={k} type="button" role="tab" aria-selected={rowMode === k} title={tip}
+                  className={`oh-chip ${rowMode === k ? "on" : ""}`} onClick={() => setRowMode(k)}>{l}</button>
+              ))}
+            </div>
+            <button type="button" className="oh-chip" title="Clear every filter" onClick={() => { setType(""); setStrike(""); setStart(""); setEnd(""); setRowMode("atm"); }}>Reset</button>
             <button type="button" className="btn btn-primary btn-sm nmd-csv" disabled={!rows.length} onClick={downloadCsv}>Download CSV</button>
           </div></div>
       </div>
@@ -199,13 +210,13 @@ export default function NseMcxDaily({ product, cfg }) {
       {data && (
         <>
           <div className="nmd-sub">
-            <b>{cfg?.label || product}</b> · options NSE {dmy(data.nse_expiry)} vs MCX {dmy(data.mcx_expiry)} · futures NSE {dmy(data.nse_future_expiry)} vs MCX {dmy(data.mcx_future_expiry)} · {data.days} trading days {data.from ? `(${dmy(data.from)} to ${dmy(data.to)})` : ""} · closing prices, difference = NSE − MCX{tradedOnly ? " · traded on both exchanges only" : ""}
+            <b>{cfg?.label || product}</b> · options NSE {dmy(data.nse_expiry)} vs MCX {dmy(data.mcx_expiry)} · futures NSE {dmy(data.nse_future_expiry)} vs MCX {dmy(data.mcx_future_expiry)} · {data.days} trading days {data.from ? `(${dmy(data.from)} to ${dmy(data.to)})` : ""} · closing prices, difference = NSE − MCX{rowMode === "atm" ? " · ATM strike of each day" : rowMode === "traded" ? " · traded on both exchanges only" : ""}
           </div>
           {strike && rows.length > 1 && <DiffChart rows={rows} strike={Number(strike)} />}
           {rows.length === 0 ? (
             <div className="oh-note">
-              {tradedOnly && allRows.length
-                ? <>No day where BOTH exchanges traded this contract on the ladder yet. <button type="button" className="nmd-link" onClick={() => setTradedOnly(false)}>Show untraded strikes too</button>.</>
+              {rowMode !== "all" && allRows.length
+                ? <>Nothing for this view yet. <button type="button" className="nmd-link" onClick={() => setRowMode("all")}>Show all strikes</button>.</>
                 : "No days where both exchanges have this contract."}
             </div>
           ) : (
@@ -233,7 +244,7 @@ export default function NseMcxDaily({ product, cfg }) {
                         <><td className="nmd-fut">{num(r.fut?.nse, dec)}</td><td className="nmd-fut">{num(r.fut?.mcx, dec)}</td>
                           <td className={`nmd-fut ${r.fut?.diff > 0 ? "pos" : r.fut?.diff < 0 ? "neg" : ""}`}>{signed(r.fut?.diff, dec)}</td></>
                       ) : <><td /><td /><td /></>}
-                      <td className="nmd-strike">{fmtNum(r.strike, 0)}</td>
+                      <td className="nmd-strike">{fmtNum(r.strike, 0)}{r.atm && <span className="nmd-atm">ATM</span>}</td>
                       {showCE && <Leg leg={r.ce} dec={dec} />}
                       {showPE && <Leg leg={r.pe} dec={dec} />}
                     </tr>
