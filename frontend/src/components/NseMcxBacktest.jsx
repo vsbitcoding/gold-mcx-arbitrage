@@ -106,9 +106,9 @@ export default function NseMcxBacktest({ product, cfg }) {
   const th = (k, l) => <th onClick={() => { if (sortKey === k) setSortDir(-sortDir); else { setSortKey(k); setSortDir(1); } }} className="bt-sort">{l}{sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>;
 
   function downloadCsv() {
-    const head = ["Entry date", "NSE expiry", "MCX expiry", "Side", "Strike", "Buy on", "Buy premium", "Sell on", "Sell premium", "Diff", "Entry future", "Reason", "Exit date", "Exit reason", "Buy exit", "Sell exit", "Shifts", "Final NSE expiry", "Final MCX expiry", "P&L points", "P&L Rs", "Days"];
+    const head = ["Entry date", "NSE expiry", "MCX expiry", "Side", "Strike", "Buy on", "Buy premium", "Sell on", "Sell premium", "Diff", "Entry future", "Reason", "Exit date", "Exit reason", "Buy exit", "Sell exit", "Shifts", "Shift details", "Shifted legs P&L", "Final NSE expiry", "Final MCX expiry", "P&L points", "P&L Rs", "Days"];
     const lines = [head.join(",")];
-    trades.forEach((t) => lines.push([t.entry_date, t.nse_expiry, t.mcx_expiry, t.side, t.strike, t.buy_exch, t.buy_px, t.sell_exch, t.sell_px, t.diff, t.entry_future ?? "", t.reason, t.exit_date ?? "", t.exit_reason ?? "", t.buy_exit ?? "", t.sell_exit ?? "", t.rolls, t.exit_nse_expiry, t.exit_mcx_expiry, t.pnl_points ?? "", t.pnl_rs ?? "", t.days ?? ""].join(",")));
+    trades.forEach((t) => lines.push([t.entry_date, t.nse_expiry, t.mcx_expiry, t.side, t.strike, t.buy_exch, t.buy_px, t.sell_exch, t.sell_px, t.diff, t.entry_future ?? "", t.reason, t.exit_date ?? "", t.exit_reason ?? "", t.buy_exit ?? "", t.sell_exit ?? "", t.rolls, `"${(t.roll_log || []).map((r) => `${r.exch} ${r.date}: ${r.from} out ${r.out} / ${r.to} in ${r.in}`).join("; ")}"`, t.rolls ? t.realised : "", t.exit_nse_expiry, t.exit_mcx_expiry, t.pnl_points ?? "", t.pnl_rs ?? "", t.days ?? ""].join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backtest-${product}-${p.mode}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -219,11 +219,11 @@ export default function NseMcxBacktest({ product, cfg }) {
                       <td>{signed(t.diff)}</td>
                       <td>{num(t.entry_future, 0)}</td>
                       <td className="bt-why">{t.reason === "adjust" ? `adjusted from ${t.parent}` : "signal"}
-                        {t.rolls > 0 && <small className="bt-sub bt-shifts" title={t.roll_log.map((r) => `${r.exch} ${dmy(r.date)} → ${dmy(r.to)}`).join("\n")}>
-                          {t.roll_log.slice(0, 3).map((r, j) => <span key={j}>{r.exch} {dmy(r.date)} → {dmy(r.to)}</span>)}
-                          {t.rolls > 3 && <span>+{t.rolls - 3} more shifts</span>}</small>}</td>
+                        {t.rolls > 0 && <small className="bt-sub bt-shifts" title={t.roll_log.map((r) => `${r.exch} ${dmy(r.date)}: ${dmy(r.from)} closed @ ${num(r.out)}, ${dmy(r.to)} opened @ ${num(r.in)}`).join("\n")}>
+                          {t.roll_log.slice(0, 3).map((r, j) => <span key={j}>{r.exch} {dmy(r.date)}: out @ {num(r.out)} → {dmy(r.to)} @ {num(r.in)}</span>)}
+                          {t.rolls > 3 && <span>+{t.rolls - 3} more shifts (hover)</span>}</small>}</td>
                       <td>{dmy(t.exit_date)}<small className="bt-sub">{EXIT_LABEL[t.exit_reason] || t.exit_reason}{t.rolls > 0 ? ` · ${t.rolls} shift${t.rolls > 1 ? "s" : ""}` : ""}</small></td>
-                      <td>{num(t.buy_exit)} / {num(t.sell_exit)}</td>
+                      <td>{num(t.buy_exit)} / {num(t.sell_exit)}{t.rolls > 0 && <small className="bt-sub">shifted legs {signed(t.realised)} pts</small>}</td>
                       <td className={t.pnl_points > 0 ? "pos" : t.pnl_points < 0 ? "neg" : ""}>{signed(t.pnl_points)}</td>
                       <td className={t.pnl_rs > 0 ? "pos" : t.pnl_rs < 0 ? "neg" : ""}>{rs(t.pnl_rs)}</td>
                       <td>{t.days ?? "—"}</td>
