@@ -124,6 +124,8 @@ def get_table() -> dict:
         near_q = quote_store.get(p["near_security_id"])
         far_price = _bid(far_q)    # far month Buy Price (bid)
         near_price = _ask(near_q)  # near month Sell Price (ask)
+        far_ask, near_bid = _ask(far_q), _bid(near_q)      # the other side: far Sell (ask) - near Buy (bid)
+        increase = round(far_ask - near_bid, 2) if far_ask and near_bid else None
         difference = pct = None
         if far_price and near_price:
             difference = round(far_price - near_price, 2)
@@ -134,7 +136,7 @@ def get_table() -> dict:
             "month": f'{p["near_expiry"].strftime("%b")}–{p["far_expiry"].strftime("%b")}',
             "near_month": p["near_expiry"].strftime("%d %b %Y"),
             "far_month": p["far_expiry"].strftime("%d %b %Y"),
-            "far_price": far_price,      # 1392.15
+            "far_price": far_price, "increase": increase, "far_ask": far_ask, "near_bid": near_bid,      # 1392.15
             "near_price": near_price,    # 1376.30
             "difference": difference,    # 15.85
             "pct": pct,                  # 1.15

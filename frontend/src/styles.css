@@ -3955,7 +3955,19 @@ body.dark .mc-aluminium .metal-card-head { color: #b9c6d4; }
 body.dark .mc-zinc      .metal-card-head { color: #8fb4d8; }
 body.dark .mc-nickel    .metal-card-head { color: #cabf8c; }
 body.dark .mc-lead      .metal-card-head { color: #9fb0c2; }
-.metal-card-body { padding: 2px 12px 4px; }
+.metal-card-body { padding: 0 0 2px; }
+/* Metal / Other Commodity rows in the Calendar board's shape: Expiry | Dec | Inc | % (client, 10-Sep) */
+.metal-card-head { position: relative; }
+.metal-card-head .sc-count { text-transform: none; letter-spacing: 0; }
+.mrow { display: grid; grid-template-columns: minmax(150px, 1.6fr) 1fr 1fr 0.8fr; align-items: center; gap: 6px; padding: 5px 11px; border-bottom: 1px dashed var(--border-light); }
+.mrow:last-child { border-bottom: none; }
+.mrow:not(.mrow-head):hover { background: var(--bg-hover); }
+.mrow-head { background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+.mrow-head span { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.mrow-head .sc-c { text-align: center; }
+.mrow .sc-exp { font-size: 12.5px; }
+.mrow .sc-exp-txt { overflow: visible; }
+.mc-nopct .mrow { grid-template-columns: minmax(150px, 1.6fr) 1fr 1fr; }
 
 .metal-row {
   display: grid;

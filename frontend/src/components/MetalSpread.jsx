@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
-import { fmtNum } from "../utils/format.js";
+import { fmtSpread } from "../utils/format.js";
 
 function signCls(v) {
   if (v == null) return "neutral";
@@ -9,7 +9,7 @@ function signCls(v) {
 
 function fmtSigned(v, decimals) {
   if (v == null) return "—";
-  return (v >= 0 ? "+" : "−") + fmtNum(Math.abs(v), decimals);
+  return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(decimals);
 }
 
 // Real-life metal colour theme per family (minis share their parent's colour).
@@ -93,25 +93,21 @@ export default function MetalSpread({
         <div className="metal-cards">
           {cards.map((c) => (
             <div className={`metal-card mc-${c.color}${showPct ? "" : " mc-nopct"}`} key={c.metal}>
-              <div className="metal-card-head">{c.metal}</div>
+              <div className="metal-card-head">{c.metal}<span className="sc-count">{c.rows.length} exp</span></div>
               <div className="metal-card-body">
+                <div className="mrow mrow-head">
+                  <span>Expiry</span><span className="sc-c">▼ Dec</span><span className="sc-c">▲ Inc</span>{showPct && <span className="sc-c">%</span>}
+                </div>
                 {c.rows.map((r, i) => (
-                  <div className="metal-row" key={i}>
-                    <div className="mr-month">{r.month}</div>
-                    <div className="mr-diff">
-                      <span className={`mr-diff-val ${signCls(r.difference)}`}>
-                        {fmtSigned(r.difference, 2)}
-                      </span>
-                      {r.far_price != null && r.near_price != null && (
-                        <span className="mr-calc">
-                          {fmtNum(r.far_price, 2)}−{fmtNum(r.near_price, 2)}
-                        </span>
-                      )}
-                    </div>
+                  <div className="mrow" key={i} title={`Dec = far Buy − near Sell · Inc = far Sell − near Buy`}>
+                    <span className="sc-exp">
+                      <span className="sc-exp-txt">{r.near_month} − {r.far_month}</span>
+                      {i === 0 && <span className="sc-front" title="Front month">★</span>}
+                    </span>
+                    <span className="sc-dec">{fmtSpread(r.difference)}</span>
+                    <span className="sc-inc">{fmtSpread(r.increase)}</span>
                     {showPct && (
-                      <div className={`mr-pct ${signCls(r.pct)}`}>
-                        {r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}
-                      </div>
+                      <span className={`sc-pct ${signCls(r.pct)}`}>{r.pct == null ? "—" : fmtSigned(r.pct, 2) + "%"}</span>
                     )}
                   </div>
                 ))}
