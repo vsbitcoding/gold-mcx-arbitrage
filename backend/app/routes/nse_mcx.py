@@ -383,6 +383,14 @@ def nse_mcx_daily(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
     return nse_opt_history.compare(commodity, expiry, start, end, type, strike, mcx_expiry)
 
 
+@router.post("/nse-mcx/backtest")
+def nse_mcx_backtest(body: dict, user: str = Depends(get_current_user)):
+    """The premium-arbitrage backtester over the daily closes. Body = any of
+    nse_mcx_backtest.DEFAULTS; missing keys take the defaults."""
+    from app.services import nse_mcx_backtest
+    return nse_mcx_backtest.run(body or {})
+
+
 @router.post("/nse-mcx/daily/backfill")
 def nse_mcx_daily_backfill(user: str = Depends(get_current_user)):
     from app.security import require_admin

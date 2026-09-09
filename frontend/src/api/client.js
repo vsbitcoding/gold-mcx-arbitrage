@@ -185,6 +185,7 @@ export const api = {
     request(`/api/nse-mcx/graph?commodity=${encodeURIComponent(commodity)}` +
             `&side=${side}&month=${month}&days=${days}` +
             (strike == null ? "" : `&strike=${strike}`)),
+  nseMcxBacktest: (params) => request("/api/nse-mcx/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
   nseMcxDailyExpiries: (commodity = "crude") => request(`/api/nse-mcx/daily/expiries?commodity=${commodity}`),
   nseMcxDaily: ({ commodity = "crude", expiry, mcxExpiry = null, start = null, end = null, type = null, strike = null } = {}) => {
     const q = new URLSearchParams({ commodity, expiry });
