@@ -572,14 +572,17 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
                 return {}
             q = db.query(NseMcxOptDaily).filter(NseMcxOptDaily.commodity == commodity, NseMcxOptDaily.exchange == exchange,
                                                  NseMcxOptDaily.expiry == exp, NseMcxOptDaily.option_type == "FUT")
-            return {r.trade_date: (r.close or r.settle) for r in q.all()}
+            # NSE's future seldom trades: an untraded day's "close" is a stale print, the settlement is the level
+            return {r.trade_date: (r.settle if (exchange == "NSE" and r.settle and not r.volume) else (r.close or r.settle)) for r in q.all()}
         nse_fut = fut("NSE", nse_fut_exp); mcx_fut = fut("MCX", mcx_fut_exp)
     finally:
         db.close()
 
     def px(r):
-        # NSE: the close, else the settle (an untraded strike still settles);
-        # MCX: the bhavcopy close.
+        # NSE: the close when the strike traded, else the settlement (NSE repeats a
+        # stale last-traded close for weeks); MCX: the bhavcopy close.
+        if r.exchange == "NSE" and r.settle and not r.volume:
+            return r.settle
         return r.close if r.close else (r.settle if r.exchange == "NSE" else None)
     nse = {(r.trade_date, r.strike, r.option_type): r for r in nse_rows if r.option_type != "FUT" and r.strike % step == 0}
     mcx = {(r.trade_date, r.strike, r.option_type): r for r in mcx_rows if r.option_type != "FUT" and r.strike % step == 0}
@@ -589,9 +592,9 @@ def compare(commodity: str, nse_expiry: str, start: str | None = None, end: str 
     futures = {}
     for d in days:
         nf, mf = nse_fut.get(d), mcx_fut.get(d)
-        # The day's ATM: the ladder strike nearest the future's close (NSE's,
-        # else MCX's). The client reads the day-wise ATM premium off this row.
-        ref = nf if nf is not None else mf
+        # The day's ATM: the ladder strike nearest the future's close (MCX's, the
+        # traded market, else NSE's). The client reads the day-wise ATM premium off this row.
+        ref = mf if mf is not None else nf
         atm = min(strikes, key=lambda k: abs(k - ref)) if (strikes and ref) else None
         futures[d] = {"nse": nf, "mcx": mf, "diff": round(nf - mf, 2) if (nf is not None and mf is not None) else None,
                       "diff_pct": round((nf - mf) / mf * 100, 2) if (nf is not None and mf) else None,

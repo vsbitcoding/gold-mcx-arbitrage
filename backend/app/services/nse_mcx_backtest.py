@@ -153,7 +153,12 @@ def _dataset(commodity: str) -> dict:
                 NseMcxOptDaily.commodity == commodity).yield_per(5000):
             exch, exp, td, k, side, close, settle, vol = r
             if side == "FUT":
-                futs.setdefault((exch, exp), {})[td] = close or settle
+                # NSE's future rarely trades (natural gas almost never): its "close" is
+                # then a stale print, the settlement is the day's real level
+                if exch == "NSE" and settle and not vol:
+                    futs.setdefault((exch, exp), {})[td] = settle
+                else:
+                    futs.setdefault((exch, exp), {})[td] = close or settle
             else:
                 # NSE repeats the last traded price as "close" for weeks when a
                 # contract does not trade; its daily settlement is the real mark
@@ -204,10 +209,13 @@ def _load(ds: dict, nse_exp: str, mcx_exp: str, start: str | None, end: str | No
     nse_days = {k[0] for k, v in opts.items() if v["nse"] is not None}
     mcx_days = {k[0] for k, v in opts.items() if v["mcx"] is not None}
     days = sorted(nse_days & mcx_days)
+    opts["_traded_days"] = {"nse": len({k[0] for k, v in opts.items() if v["nse_vol"] > 0}),
+                            "mcx": len({k[0] for k, v in opts.items() if v["mcx_vol"] > 0})}
     # the day index the scan walks, so a day costs its own strikes, not every day's
     by_day: dict = {}
-    for (td, k, side), cell in opts.items():
-        by_day.setdefault(td, []).append((k, side, cell))
+    for key, cell in opts.items():
+        if isinstance(key, tuple):
+            by_day.setdefault(key[0], []).append((key[1], key[2], cell))
     opts["_by_day"] = by_day
     return opts, futs, days, nse_fut_exp, mcx_fut_exp
 
@@ -415,7 +423,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
     gap = abs((datetime.strptime(mcx_exp, "%Y-%m-%d") - datetime.strptime(nse_exp, "%Y-%m-%d")).days)
     threshold = p["threshold_same"] if gap == 0 else p["threshold_gap"]
     sides = ["CE", "PE"] if p["sides"] == "both" else [p["sides"]]
-    strikes_all = sorted({k for key in opts if key != "_by_day" for k in [key[1]] if k % p["strike_step"] == 0})
+    strikes_all = sorted({key[1] for key in opts if isinstance(key, tuple) and key[1] % p["strike_step"] == 0})
     sq_day = _last_on_or_before(days, _shift(first_exp, p["exit_days"])) or first_exp
     window_from = _shift(first_exp, p["entry_days"]) if p["entry_days"] else None
     open_pos: list[Position] = []
@@ -424,7 +432,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
     if not days:
         return {"nse_expiry": nse_exp, "mcx_expiry": mcx_exp, "gap_days": gap, "threshold": threshold,
                 "nse_future_expiry": nse_fut_exp, "mcx_future_expiry": mcx_fut_exp,
-                "days": 0, "first_day": None, "last_day": None, "trades": []}
+                "days": 0, "first_day": None, "last_day": None, "trades": [], "traded_days": opts["_traded_days"]}
     walk = ds["days"][bisect_right(ds["days"], days[0]) - 1:]
     if p.get("end"):
         walk = [d for d in walk if d <= p["end"]]
@@ -433,7 +441,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
             break
         if day in day_set:
             f = futs.get(day, {})
-            fut = f.get("nse") if f.get("nse") is not None else f.get("mcx")
+            fut = f.get("mcx") if f.get("mcx") is not None else f.get("nse")   # ATM from the traded market
             atm = min(strikes_all, key=lambda k: abs(k - fut)) if (strikes_all and fut) else None
             if atm is not None:
                 # 1. adjustments on what is open (roll / add), measured from the reference future
@@ -507,7 +515,8 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
         })
     return {"nse_expiry": nse_exp, "mcx_expiry": mcx_exp, "gap_days": gap, "threshold": threshold,
             "nse_future_expiry": nse_fut_exp, "mcx_future_expiry": mcx_fut_exp,
-            "days": len(days), "first_day": days[0] if days else None, "last_day": last_day, "trades": trades}
+            "days": len(days), "first_day": days[0] if days else None, "last_day": last_day, "trades": trades,
+            "traded_days": opts["_traded_days"]}
 
 
 def run(params: dict) -> dict:
@@ -537,6 +546,7 @@ def run(params: dict) -> dict:
         per_expiry.append({"nse_expiry": e["nse"], "mcx_expiry": e["mcx"], "gap_days": res["gap_days"], "threshold": res["threshold"],
                            "days": res["days"], "trades": len(res["trades"]), "wins": wins,
                            "rolls": sum(t["rolls"] for t in res["trades"]),
+                           "nse_traded_days": res["traded_days"]["nse"], "mcx_traded_days": res["traded_days"]["mcx"],
                            "pnl_points": round(pts, 2), "pnl_rs": round(pts * p["point_value"], 0)})
         trades.extend(res["trades"])
     trades.sort(key=lambda t: (t["entry_date"], t["nse_expiry"], t["side"], t["strike"]))
