@@ -352,6 +352,10 @@ def refresh_nse_recent(days: int = 7) -> dict:
                 out["rows"] += nse_pull_future(s, commodity, fexp, start=today - timedelta(days=days))
         except Exception as e:  # noqa: BLE001
             out["errors"].append(f"{commodity} futures: {e}")
+    try:
+        out["merged"] = merge_redated()
+    except Exception as e:  # noqa: BLE001
+        out["errors"].append(f"merge: {e}")
     return out
 
 
@@ -432,6 +436,45 @@ def backfill_mcx(since: date = SINCE) -> dict:
     return out
 
 
+def merge_redated(commodity: str | None = None) -> list[dict]:
+    """NSE re-dates option expiries now and then (Nov-2025: crude's 16-Dec
+    became 09-Dec, 14-Jan became 07-Jan; May-2026: gas). The same contract
+    then sits under two expiry labels, the old one stopping dead mid-life.
+    Relabel the old rows to the successor - the expiry whose data begins the
+    trading day after the old one's ends, in the same month - so every reader
+    sees one contract. Idempotent; runs after every NSE pull."""
+    from sqlalchemy import func
+    out = []
+    db = SessionLocal()
+    try:
+        for comm in ([commodity] if commodity else list(SYMBOLS)):
+            spans = db.query(NseMcxOptDaily.expiry, func.min(NseMcxOptDaily.trade_date), func.max(NseMcxOptDaily.trade_date)).filter(
+                NseMcxOptDaily.commodity == comm, NseMcxOptDaily.exchange == "NSE",
+                NseMcxOptDaily.option_type != "FUT").group_by(NseMcxOptDaily.expiry).all()
+            by_exp = {e: (lo, hi) for e, lo, hi in spans}
+            today = date.today().isoformat()
+            for exp, (lo, hi) in sorted(by_exp.items()):
+                e = datetime.strptime(exp, "%Y-%m-%d").date(); h = datetime.strptime(hi, "%Y-%m-%d").date()
+                if exp >= today or (e - h).days <= 3:
+                    continue                                    # lived to its expiry, or still live
+                succ = [e2 for e2, (lo2, _hi2) in by_exp.items()
+                        if e2 < exp and e2[:7] == exp[:7] and 0 < (datetime.strptime(lo2, "%Y-%m-%d").date() - h).days <= 7]
+                if not succ:
+                    continue
+                new = min(succ)
+                n = db.query(NseMcxOptDaily).filter(NseMcxOptDaily.commodity == comm, NseMcxOptDaily.exchange == "NSE",
+                                                    NseMcxOptDaily.expiry == exp).update({"expiry": new}, synchronize_session=False)
+                db.commit()
+                out.append({"commodity": comm, "from": exp, "to": new, "rows": n})
+                log.info("nse re-dated expiry merged: %s %s -> %s (%d rows)", comm, exp, new, n)
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return out
+
+
 def backfill_all(since: date = SINCE) -> dict:
     if not _lock.acquire(blocking=False):
         return {"ok": False, "msg": "already running"}
@@ -439,6 +482,7 @@ def backfill_all(since: date = SINCE) -> dict:
     try:
         mcx = backfill_mcx(since)
         nse = backfill_nse(since)
+        merge_redated()
         _status["msg"] = f"complete: MCX {mcx['files']} files/{mcx['rows']} rows, NSE {nse['expiries']} expiries/{nse['rows']} rows, errors {len(nse['errors'])}"
         log.info("nse-mcx daily backfill %s", _status["msg"])
         return {"ok": True, "mcx": mcx, "nse": nse}
