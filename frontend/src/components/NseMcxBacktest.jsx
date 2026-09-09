@@ -231,7 +231,7 @@ export default function NseMcxBacktest({ product, cfg }) {
         <div className="oh-note">
           <b>No trade fired.</b> Entry needs the option traded on both exchanges that day, and NSE traded {product === "natgas" ? "natural gas" : "crude"} options on{" "}
           {res.by_expiry.reduce((a, e) => a + (e.nse_traded_days || 0), 0)} of {res.by_expiry.reduce((a, e) => a + (e.days || 0), 0)} days in this range
-          (see the NSE traded column below). Untick <b>Traded on both exchanges</b> to test on settlement prices instead, or widen the date range.
+          (see the NSE traded column below). The <b>Best diff seen</b> column shows the widest premium difference each expiry reached inside the entry window; when it is below the diff rule, nothing could fire. Lower the diff rule, untick <b>Traded on both exchanges</b> to test on settlement prices, or widen the date range.
         </div>
       )}
       {res && (
@@ -256,11 +256,13 @@ export default function NseMcxBacktest({ product, cfg }) {
               <div className="bs-card-h">By expiry</div>
               <div className="bt-tablewrap">
                 <table className="nmd-table bt-table">
-                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th title="Days on which NSE traded at least one option of this expiry">NSE traded</th><th>Trades</th><th>Won</th><th>Shifts</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
+                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th title="Days on which NSE traded at least one option of this expiry">NSE traded</th><th>Trades</th><th title="The widest premium difference seen inside the entry window among strikes that qualified on everything except the difference rule">Best diff seen</th><th>Won</th><th>Shifts</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
                   <tbody>
                     {res.by_expiry.slice().reverse().map((e) => (
                       <tr key={e.nse_expiry} className={e.trades ? "" : "nmd-dim"}>
-                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td className={e.nse_traded_days === 0 ? "neg" : ""}>{e.nse_traded_days ?? "—"}{e.nse_traded_days === 0 ? " (no NSE trades)" : ""}</td><td>{e.trades}</td><td>{e.wins}</td><td>{e.rolls || "—"}</td>
+                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td className={e.nse_traded_days === 0 ? "neg" : ""}>{e.nse_traded_days ?? "—"}{e.nse_traded_days === 0 ? " (no NSE trades)" : ""}</td><td>{e.trades}</td>
+                        <td className={e.trades === 0 && e.best_seen?.diff != null ? "neg" : ""}>{e.best_seen?.diff == null ? "—" : `${num(e.best_seen.diff)} (${dmy(e.best_seen.date)}, ${fmtNum(e.best_seen.strike, 0)} ${e.best_seen.side})`}{e.trades === 0 && e.best_seen?.diff != null ? ` < ${e.threshold}` : ""}</td>
+                        <td>{e.wins}</td><td>{e.rolls || "—"}</td>
                         <td className={e.pnl_points > 0 ? "pos" : e.pnl_points < 0 ? "neg" : ""}>{signed(e.pnl_points)}</td>
                         <td className={e.pnl_rs > 0 ? "pos" : e.pnl_rs < 0 ? "neg" : ""}>{rs(e.pnl_rs)}</td>
                       </tr>

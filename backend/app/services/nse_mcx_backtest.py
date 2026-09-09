@@ -429,10 +429,11 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
     open_pos: list[Position] = []
     closed: list[Position] = []
     last_day = days[-1] if days else None
+    best_seen: dict = {"diff": None, "date": None, "strike": None, "side": None}   # widest candidate difference inside the entry window
     if not days:
         return {"nse_expiry": nse_exp, "mcx_expiry": mcx_exp, "gap_days": gap, "threshold": threshold,
                 "nse_future_expiry": nse_fut_exp, "mcx_future_expiry": mcx_fut_exp,
-                "days": 0, "first_day": None, "last_day": None, "trades": [], "traded_days": opts["_traded_days"]}
+                "days": 0, "first_day": None, "last_day": None, "trades": [], "traded_days": opts["_traded_days"], "best_seen": best_seen}
     walk = ds["days"][bisect_right(ds["days"], days[0]) - 1:]
     if p.get("end"):
         walk = [d for d in walk if d <= p["end"]]
@@ -475,7 +476,12 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
                         have = [x for x in open_pos if x.side == side]
                         if have and not p["multi"]:
                             continue
-                        cand = _best(_candidates(opts, day, atm, side, p), threshold, atm, p["pick"])
+                        cands = _candidates(opts, day, atm, side, p)
+                        for ck, cc in cands:
+                            d_abs = abs(cc["nse"] - cc["mcx"])
+                            if best_seen["diff"] is None or d_abs > best_seen["diff"]:
+                                best_seen.update(diff=round(d_abs, 2), date=day, strike=ck, side=side)
+                        cand = _best(cands, threshold, atm, p["pick"])
                         if cand is None:
                             continue
                         k, cell = cand
@@ -516,7 +522,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
     return {"nse_expiry": nse_exp, "mcx_expiry": mcx_exp, "gap_days": gap, "threshold": threshold,
             "nse_future_expiry": nse_fut_exp, "mcx_future_expiry": mcx_fut_exp,
             "days": len(days), "first_day": days[0] if days else None, "last_day": last_day, "trades": trades,
-            "traded_days": opts["_traded_days"]}
+            "traded_days": opts["_traded_days"], "best_seen": best_seen}
 
 
 def run(params: dict) -> dict:
@@ -547,6 +553,7 @@ def run(params: dict) -> dict:
                            "days": res["days"], "trades": len(res["trades"]), "wins": wins,
                            "rolls": sum(t["rolls"] for t in res["trades"]),
                            "nse_traded_days": res["traded_days"]["nse"], "mcx_traded_days": res["traded_days"]["mcx"],
+                           "best_seen": res["best_seen"],
                            "pnl_points": round(pts, 2), "pnl_rs": round(pts * p["point_value"], 0)})
         trades.extend(res["trades"])
     trades.sort(key=lambda t: (t["entry_date"], t["nse_expiry"], t["side"], t["strike"]))
