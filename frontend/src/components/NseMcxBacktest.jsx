@@ -18,6 +18,11 @@ const DEFAULTS = {
   start: "2024-04-01", end: "", expiry: "", sides: "both",
   threshold_same: 25, threshold_gap: 60, otm_min: 300, otm_max: 800, strike_step: 100,
   mode: "hold", move_points: 500, point_value: 100, multi: false, liquid_only: true, pick: "max",
+  entry_days: 30, exit_days: 10, loss_roll: true, roll_days: 1, roll_legs: "both", max_rolls: 0,
+};
+const EXIT_LABEL = {
+  "square off": "squared off before expiry", expiry: "at expiry", adjusted: "closed on adjustment",
+  "data end": "still open, at latest close", "last price": "at latest close",
 };
 
 function Field({ label, hint, children }) {
@@ -101,9 +106,9 @@ export default function NseMcxBacktest({ product, cfg }) {
   const th = (k, l) => <th onClick={() => { if (sortKey === k) setSortDir(-sortDir); else { setSortKey(k); setSortDir(1); } }} className="bt-sort">{l}{sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>;
 
   function downloadCsv() {
-    const head = ["Entry date", "NSE expiry", "MCX expiry", "Side", "Strike", "Buy on", "Buy premium", "Sell on", "Sell premium", "Diff", "Entry future", "Reason", "Exit date", "Exit reason", "Buy exit", "Sell exit", "P&L points", "P&L Rs", "Days"];
+    const head = ["Entry date", "NSE expiry", "MCX expiry", "Side", "Strike", "Buy on", "Buy premium", "Sell on", "Sell premium", "Diff", "Entry future", "Reason", "Exit date", "Exit reason", "Buy exit", "Sell exit", "Shifts", "Final NSE expiry", "Final MCX expiry", "P&L points", "P&L Rs", "Days"];
     const lines = [head.join(",")];
-    trades.forEach((t) => lines.push([t.entry_date, t.nse_expiry, t.mcx_expiry, t.side, t.strike, t.buy_exch, t.buy_px, t.sell_exch, t.sell_px, t.diff, t.entry_future ?? "", t.reason, t.exit_date ?? "", t.exit_reason ?? "", t.buy_exit ?? "", t.sell_exit ?? "", t.pnl_points ?? "", t.pnl_rs ?? "", t.days ?? ""].join(",")));
+    trades.forEach((t) => lines.push([t.entry_date, t.nse_expiry, t.mcx_expiry, t.side, t.strike, t.buy_exch, t.buy_px, t.sell_exch, t.sell_px, t.diff, t.entry_future ?? "", t.reason, t.exit_date ?? "", t.exit_reason ?? "", t.buy_exit ?? "", t.sell_exit ?? "", t.rolls, t.exit_nse_expiry, t.exit_mcx_expiry, t.pnl_points ?? "", t.pnl_rs ?? "", t.days ?? ""].join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backtest-${product}-${p.mode}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -137,6 +142,16 @@ export default function NseMcxBacktest({ product, cfg }) {
             <label className="pt-symtick"><input type="checkbox" checked={!!p.liquid_only} onChange={set("liquid_only")} /> Traded on both exchanges</label>
             <label className="pt-symtick"><input type="checkbox" checked={!!p.multi} onChange={set("multi")} /> Several strikes per side</label>
           </div>
+        </div>
+        <div className="bt-row">
+          <Field label="Entry window (days)" hint="Enter only when the first expiry is this many days away or less. 0 = any day"><input type="number" min="0" className="oh-weeks bt-num" value={p.entry_days} onChange={set("entry_days")} /></Field>
+          <Field label="Square off (days before)" hint="Square off this many days before the first expiry. 0 = on the expiry day"><input type="number" min="0" className="oh-weeks bt-num" value={p.exit_days} onChange={set("exit_days")} /></Field>
+          <div className="bt-checks">
+            <label className="pt-symtick"><input type="checkbox" checked={!!p.loss_roll} onChange={set("loss_roll")} /> In loss: shift to next expiry</label>
+          </div>
+          <Field label="Shift (days before)" hint="A losing leg shifts to its next expiry this many days before its own expiry (NSE leg at NSE expiry, MCX leg at MCX expiry)"><input type="number" min="0" className="oh-weeks bt-num" value={p.roll_days} onChange={set("roll_days")} disabled={!p.loss_roll} /></Field>
+          <Field label="Shift legs"><select className="oh-weeks" value={p.roll_legs} onChange={set("roll_legs")} disabled={!p.loss_roll}><option value="both">NSE and MCX</option><option value="NSE">NSE only</option><option value="MCX">MCX only</option></select></Field>
+          <Field label="Max shifts" hint="How many times one trade may shift. 0 = no limit"><input type="number" min="0" className="oh-weeks bt-num" value={p.max_rolls} onChange={set("max_rolls")} disabled={!p.loss_roll} /></Field>
           <div className="bt-actions">
             <button type="button" className="oh-chip" onClick={() => setP({ ...DEFAULTS })}>Defaults</button>
             <button type="button" className="btn btn-primary" disabled={busy} onClick={run}>{busy ? "Running…" : "Run backtest"}</button>
@@ -145,12 +160,12 @@ export default function NseMcxBacktest({ product, cfg }) {
       </div>
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
-      {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both at the first expiry.</div>}
+      {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both before the first expiry when in profit, or shift a losing trade to the next expiry.</div>}
       {res && (
         <>
           <div className="bt-tiles">
             <div className="bt-tile"><span>Net P&L</span><b className={s.pnl_rs > 0 ? "pos" : s.pnl_rs < 0 ? "neg" : ""}>{rs(s.pnl_rs)}</b><small>{signed(s.pnl_points)} pts</small></div>
-            <div className="bt-tile"><span>Trades</span><b>{s.trades}</b><small>{s.wins} won · {s.losses} lost{s.flat ? ` · ${s.flat} flat` : ""}</small></div>
+            <div className="bt-tile"><span>Trades</span><b>{s.trades}</b><small>{s.wins} won · {s.losses} lost{s.flat ? ` · ${s.flat} flat` : ""}{s.rolled_trades ? ` · ${s.rolled_trades} shifted` : ""}</small></div>
             <div className="bt-tile"><span>Win rate</span><b>{s.win_rate == null ? "—" : `${s.win_rate}%`}</b><small>{res.summary.expiries} expiries</small></div>
             <div className="bt-tile"><span>Average trade</span><b className={s.avg_points > 0 ? "pos" : s.avg_points < 0 ? "neg" : ""}>{signed(s.avg_points)} pts</b><small>win {signed(s.avg_win)} · loss {signed(s.avg_loss)}</small></div>
             <div className="bt-tile"><span>Best / worst</span><b>{signed(s.best)} / {signed(s.worst)}</b><small>points</small></div>
@@ -168,11 +183,11 @@ export default function NseMcxBacktest({ product, cfg }) {
               <div className="bs-card-h">By expiry</div>
               <div className="bt-tablewrap">
                 <table className="nmd-table bt-table">
-                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th>Trades</th><th>Won</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
+                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th>Trades</th><th>Won</th><th>Shifts</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
                   <tbody>
                     {res.by_expiry.slice().reverse().map((e) => (
                       <tr key={e.nse_expiry} className={e.trades ? "" : "nmd-dim"}>
-                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td>{e.trades}</td><td>{e.wins}</td>
+                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td>{e.trades}</td><td>{e.wins}</td><td>{e.rolls || "—"}</td>
                         <td className={e.pnl_points > 0 ? "pos" : e.pnl_points < 0 ? "neg" : ""}>{signed(e.pnl_points)}</td>
                         <td className={e.pnl_rs > 0 ? "pos" : e.pnl_rs < 0 ? "neg" : ""}>{rs(e.pnl_rs)}</td>
                       </tr>
@@ -203,8 +218,9 @@ export default function NseMcxBacktest({ product, cfg }) {
                       <td>{t.sell_exch} @ {num(t.sell_px)}</td>
                       <td>{signed(t.diff)}</td>
                       <td>{num(t.entry_future, 0)}</td>
-                      <td className="bt-why">{t.reason === "adjust" ? `adjusted from ${t.parent}` : "signal"}</td>
-                      <td>{dmy(t.exit_date)}<small className="bt-sub">{t.exit_reason === "data end" ? "still open, at latest close" : t.exit_reason === "adjusted" ? "closed on adjustment" : t.exit_reason}</small></td>
+                      <td className="bt-why">{t.reason === "adjust" ? `adjusted from ${t.parent}` : "signal"}
+                        {t.rolls > 0 && <small className="bt-sub">{t.roll_log.map((r) => `${r.exch} ${dmy(r.date)} → ${dmy(r.to)}`).join(", ")}</small>}</td>
+                      <td>{dmy(t.exit_date)}<small className="bt-sub">{EXIT_LABEL[t.exit_reason] || t.exit_reason}{t.rolls > 0 ? ` · ${t.rolls} shift${t.rolls > 1 ? "s" : ""}` : ""}</small></td>
                       <td>{num(t.buy_exit)} / {num(t.sell_exit)}</td>
                       <td className={t.pnl_points > 0 ? "pos" : t.pnl_points < 0 ? "neg" : ""}>{signed(t.pnl_points)}</td>
                       <td className={t.pnl_rs > 0 ? "pos" : t.pnl_rs < 0 ? "neg" : ""}>{rs(t.pnl_rs)}</td>
