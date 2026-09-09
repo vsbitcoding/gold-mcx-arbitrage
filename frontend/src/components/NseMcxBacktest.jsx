@@ -204,7 +204,7 @@ export default function NseMcxBacktest({ product, cfg }) {
                       <td>{signed(t.diff)}</td>
                       <td>{num(t.entry_future, 0)}</td>
                       <td className="bt-why">{t.reason === "adjust" ? `adjusted from ${t.parent}` : "signal"}</td>
-                      <td>{dmy(t.exit_date)}<small className="bt-sub">{t.exit_reason}</small></td>
+                      <td>{dmy(t.exit_date)}<small className="bt-sub">{t.exit_reason === "data end" ? "still open, at latest close" : t.exit_reason === "adjusted" ? "closed on adjustment" : t.exit_reason}</small></td>
                       <td>{num(t.buy_exit)} / {num(t.sell_exit)}</td>
                       <td className={t.pnl_points > 0 ? "pos" : t.pnl_points < 0 ? "neg" : ""}>{signed(t.pnl_points)}</td>
                       <td className={t.pnl_rs > 0 ? "pos" : t.pnl_rs < 0 ? "neg" : ""}>{rs(t.pnl_rs)}</td>
