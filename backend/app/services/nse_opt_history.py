@@ -526,14 +526,29 @@ def _nearest(target: str, pool: list[str]) -> str | None:
     return min(pool, key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d") - t).days))
 
 
+def _nse_traded_days(commodity: str) -> dict:
+    """{NSE option expiry: days on which at least one of its strikes traded}."""
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        rows = db.query(NseMcxOptDaily.expiry, func.count(func.distinct(NseMcxOptDaily.trade_date))).filter(
+            NseMcxOptDaily.commodity == commodity, NseMcxOptDaily.exchange == "NSE",
+            NseMcxOptDaily.option_type != "FUT", NseMcxOptDaily.volume > 0).group_by(NseMcxOptDaily.expiry).all()
+        return {e: n for e, n in rows}
+    finally:
+        db.close()
+
+
 def expiries(commodity: str) -> dict:
     """NSE expiries with the MCX expiry each is compared against, newest first,
-    plus the day span each pairing has data for."""
+    plus the day span each pairing has data for and how many days NSE traded
+    (the client wants only traded expiries offered, 09-Sep-2026)."""
     nse = _expiries(commodity, "NSE", "OPT"); mcx = _expiries(commodity, "MCX", "OPT")
+    traded = _nse_traded_days(commodity)
     out = []
     for e in sorted(nse, reverse=True):
         m = _nearest(e, mcx)
-        out.append({"nse": e, "mcx": m,
+        out.append({"nse": e, "mcx": m, "nse_traded_days": traded.get(e, 0),
                     "gap_days": abs((datetime.strptime(m, "%Y-%m-%d") - datetime.strptime(e, "%Y-%m-%d")).days) if m else None})
     return {"commodity": commodity, "step": STEP[commodity], "expiries": out}
 
