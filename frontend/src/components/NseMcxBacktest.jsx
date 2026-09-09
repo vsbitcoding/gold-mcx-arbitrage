@@ -18,10 +18,10 @@ const DEFAULTS = {
   start: "2024-04-01", end: "", expiry: "", sides: "both",
   threshold_same: 25, threshold_gap: 60, otm_min: 300, otm_max: 800, strike_step: 100,
   mode: "hold", move_points: 500, point_value: 100, multi: false, liquid_only: true, pick: "max",
-  entry_days: 30, exit_days: 10, loss_roll: true, roll_days: 1, roll_legs: "both", max_rolls: 0,
+  entry_days: 30, exit_days: 10, loss_roll: true, roll_days: 1, roll_legs: "both", max_rolls: 0, take_profit: 0,
 };
 const EXIT_LABEL = {
-  "square off": "squared off before expiry", expiry: "at expiry", adjusted: "closed on adjustment",
+  "square off": "squared off before expiry", expiry: "at expiry", adjusted: "closed on adjustment", "take profit": "take profit hit",
   "data end": "still open, at latest close", "last price": "at latest close",
 };
 
@@ -29,7 +29,7 @@ function Field({ label, hint, children }) {
   return <label className="bt-f"><span title={hint}>{label}</span>{children}</label>;
 }
 
-function EquityChart({ curve }) {
+function EquityChart({ curve, byDay = false }) {
   const box = useRef(null);
   const [W, setW] = useState(900);
   useEffect(() => {
@@ -52,9 +52,14 @@ function EquityChart({ curve }) {
     const area = `M${x(0).toFixed(1)},${y(0).toFixed(1)} ` + curve.map((c, i) => `L${x(i).toFixed(1)},${y(c.cum_rs).toFixed(1)}`).join(" ") + ` L${x(curve.length - 1).toFixed(1)},${y(0).toFixed(1)} Z`;
     const ticks = Array.from({ length: 5 }, (_, i) => lo + ((hi - lo) * i) / 4);
     const xt = []; let last = "";
-    curve.forEach((c, i) => { const m = (c.date || "").slice(0, 7); if (m && m !== last) { last = m; xt.push({ x: x(i), label: `${MONTHS[+c.date.slice(5, 7) - 1]} ${c.date.slice(2, 4)}` }); } });
-    return { x, y, path, area, ticks, xt: xt.filter((_, i) => i % Math.ceil(xt.length / 14) === 0), zero: y(0) };
-  }, [curve, W]);
+    if (byDay) {
+      const step = Math.max(1, Math.ceil(curve.length / Math.max(4, Math.floor((W - padL - padR) / 80))));
+      curve.forEach((c, i) => { if (i % step === 0 || i === curve.length - 1) xt.push({ x: x(i), label: `${c.date.slice(8, 10)} ${MONTHS[+c.date.slice(5, 7) - 1]}` }); });
+    } else {
+      curve.forEach((c, i) => { const m = (c.date || "").slice(0, 7); if (m && m !== last) { last = m; xt.push({ x: x(i), label: `${MONTHS[+c.date.slice(5, 7) - 1]} ${c.date.slice(2, 4)}` }); } });
+    }
+    return { x, y, path, area, ticks, xt: byDay ? xt : xt.filter((_, i) => i % Math.ceil(xt.length / 14) === 0), zero: y(0) };
+  }, [curve, W, byDay]);
   if (!geo) return null;
   return (
     <div className="bt-chart" ref={box}>
@@ -65,6 +70,51 @@ function EquityChart({ curve }) {
         <path d={geo.area} className="bt-area" />
         <path d={geo.path} className="bsc-line bt-line" />
       </svg>
+    </div>
+  );
+}
+
+function TradeDetail({ t, pointValue, onClose }) {
+  const curve = useMemo(() => (t.daily || []).map((d) => ({ date: d.date, cum_rs: (d.pnl ?? 0) * pointValue })), [t, pointValue]);
+  const firstProfit = (t.daily || []).find((d, i) => i > 0 && d.pnl > 0);
+  const best = (t.daily || []).reduce((m, d) => (d.pnl != null && (m == null || d.pnl > m.pnl) ? d : m), null);
+  const worst = (t.daily || []).reduce((m, d) => (d.pnl != null && (m == null || d.pnl < m.pnl) ? d : m), null);
+  return (
+    <div className="pt-overlay bsc-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pt-modal bsc-modal bt-modal" role="dialog" aria-label="Trade day by day">
+        <div className="pt-modal-head">
+          <div className="bsc-title">
+            <span className="bsc-comm">{fmtNum(t.strike, 0)} {t.side} <span className="bsc-pair-inl">· buy {t.buy_exch} @ {num(t.buy_px)} · sell {t.sell_exch} @ {num(t.sell_px)}</span></span>
+            <span className="bsc-exp">Entered {dmy(t.entry_date)} · NSE expiry {dmy(t.nse_expiry)} · MCX expiry {dmy(t.mcx_expiry)}</span>
+          </div>
+          <button type="button" className="pt-modal-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="bsc-body">
+          <div className="bsc-summary bsc-summary-modal">
+            <div className="bsc-stat"><span>Result</span><b className={t.pnl_points > 0 ? "pos" : t.pnl_points < 0 ? "neg" : ""}>{signed(t.pnl_points)} pts</b><small>{rs(t.pnl_rs)} · {dmy(t.exit_date)} · {EXIT_LABEL[t.exit_reason] || t.exit_reason}</small></div>
+            <div className="bsc-stat"><span>First day in profit</span><b>{firstProfit ? dmy(firstProfit.date) : "never"}</b><small>{firstProfit ? `${signed(firstProfit.pnl)} pts` : "stayed at or below zero"}</small></div>
+            <div className="bsc-stat"><span>Best day</span><b className="pos">{best ? signed(best.pnl) : "—"} pts</b><small>{best ? dmy(best.date) : ""}</small></div>
+            <div className="bsc-stat"><span>Worst day</span><b className="neg">{worst ? signed(worst.pnl) : "—"} pts</b><small>{worst ? dmy(worst.date) : ""}</small></div>
+          </div>
+          {curve.length > 1 && <EquityChart curve={curve} byDay />}
+          <div className="bt-tablewrap bt-daily">
+            <table className="nmd-table bt-table">
+              <thead><tr><th>Date</th><th>NSE price</th><th>MCX price</th><th>P&L pts</th><th>P&L ₹</th><th>Note</th></tr></thead>
+              <tbody>
+                {(t.daily || []).map((d) => (
+                  <tr key={d.date} className={d.note ? "bt-daily-note" : ""}>
+                    <td className="nmd-date">{dmy(d.date)}</td>
+                    <td>{num(d.nse)}</td><td>{num(d.mcx)}</td>
+                    <td className={d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : ""}>{signed(d.pnl)}</td>
+                    <td className={d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : ""}>{d.pnl == null ? "—" : rs(d.pnl * pointValue)}</td>
+                    <td className="bt-why">{d.note || ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -80,6 +130,7 @@ export default function NseMcxBacktest({ product, cfg }) {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState("entry_date");
   const [sortDir, setSortDir] = useState(1);
+  const [detail, setDetail] = useState(null);
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }, [p]);
   useEffect(() => { api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
   const set = (k) => (e) => setP((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
@@ -145,6 +196,7 @@ export default function NseMcxBacktest({ product, cfg }) {
         </div>
         <div className="bt-row">
           <Field label="Entry window (days)" hint="Enter only when the first expiry is this many days away or less. 0 = any day"><input type="number" min="0" className="oh-weeks bt-num" value={p.entry_days} onChange={set("entry_days")} /></Field>
+          <Field label="Take profit (pts)" hint="Square off the day the open profit reaches this many points. 0 = off"><input type="number" min="0" className="oh-weeks bt-num" value={p.take_profit} onChange={set("take_profit")} /></Field>
           <Field label="Square off (days before)" hint="Square off this many days before the first expiry. 0 = on the expiry day"><input type="number" min="0" className="oh-weeks bt-num" value={p.exit_days} onChange={set("exit_days")} /></Field>
           <div className="bt-checks">
             <label className="pt-symtick"><input type="checkbox" checked={!!p.loss_roll} onChange={set("loss_roll")} /> In loss: shift to next expiry</label>
@@ -161,6 +213,7 @@ export default function NseMcxBacktest({ product, cfg }) {
 
       {err && <div className="settings-banner danger">⚠ {err}</div>}
       {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both before the first expiry when in profit, or shift a losing trade to the next expiry.</div>}
+      {detail && <TradeDetail t={detail} pointValue={+p.point_value || 100} onClose={() => setDetail(null)} />}
       {res && (
         <>
           <div className="bt-tiles">
@@ -198,7 +251,7 @@ export default function NseMcxBacktest({ product, cfg }) {
             </div>
           </div>
           <div className="bt-card">
-            <div className="bs-card-h bt-head">Trades <span className="bs-muted">click a column to sort</span>
+            <div className="bs-card-h bt-head">Trades <span className="bs-muted">click a column to sort · click a trade for its day by day P&L</span>
               <button type="button" className="btn btn-primary btn-sm" onClick={downloadCsv}>Download CSV</button></div>
             <div className="bt-tablewrap">
               <table className="nmd-table bt-table">
@@ -209,7 +262,7 @@ export default function NseMcxBacktest({ product, cfg }) {
                 </tr></thead>
                 <tbody>
                   {shown.map((t, i) => (
-                    <tr key={i}>
+                    <tr key={i} className="bt-trow" onClick={() => setDetail(t)} title="Day by day P&L">
                       <td className="nmd-date">{dmy(t.entry_date)}</td>
                       <td>{dmy(t.nse_expiry)} / {dmy(t.mcx_expiry)}</td>
                       <td className={t.side === "CE" ? "pos" : "neg"}>{t.side}</td>

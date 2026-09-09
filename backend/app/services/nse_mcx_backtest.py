@@ -10,7 +10,8 @@ first expiry. Rules from the notebook, every number a parameter:
           they are about a week apart. Buy on the cheaper exchange, sell on
           the dearer one, one lot each. Only inside the entry window: at most
           `entry_days` calendar days before the first expiry (0 = any day).
-  exit    `exit_days` calendar days before the FIRST expiry (0 = on the expiry
+  exit    `take_profit` points of open profit at any day's close squares the
+          trade there (0 = off). Otherwise `exit_days` calendar days before the FIRST expiry (0 = on the expiry
           day itself) both legs are squared at that day's closes - if the trade
           is in profit. A losing trade is carried instead (`loss_roll`): each
           leg is shifted to its exchange's next expiry `roll_days` before its
@@ -64,6 +65,7 @@ DEFAULTS = {
     "roll_days": 1,                 # shift a leg this many calendar days before its own expiry
     "roll_legs": "both",            # both | NSE | MCX
     "max_rolls": 0,                 # 0 = never shift (a loss squares off too); a big number = practically no cap
+    "take_profit": 0.0,             # square off the day the open profit reaches this many points (0 = off)
 }
 
 
@@ -95,6 +97,7 @@ class Position:
     realised: float = 0.0             # points banked by legs already shifted
     rolls: int = 0
     roll_log: list = field(default_factory=list)
+    daily: list = field(default_factory=list)     # {date, nse, mcx, pnl, note} from entry to exit
     sq_due: str | None = None         # the square-off check date for the current legs
     sq_done: bool = False             # checked and carried (loss)
     exit_date: str | None = None
@@ -339,6 +342,23 @@ def _roll_leg(pos: Position, leg: Leg, book: _Book, day: str) -> bool:
     return True
 
 
+def _record(pos: Position, book: _Book, day: str):
+    """One row of the trade's day-by-day P&L (after the day's actions)."""
+    closed_today = pos.exit_date == day
+    if closed_today:
+        nse, mcx, pnl = pos.legs["NSE"].exit_px, pos.legs["MCX"].exit_px, pos.pnl_points
+    else:
+        nse = book.px(pos.legs["NSE"], day, pos.strike, pos.side)
+        mcx = book.px(pos.legs["MCX"], day, pos.strike, pos.side)
+        pnl = _mark(pos, book, day)
+    notes = [f"{r['exch']} shifted to {r['to']}" for r in pos.roll_log if r["date"] == day]
+    if day == pos.entry_date:
+        notes.insert(0, "entry")
+    if closed_today:
+        notes.append(pos.exit_reason)
+    pos.daily.append({"date": day, "nse": _num(nse), "mcx": _num(mcx), "pnl": pnl, "note": ", ".join(notes) or None})
+
+
 def _manage(pos: Position, book: _Book, day: str, p: dict) -> bool:
     """Square-off check, expiry shifts and forced closes for one open
     position on one day. True when the position closed."""
@@ -346,6 +366,11 @@ def _manage(pos: Position, book: _Book, day: str, p: dict) -> bool:
     if any(leg.exp < day for leg in pos.legs.values()):
         return _close(pos, book, day, "last price", fallback=True)
     can_roll = p["loss_roll"] and pos.rolls < p["max_rolls"]
+    # 0. take profit: the first close at or above the target
+    if p["take_profit"] > 0 and day > pos.entry_date:
+        pnl = _mark(pos, book, day)
+        if pnl is not None and pnl >= p["take_profit"]:
+            return _close(pos, book, day, "take profit")
     # 1. the square-off date for the current legs: profit closes, loss carries
     if not pos.sq_done and pos.sq_due and day >= pos.sq_due:
         pnl = _mark(pos, book, day)
@@ -446,13 +471,20 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
                         pos = _open(side, k, cell, day, fut, nse_exp, mcx_exp)
                         _set_sq_due(pos, book, p["exit_days"])
                         open_pos.append(pos)
-        # 3. square-off checks, expiry shifts, forced closes
+        # 3. square-off checks, expiry shifts, forced closes, then the day's P&L row
         for pos in list(open_pos):
             if _manage(pos, book, day, p):
                 open_pos.remove(pos); closed.append(pos)
+            _record(pos, book, day)
+        for pos in closed:
+            if pos.exit_date == day and pos.exit_reason == "adjusted" and (not pos.daily or pos.daily[-1]["date"] != day):
+                _record(pos, book, day)
     # anything still open at the end of the data: mark at the latest closes
     for pos in list(open_pos):
         _close(pos, book, walk[-1], "data end", fallback=True)
+        if pos.daily and pos.daily[-1]["date"] == walk[-1]:
+            pos.daily.pop()
+        _record(pos, book, walk[-1])
         closed.append(pos)
     trades = []
     for t in sorted(closed, key=lambda x: (x.entry_date, x.side, x.strike)):
@@ -464,7 +496,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
             "diff": t.diff, "entry_future": _num(t.entry_future),
             "exit_date": t.exit_date, "exit_reason": t.exit_reason, "buy_exit": _num(t.buy_exit), "sell_exit": _num(t.sell_exit),
             "exit_nse_expiry": t.legs["NSE"].exp, "exit_mcx_expiry": t.legs["MCX"].exp,
-            "rolls": t.rolls, "roll_log": t.roll_log, "realised": _num(t.realised),
+            "rolls": t.rolls, "roll_log": t.roll_log, "realised": _num(t.realised), "daily": t.daily,
             "pnl_points": t.pnl_points, "pnl_rs": _num(rs, 0),
             "days": (datetime.strptime(t.exit_date, "%Y-%m-%d") - datetime.strptime(t.entry_date, "%Y-%m-%d")).days if t.exit_date else None,
         })
@@ -475,7 +507,7 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
 
 def run(params: dict) -> dict:
     p = {**DEFAULTS, **{k: v for k, v in (params or {}).items() if v is not None and v != ""}}
-    for k in ("threshold_same", "threshold_gap", "otm_min", "otm_max", "strike_step", "move_points", "point_value"):
+    for k in ("threshold_same", "threshold_gap", "otm_min", "otm_max", "strike_step", "move_points", "point_value", "take_profit"):
         p[k] = float(p[k])
     for k in ("entry_days", "exit_days", "roll_days"):
         p[k] = max(0, int(float(p[k])))
