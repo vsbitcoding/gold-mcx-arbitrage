@@ -107,7 +107,7 @@ function TradeDetail({ t, pointValue, onClose }) {
                     <td>{num(d.nse)}</td><td>{num(d.mcx)}</td>
                     <td className={d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : ""}>{signed(d.pnl)}</td>
                     <td className={d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : ""}>{d.pnl == null ? "—" : rs(d.pnl * pointValue)}</td>
-                    <td className="bt-why">{d.note || ""}</td>
+                    <td className="bt-why">{(d.note || "").replace(/\d{4}-\d{2}-\d{2}/g, (m) => dmy(m))}</td>
                   </tr>
                 ))}
               </tbody>
