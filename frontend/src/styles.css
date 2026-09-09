@@ -6356,5 +6356,6 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bt-table th.bt-sort:hover { color: var(--accent); }
 .bt-why { color: var(--text-secondary); font-size: 12px; }
 .bt-sub { display: block; font-size: 10px; color: var(--text-muted); }
+.bt-shifts { display: flex; flex-direction: column; align-items: center; gap: 1px; white-space: nowrap; cursor: help; }
 .bt-table tr.nmd-dim td { color: var(--text-muted); }
 @media (max-width: 1200px) { .bt-tiles { grid-template-columns: repeat(3, 1fr); } .bt-actions { margin-left: 0; } }
