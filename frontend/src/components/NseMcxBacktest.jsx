@@ -224,6 +224,13 @@ export default function NseMcxBacktest({ product, cfg }) {
       {err && <div className="settings-banner danger">⚠ {err}</div>}
       {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both before the first expiry when in profit, or shift a losing trade to the next expiry.</div>}
       {detail && <TradeDetail t={detail} pointValue={+p.point_value || 100} onClose={() => setDetail(null)} />}
+      {res && s.trades === 0 && p.liquid_only && (
+        <div className="oh-note">
+          <b>No trade fired.</b> Entry needs the option traded on both exchanges that day, and NSE traded {product === "natgas" ? "natural gas" : "crude"} options on{" "}
+          {res.by_expiry.reduce((a, e) => a + (e.nse_traded_days || 0), 0)} of {res.by_expiry.reduce((a, e) => a + (e.days || 0), 0)} days in this range
+          (see the NSE traded column below). Untick <b>Traded on both exchanges</b> to test on settlement prices instead, or widen the date range.
+        </div>
+      )}
       {res && (
         <>
           <div className="bt-tiles">
@@ -246,11 +253,11 @@ export default function NseMcxBacktest({ product, cfg }) {
               <div className="bs-card-h">By expiry</div>
               <div className="bt-tablewrap">
                 <table className="nmd-table bt-table">
-                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th>Trades</th><th>Won</th><th>Shifts</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
+                  <thead><tr><th>NSE expiry</th><th>MCX expiry</th><th>Gap</th><th>Diff rule</th><th>Days</th><th title="Days on which NSE traded at least one option of this expiry">NSE traded</th><th>Trades</th><th>Won</th><th>Shifts</th><th>P&L pts</th><th>P&L ₹</th></tr></thead>
                   <tbody>
                     {res.by_expiry.slice().reverse().map((e) => (
                       <tr key={e.nse_expiry} className={e.trades ? "" : "nmd-dim"}>
-                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td>{e.trades}</td><td>{e.wins}</td><td>{e.rolls || "—"}</td>
+                        <td>{dmy(e.nse_expiry)}</td><td>{dmy(e.mcx_expiry)}</td><td>{e.gap_days}d</td><td>≥ {e.threshold}</td><td>{e.days}</td><td className={e.nse_traded_days === 0 ? "neg" : ""}>{e.nse_traded_days ?? "—"}{e.nse_traded_days === 0 ? " (no NSE trades)" : ""}</td><td>{e.trades}</td><td>{e.wins}</td><td>{e.rolls || "—"}</td>
                         <td className={e.pnl_points > 0 ? "pos" : e.pnl_points < 0 ? "neg" : ""}>{signed(e.pnl_points)}</td>
                         <td className={e.pnl_rs > 0 ? "pos" : e.pnl_rs < 0 ? "neg" : ""}>{rs(e.pnl_rs)}</td>
                       </tr>
