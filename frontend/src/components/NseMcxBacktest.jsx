@@ -193,7 +193,7 @@ export default function NseMcxBacktest({ product, cfg }) {
         </div>
         <div className="bt-row">
           <Field label="Diff, same expiry" hint="Minimum premium difference (points) when both expiries fall on one day"><input type="number" step="any" className="oh-weeks bt-num" value={p.threshold_same} onChange={set("threshold_same")} /></Field>
-          <Field label="Diff, 7-day gap" hint="Minimum premium difference (points) when the expiries are a week apart"><input type="number" step="any" className="oh-weeks bt-num" value={p.threshold_gap} onChange={set("threshold_gap")} /></Field>
+          <Field label="Diff, different expiry" hint="Minimum premium difference (points) when the two expiries fall on different days"><input type="number" step="any" className="oh-weeks bt-num" value={p.threshold_gap} onChange={set("threshold_gap")} /></Field>
           <Field label="OTM from (pts)" hint="Nearest strike considered, points from the day's ATM"><input type="number" step="any" className="oh-weeks bt-num" value={p.otm_min} onChange={set("otm_min")} /></Field>
           <Field label="OTM to (pts)"><input type="number" step="any" className="oh-weeks bt-num" value={p.otm_max} onChange={set("otm_max")} /></Field>
           <Field label="Strike step" hint={product === "natgas" ? "5 = every strike, 10 = the round ones" : "100 = every hundred, 500 = the round ones (5000, 5500...)"}><select className="oh-weeks" value={p.strike_step} onChange={set("strike_step")}>{(STEPS[product] || STEPS.crude).map((v) => <option key={v} value={v}>{v}</option>)}</select></Field>
