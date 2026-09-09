@@ -67,6 +67,11 @@ DEFAULTS = {
     "max_rolls": 0,                 # 0 = never shift (a loss squares off too); a big number = practically no cap
     "take_profit": 0.0,             # square off the day the open profit reaches this many points (0 = off)
 }
+# The notebook's numbers are crude's; natural gas has its own scale (client's note, 10-Sep-2026).
+COMMODITY_DEFAULTS = {
+    "natgas": {"threshold_same": 0.75, "threshold_gap": 1.25, "otm_min": 20.0, "otm_max": 60.0,
+               "strike_step": 5.0, "move_points": 40.0, "point_value": 1250.0},
+}
 
 
 @dataclass
@@ -506,7 +511,8 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
 
 
 def run(params: dict) -> dict:
-    p = {**DEFAULTS, **{k: v for k, v in (params or {}).items() if v is not None and v != ""}}
+    commodity = (params or {}).get("commodity") or DEFAULTS["commodity"]
+    p = {**DEFAULTS, **COMMODITY_DEFAULTS.get(commodity, {}), **{k: v for k, v in (params or {}).items() if v is not None and v != ""}}
     for k in ("threshold_same", "threshold_gap", "otm_min", "otm_max", "strike_step", "move_points", "point_value", "take_profit"):
         p[k] = float(p[k])
     for k in ("entry_days", "exit_days", "roll_days"):

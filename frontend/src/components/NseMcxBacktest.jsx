@@ -14,12 +14,23 @@ const rs = (v) => (v == null ? "—" : (v < 0 ? "−₹" : "₹") + fmtNum(Math.
 const PAGE = 25;
 const KEY = "arbi_nsemcx_bt_params";
 
-const DEFAULTS = {
+const BASE = {
   start: "2024-04-01", end: "", expiry: "", sides: "both",
   threshold_same: 25, threshold_gap: 60, otm_min: 300, otm_max: 800, strike_step: 100,
   mode: "hold", move_points: 500, point_value: 100, multi: false, liquid_only: true, pick: "max",
   entry_days: 30, exit_days: 10, loss_roll: true, roll_days: 1, roll_legs: "both", max_rolls: 0, take_profit: 0,
 };
+// Natural gas trades on its own scale (client's note, 10-Sep): 40-point move, 0.75 / 1.25 diff, 20-60 OTM, 5-step, 1250 a point.
+const BY_PRODUCT = {
+  crude: BASE,
+  natgas: { ...BASE, threshold_same: 0.75, threshold_gap: 1.25, otm_min: 20, otm_max: 60, strike_step: 5, move_points: 40, point_value: 1250 },
+};
+const STEPS = { crude: [100, 500], natgas: [5, 10] };
+const defaultsFor = (product) => BY_PRODUCT[product] || BASE;
+const keyFor = (product) => (product === "crude" ? KEY : `${KEY}_${product}`);
+function loadParams(product) {
+  try { return { ...defaultsFor(product), ...(JSON.parse(localStorage.getItem(keyFor(product)) || "{}")) }; } catch { return { ...defaultsFor(product) }; }
+}
 const EXIT_LABEL = {
   "square off": "squared off before expiry", expiry: "at expiry", adjusted: "closed on adjustment", "take profit": "take profit hit",
   "data end": "still open, at latest close", "last price": "at latest close",
@@ -120,9 +131,8 @@ function TradeDetail({ t, pointValue, onClose }) {
 }
 
 export default function NseMcxBacktest({ product, cfg }) {
-  const [p, setP] = useState(() => {
-    try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || "{}")) }; } catch { return { ...DEFAULTS }; }
-  });
+  const [p, setP] = useState(() => loadParams(product));
+  const DEFAULTS = defaultsFor(product);
   const [exps, setExps] = useState([]);
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -131,8 +141,8 @@ export default function NseMcxBacktest({ product, cfg }) {
   const [sortKey, setSortKey] = useState("entry_date");
   const [sortDir, setSortDir] = useState(1);
   const [detail, setDetail] = useState(null);
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }, [p]);
-  useEffect(() => { api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
+  useEffect(() => { try { localStorage.setItem(keyFor(product), JSON.stringify(p)); } catch {} }, [p, product]);
+  useEffect(() => { setP(loadParams(product)); setRes(null); api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
   const set = (k) => (e) => setP((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
   async function run() {
@@ -179,15 +189,15 @@ export default function NseMcxBacktest({ product, cfg }) {
           <Field label="Side"><select className="oh-weeks" value={p.sides} onChange={set("sides")}><option value="both">Call + Put</option><option value="CE">Call only</option><option value="PE">Put only</option></select></Field>
           <Field label="Mode" hint="hold = run to expiry; roll = on a move close the old strike and take the new one; add = keep the old and add the new">
             <select className="oh-weeks" value={p.mode} onChange={set("mode")}><option value="hold">Hold to expiry (a)</option><option value="roll">Adjust: new strike, old closed (b1)</option><option value="add">Adjust: new strike, old kept (b2)</option></select></Field>
-          <Field label="Move trigger (pts)" hint="Future move after entry that adjusts the strike (down hurts CE, up hurts PE)"><input type="number" className="oh-weeks bt-num" value={p.move_points} onChange={set("move_points")} disabled={p.mode === "hold"} /></Field>
+          <Field label="Move trigger (pts)" hint="Future move after entry that adjusts the strike (down hurts CE, up hurts PE)"><input type="number" step="any" className="oh-weeks bt-num" value={p.move_points} onChange={set("move_points")} disabled={p.mode === "hold"} /></Field>
         </div>
         <div className="bt-row">
-          <Field label="Diff, same expiry" hint="Minimum premium difference (points) when both expiries fall on one day"><input type="number" className="oh-weeks bt-num" value={p.threshold_same} onChange={set("threshold_same")} /></Field>
-          <Field label="Diff, 7-day gap" hint="Minimum premium difference (points) when the expiries are a week apart"><input type="number" className="oh-weeks bt-num" value={p.threshold_gap} onChange={set("threshold_gap")} /></Field>
-          <Field label="OTM from (pts)" hint="Nearest strike considered, points from the day's ATM"><input type="number" className="oh-weeks bt-num" value={p.otm_min} onChange={set("otm_min")} /></Field>
-          <Field label="OTM to (pts)"><input type="number" className="oh-weeks bt-num" value={p.otm_max} onChange={set("otm_max")} /></Field>
-          <Field label="Strike step" hint="100 = every hundred, 500 = the round ones (5000, 5500...)"><select className="oh-weeks" value={p.strike_step} onChange={set("strike_step")}><option value="100">100</option><option value="500">500</option></select></Field>
-          <Field label="₹ per point"><input type="number" className="oh-weeks bt-num" value={p.point_value} onChange={set("point_value")} /></Field>
+          <Field label="Diff, same expiry" hint="Minimum premium difference (points) when both expiries fall on one day"><input type="number" step="any" className="oh-weeks bt-num" value={p.threshold_same} onChange={set("threshold_same")} /></Field>
+          <Field label="Diff, 7-day gap" hint="Minimum premium difference (points) when the expiries are a week apart"><input type="number" step="any" className="oh-weeks bt-num" value={p.threshold_gap} onChange={set("threshold_gap")} /></Field>
+          <Field label="OTM from (pts)" hint="Nearest strike considered, points from the day's ATM"><input type="number" step="any" className="oh-weeks bt-num" value={p.otm_min} onChange={set("otm_min")} /></Field>
+          <Field label="OTM to (pts)"><input type="number" step="any" className="oh-weeks bt-num" value={p.otm_max} onChange={set("otm_max")} /></Field>
+          <Field label="Strike step" hint={product === "natgas" ? "5 = every strike, 10 = the round ones" : "100 = every hundred, 500 = the round ones (5000, 5500...)"}><select className="oh-weeks" value={p.strike_step} onChange={set("strike_step")}>{(STEPS[product] || STEPS.crude).map((v) => <option key={v} value={v}>{v}</option>)}</select></Field>
+          <Field label="₹ per point"><input type="number" step="any" className="oh-weeks bt-num" value={p.point_value} onChange={set("point_value")} /></Field>
           <Field label="Pick" hint="Which strike when several qualify"><select className="oh-weeks" value={p.pick} onChange={set("pick")}><option value="max">Widest difference</option><option value="near">Nearest to ATM</option></select></Field>
           <div className="bt-checks">
             <label className="pt-symtick"><input type="checkbox" checked={!!p.liquid_only} onChange={set("liquid_only")} /> Traded on both exchanges</label>
@@ -196,7 +206,7 @@ export default function NseMcxBacktest({ product, cfg }) {
         </div>
         <div className="bt-row">
           <Field label="Entry window (days)" hint="Enter only when the first expiry is this many days away or less. 0 = any day"><input type="number" min="0" className="oh-weeks bt-num" value={p.entry_days} onChange={set("entry_days")} /></Field>
-          <Field label="Take profit (pts)" hint="Square off the day the open profit reaches this many points. 0 = off"><input type="number" min="0" className="oh-weeks bt-num" value={p.take_profit} onChange={set("take_profit")} /></Field>
+          <Field label="Take profit (pts)" hint="Square off the day the open profit reaches this many points. 0 = off"><input type="number" step="any" min="0" className="oh-weeks bt-num" value={p.take_profit} onChange={set("take_profit")} /></Field>
           <Field label="Square off (days before)" hint="Square off this many days before the first expiry. 0 = on the expiry day"><input type="number" min="0" className="oh-weeks bt-num" value={p.exit_days} onChange={set("exit_days")} /></Field>
           <div className="bt-checks">
             <label className="pt-symtick"><input type="checkbox" checked={!!p.loss_roll} onChange={set("loss_roll")} /> In loss: shift to next expiry</label>
