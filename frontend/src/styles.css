@@ -6377,3 +6377,23 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .bt-daily { margin-top: 10px; }
 .bt-daily tr.bt-daily-note td { font-weight: 700; }
 @media (max-width: 1200px) { .bt-tiles { grid-template-columns: repeat(3, 1fr); } .bt-actions { margin-left: 0; } }
+
+/* NSE vs MCX paper trading */
+.pp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
+.pp-pill { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--bg-surface-alt); color: var(--text-muted); }
+.pp-pill.on { background: rgba(22,163,74,.12); color: var(--green); }
+.pp-info { font-size: 12px; color: var(--text-secondary); }
+.pp-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.pp-flash { padding: 10px 14px; border-radius: 12px; background: rgba(201,162,78,.16); border: 1px solid var(--accent); font-size: 13px; }
+.pp-flash small { color: var(--text-muted); margin-left: 6px; }
+.pp-tiles { grid-template-columns: repeat(6, minmax(120px, 1fr)); }
+.pp-see { display: flex; flex-direction: column; font-size: 13px !important; line-height: 1.25; }
+.pp-two { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+.pp-evlist { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow: auto; }
+.pp-ev { font-size: 12px; padding: 5px 0; border-bottom: 1px dashed var(--border-light); line-height: 1.35; }
+.pp-ev b { margin-right: 4px; }
+.pp-evtime { display: block; font-size: 10.5px; color: var(--text-muted); }
+.pp-ev-signal b, .pp-ev-add-lot b { color: var(--green); }
+.pp-ev-exit b { color: var(--red); }
+.pp-ev-shift b, .pp-ev-adjust b { color: var(--accent); }
+@media (max-width: 1200px) { .pp-tiles { grid-template-columns: repeat(3, 1fr); } .pp-two { grid-template-columns: 1fr; } }

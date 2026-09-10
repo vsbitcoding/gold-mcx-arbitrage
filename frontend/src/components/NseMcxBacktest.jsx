@@ -7,7 +7,7 @@ import { fmtNum } from "../utils/format.js";
 // past with his own thresholds. Runs on the daily closes since April 2024.
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const dmy = (iso) => (iso ? `${iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` : "—");
+export const dmy = (iso) => (iso ? `${iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` : "—");
 const num = (v, d = 2) => (v == null ? "—" : fmtNum(v, d));
 const signed = (v, d = 2) => (v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + fmtNum(Math.abs(v), d));
 const rs = (v) => (v == null ? "—" : (v < 0 ? "−₹" : "₹") + fmtNum(Math.abs(v), 0));
@@ -31,7 +31,7 @@ const keyFor = (product) => (product === "crude" ? KEY : `${KEY}_${product}`);
 function loadParams(product) {
   try { return { ...defaultsFor(product), ...(JSON.parse(localStorage.getItem(keyFor(product)) || "{}")) }; } catch { return { ...defaultsFor(product) }; }
 }
-const EXIT_LABEL = {
+export const EXIT_LABEL = {
   "square off": "squared off before expiry", expiry: "at expiry", adjusted: "closed on adjustment", "take profit": "take profit hit",
   "data end": "still open, at latest close", "last price": "at latest close",
 };
@@ -85,7 +85,7 @@ function EquityChart({ curve, byDay = false }) {
   );
 }
 
-function TradeDetail({ t, pointValue, onClose }) {
+export function TradeDetail({ t, pointValue, onClose }) {
   const curve = useMemo(() => (t.daily || []).map((d) => ({ date: d.date, cum_rs: (d.pnl ?? 0) * pointValue })), [t, pointValue]);
   const firstProfit = (t.daily || []).find((d, i) => i > 0 && d.pnl > 0);
   const best = (t.daily || []).reduce((m, d) => (d.pnl != null && (m == null || d.pnl > m.pnl) ? d : m), null);
