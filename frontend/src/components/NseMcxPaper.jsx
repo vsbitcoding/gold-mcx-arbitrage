@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api/client.js";
+import { api, getRole } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 import { TradeDetail, EXIT_LABEL, dmy } from "./NseMcxBacktest.jsx";
 
@@ -76,7 +76,7 @@ export default function NseMcxPaper({ product }) {
   const [detail, setDetail] = useState(null);
   const [flash, setFlash] = useState(null);
   const lastEvent = useRef(null);
-  const admin = (() => { try { return localStorage.getItem("arbi_role") === "admin"; } catch { return false; } })();
+  const admin = getRole() === "admin";
 
   useEffect(() => {
     let alive = true, timer = null;
