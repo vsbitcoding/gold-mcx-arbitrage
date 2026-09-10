@@ -66,6 +66,8 @@ DEFAULTS = {
     "roll_legs": "both",            # both | NSE | MCX
     "max_rolls": 0,                 # 0 = never shift (a loss squares off too); a big number = practically no cap
     "take_profit": 0.0,             # square off the day the open profit reaches this many points (0 = off)
+    "add_step": 0.0,                # add one lot each time the difference widens by this much while OTM (0 = off)
+    "max_lots": 0,                  # lots per strike incl. the first (0 = no cap)
 }
 # The notebook's numbers are crude's; natural gas has its own scale (client's note, 10-Sep-2026).
 COMMODITY_DEFAULTS = {
@@ -99,6 +101,7 @@ class Position:
     reason: str = "signal"
     adjustments: int = 0
     parent: str | None = None         # the strike this one replaced or joined
+    last_add_diff: float | None = None  # the difference the last lot was added at
     realised: float = 0.0             # points banked by legs already shifted
     rolls: int = 0
     roll_log: list = field(default_factory=list)
@@ -470,7 +473,32 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
                         newp.adjustments = pos.adjustments + 1
                         _set_sq_due(newp, book, p["exit_days"])
                         open_pos.append(newp)
-                # 2. fresh signals, inside the entry window and before the square-off day
+                        # 1b. add a lot: the same difference widened by add_step while the strike is still OTM
+                if p["add_step"] > 0:
+                    for pos in list(open_pos):
+                        if pos.reason == "add lot" or pos.rolls:
+                            continue
+                        otm = (pos.strike > atm) if pos.side == "CE" else (atm - pos.strike > 0)
+                        cell = opts.get((day, pos.strike, pos.side))
+                        if not otm or not cell or cell["nse"] is None or cell["mcx"] is None:
+                            continue
+                        if p["liquid_only"] and not (cell["nse_vol"] > 0 and cell["mcx_vol"] > 0):
+                            continue
+                        diff_now = round(cell[pos.sell_exch.lower()] - cell[pos.buy_exch.lower()], 2)
+                        lots = 1 + sum(1 for x in open_pos if x.parent == f"lot:{pos.entry_date}:{pos.strike:g}")
+                        if p["max_lots"] and lots >= p["max_lots"]:
+                            continue
+                        base = pos.last_add_diff if pos.last_add_diff is not None else abs(pos.diff)
+                        if diff_now >= base + p["add_step"]:
+                            lot = _open(pos.side, pos.strike, cell, day, fut, nse_exp, mcx_exp, reason="add lot", parent=f"lot:{pos.entry_date}:{pos.strike:g}")
+                            lot.buy_exch, lot.sell_exch = pos.buy_exch, pos.sell_exch   # same orientation as the first lot
+                            lot.buy_px, lot.sell_px = cell[pos.buy_exch.lower()], cell[pos.sell_exch.lower()]
+                            lot.legs = {"NSE": Leg("NSE", nse_exp, "buy" if pos.buy_exch == "NSE" else "sell", cell["nse"]),
+                                        "MCX": Leg("MCX", mcx_exp, "buy" if pos.buy_exch == "MCX" else "sell", cell["mcx"])}
+                            _set_sq_due(lot, book, p["exit_days"])
+                            pos.last_add_diff = diff_now
+                            open_pos.append(lot)
+        # 2. fresh signals, inside the entry window and before the square-off day
                 if day < sq_day and (window_from is None or day >= window_from):
                     for side in sides:
                         have = [x for x in open_pos if x.side == side]
@@ -528,9 +556,9 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
 def run(params: dict) -> dict:
     commodity = (params or {}).get("commodity") or DEFAULTS["commodity"]
     p = {**DEFAULTS, **COMMODITY_DEFAULTS.get(commodity, {}), **{k: v for k, v in (params or {}).items() if v is not None and v != ""}}
-    for k in ("threshold_same", "threshold_gap", "otm_min", "otm_max", "strike_step", "move_points", "point_value", "take_profit"):
+    for k in ("threshold_same", "threshold_gap", "otm_min", "otm_max", "strike_step", "move_points", "point_value", "take_profit", "add_step"):
         p[k] = float(p[k])
-    for k in ("entry_days", "exit_days", "roll_days"):
+    for k in ("entry_days", "exit_days", "roll_days", "max_lots"):
         p[k] = max(0, int(float(p[k])))
     mr = (params or {}).get("max_rolls")
     p["max_rolls"] = 0 if mr in (None, "") else max(0, int(float(mr)))

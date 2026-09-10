@@ -536,3 +536,43 @@ class NseMcxOptDaily(Base):
 Index("ix_nmopt_key", NseMcxOptDaily.exchange, NseMcxOptDaily.commodity, NseMcxOptDaily.trade_date,
       NseMcxOptDaily.expiry, NseMcxOptDaily.option_type, NseMcxOptDaily.strike, unique=True)
 Index("ix_nmopt_lookup", NseMcxOptDaily.commodity, NseMcxOptDaily.exchange, NseMcxOptDaily.expiry, NseMcxOptDaily.trade_date)
+
+
+class NseMcxPaperSetting(Base):
+    """Live paper-trading rules for one commodity on the NSE vs MCX page
+    (client's request 10-Sep-2026). `params` is the JSON of nse_mcx_paper.DEFAULTS."""
+    __tablename__ = "nse_mcx_paper_settings"
+    id = Column(Integer, primary_key=True)
+    commodity = Column(String(16), nullable=False, unique=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    params = Column(Text, nullable=False, default="{}")
+    updated_at = Column(DateTime, nullable=True)
+    updated_by = Column(String(64), nullable=True)
+
+
+class NseMcxPaperTrade(Base):
+    """One paper position (one lot) of the premium arbitrage: buy the option on
+    the cheaper exchange, sell it on the dearer one. Never a real order. The
+    full state (legs, shifts, marks, day rows) lives in `data` as JSON; the
+    columns are the bits the lists filter on."""
+    __tablename__ = "nse_mcx_paper_trades"
+    id = Column(Integer, primary_key=True)
+    commodity = Column(String(16), nullable=False, index=True)
+    status = Column(String(8), nullable=False, default="open", index=True)
+    side = Column(String(2), nullable=False)
+    strike = Column(Float, nullable=False)
+    entry_time = Column(DateTime, nullable=False)
+    exit_time = Column(DateTime, nullable=True)
+    pnl_points = Column(Float, nullable=True)
+    data = Column(Text, nullable=False, default="{}")
+
+
+class NseMcxPaperEvent(Base):
+    """What the paper engine did and why - entries, adds, shifts, exits."""
+    __tablename__ = "nse_mcx_paper_events"
+    id = Column(Integer, primary_key=True)
+    time = Column(DateTime, nullable=False, index=True)
+    commodity = Column(String(16), nullable=False, index=True)
+    trade_id = Column(Integer, nullable=True)
+    kind = Column(String(16), nullable=False)
+    text = Column(String(240), nullable=False)

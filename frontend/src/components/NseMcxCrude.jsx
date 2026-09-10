@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import NseMcxDaily from "./NseMcxDaily.jsx";
 import NseMcxBacktest from "./NseMcxBacktest.jsx";
+import NseMcxPaper from "./NseMcxPaper.jsx";
 import { fmtNum } from "../utils/format.js";
 import NseMcxGraph from "./NseMcxGraph.jsx";
 
@@ -469,7 +470,7 @@ export default function NseMcxCrude() {
   const [view, setView] = useState(() => {
     try {
       const v = localStorage.getItem("arbi_nsemcx_view");
-      return ["live", "history", "graph", "backtest"].includes(v) ? v : "live";
+      return ["live", "history", "graph", "backtest", "paper"].includes(v) ? v : "live";
     } catch { return "live"; }
   });
   // Which contract month. The client asked for one at a time behind a button
@@ -602,7 +603,7 @@ export default function NseMcxCrude() {
           title="Implied volatility under each price, off the bid and off the ask"
           onClick={() => setShowIv((v) => !v)}>IV</button>
         <div className="oh-group" role="tablist" aria-label="View">
-          {[["live", "Live"], ["history", "History"], ["graph", "Graph"], ["backtest", "Backtest"]].map(([k, l]) => (
+          {[["live", "Live"], ["history", "History"], ["graph", "Graph"], ["backtest", "Backtest"], ["paper", "Paper"]].map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k}
               className={`oh-chip ${view === k ? "on" : ""}`}
               onClick={() => setView(k)}>{l}</button>
@@ -628,6 +629,15 @@ export default function NseMcxCrude() {
       <div className="cru-page">
         {head}
         <NseMcxBacktest product={product} cfg={cfg} />
+      </div>
+    );
+  }
+
+  if (view === "paper") {
+    return (
+      <div className="cru-page">
+        {head}
+        <NseMcxPaper product={product} cfg={cfg} />
       </div>
     );
   }

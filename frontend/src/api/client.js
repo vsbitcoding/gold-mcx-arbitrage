@@ -186,6 +186,12 @@ export const api = {
             `&side=${side}&month=${month}&days=${days}` +
             (strike == null ? "" : `&strike=${strike}`)),
   nseMcxBacktest: (params) => request("/api/nse-mcx/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
+  nseMcxPaper: (commodity = "crude") => request(`/api/nse-mcx/paper?commodity=${commodity}`),
+  nseMcxPaperSettings: (commodity, params) => request(`/api/nse-mcx/paper/settings?commodity=${commodity}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
+  nseMcxPaperEnable: (commodity, enabled) => request(`/api/nse-mcx/paper/enable?commodity=${commodity}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }),
+  nseMcxPaperClose: (commodity, id) => request(`/api/nse-mcx/paper/close/${id}?commodity=${commodity}`, { method: "POST" }),
+  nseMcxPaperCloseAll: (commodity) => request(`/api/nse-mcx/paper/close-all?commodity=${commodity}`, { method: "POST" }),
+  nseMcxPaperClear: (commodity) => request(`/api/nse-mcx/paper/clear?commodity=${commodity}`, { method: "POST" }),
   nseMcxDailyExpiries: (commodity = "crude") => request(`/api/nse-mcx/daily/expiries?commodity=${commodity}`),
   nseMcxDaily: ({ commodity = "crude", expiry, mcxExpiry = null, start = null, end = null, type = null, strike = null } = {}) => {
     const q = new URLSearchParams({ commodity, expiry });

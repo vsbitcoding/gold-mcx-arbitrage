@@ -16,6 +16,7 @@ from app.services.maintenance import start_in_background as start_maintenance
 from app.services.market_data import quote_store
 from app.services.angel_feed import start_in_background as start_angel_feed
 from app.services.crude_iv_service import start_in_background as start_crude_iv
+from app.services.nse_mcx_paper import start_in_background as start_nse_mcx_paper
 from app.services.ibkr_feed import start_in_background as start_ibkr_feed
 from app.services.premium_feed import start_in_background as start_premium_feed
 from app.services.signal_service import start_in_background as start_signals
@@ -125,6 +126,7 @@ async def startup() -> None:
     start_premium_feed()
     start_ibkr_feed()
     start_crude_iv()
+    start_nse_mcx_paper()
     start_angel_feed()
 
 

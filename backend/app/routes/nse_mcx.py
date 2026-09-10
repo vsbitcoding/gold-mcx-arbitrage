@@ -22,7 +22,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
 
-from app.security import get_current_user
+from app.security import get_current_user, require_admin
 
 from app.services import (angel_feed, crude_iv_service, iv_calc, mcx_opt_stream,
                           nse_mcx_history)
@@ -408,3 +408,52 @@ def nse_mcx_history_view(commodity: str = Query("crude", pattern="^(crude|natgas
     """Stored 10:00 / 12:00 / 15:00 IST boards, newest first. Each snapshot's
     `board` is exactly the live shape, so one component renders both views."""
     return nse_mcx_history.get_history(commodity=commodity, slot=slot, days=days, date=date, month=month)
+
+
+# ------------------------------------------------------------------ paper trading
+@router.get("/nse-mcx/paper")
+def nse_mcx_paper_state(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                        user: str = Depends(get_current_user)):
+    """Live paper trading of the premium arbitrage: rules, open lots with their
+    live marks, closed trades, the event log."""
+    from app.services import nse_mcx_paper
+    return nse_mcx_paper.state(commodity)
+
+
+@router.put("/nse-mcx/paper/settings")
+def nse_mcx_paper_settings(body: dict, commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                           user: str = Depends(require_admin)):
+    from app.services import nse_mcx_paper
+    return {"params": nse_mcx_paper.set_params(commodity, body or {}, user)}
+
+
+@router.post("/nse-mcx/paper/enable")
+def nse_mcx_paper_enable(body: dict, commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                         user: str = Depends(require_admin)):
+    from app.services import nse_mcx_paper
+    return nse_mcx_paper.set_enabled(commodity, bool((body or {}).get("enabled")), user)
+
+
+@router.post("/nse-mcx/paper/close/{trade_id}")
+def nse_mcx_paper_close(trade_id: int, commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                        user: str = Depends(require_admin)):
+    from fastapi import HTTPException
+    from app.services import nse_mcx_paper
+    try:
+        return nse_mcx_paper.close_trade(commodity, trade_id, user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/nse-mcx/paper/close-all")
+def nse_mcx_paper_close_all(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                            user: str = Depends(require_admin)):
+    from app.services import nse_mcx_paper
+    return nse_mcx_paper.close_all(commodity, user)
+
+
+@router.post("/nse-mcx/paper/clear")
+def nse_mcx_paper_clear(commodity: str = Query("crude", pattern="^(crude|natgas)$"),
+                        user: str = Depends(require_admin)):
+    from app.services import nse_mcx_paper
+    return nse_mcx_paper.clear(commodity, user)
