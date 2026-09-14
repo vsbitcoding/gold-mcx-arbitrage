@@ -576,3 +576,20 @@ class NseMcxPaperEvent(Base):
     trade_id = Column(Integer, nullable=True)
     kind = Column(String(16), nullable=False)
     text = Column(String(240), nullable=False)
+
+
+class MarketHoliday(Base):
+    """One exchange holiday. NSE = equity / F&O (closed all day when listed);
+    MCX = commodity, which closes its morning session (09:00-17:00) and/or its
+    evening session (17:00-23:30) separately. Pulled from NSE's holiday master
+    once a year, editable by the admin (client, 14-Sep-2026)."""
+    __tablename__ = "market_holidays"
+    id = Column(Integer, primary_key=True)
+    date = Column(String(10), nullable=False, index=True)          # YYYY-MM-DD
+    exchange = Column(String(8), nullable=False)                    # NSE | MCX
+    name = Column(String(120), nullable=False, default="")
+    morning_closed = Column(Boolean, nullable=False, default=True)
+    evening_closed = Column(Boolean, nullable=False, default=True)
+    source = Column(String(16), nullable=False, default="manual")   # nse | manual
+    updated_by = Column(String(64), nullable=True)
+    __table_args__ = (UniqueConstraint("date", "exchange", name="uq_market_holiday"),)

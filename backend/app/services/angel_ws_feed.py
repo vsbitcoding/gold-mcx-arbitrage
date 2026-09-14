@@ -38,27 +38,21 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def is_market_open() -> bool:
-    """MCX hours, Mon-Fri 09:00-23:30 IST - the one clock every screen uses."""
-    n = datetime.now(IST)
-    if n.weekday() >= 5:
-        return False
-    open_t = n.replace(hour=9, minute=0, second=0, microsecond=0)
-    close_t = n.replace(hour=23, minute=30, second=0, microsecond=0)
-    return open_t <= n <= close_t
+    """MCX open right now - sessions AND the holiday calendar (market_calendar),
+    the one clock every screen, the watchdog and the paper engine use."""
+    from app.services import market_calendar
+    return market_calendar.is_open("MCX")
 
 
-# NSE / BSE cash and F&O close at 15:30; MCX runs to 23:30. A socket carrying
-# only NSE/BSE tokens is rightly silent all evening - not stale.
-_EXCHANGE_HOURS = {1: (9, 15, 15, 30), 2: (9, 15, 15, 30), 3: (9, 15, 15, 30), 4: (9, 15, 15, 30),
-                   5: (9, 0, 23, 30), 13: (9, 0, 17, 0)}
+# Angel exchange types: 1 NSE, 2 NFO, 3 BSE, 4 BFO, 5 MCX, 13 CDS. NSE / BSE
+# close at 15:30; MCX runs to 23:30. A socket carrying only NSE/BSE tokens is
+# rightly silent all evening - not stale. Holidays come from the calendar.
+_EXCHANGE_OF = {1: "NSE", 2: "NSE", 3: "NSE", 4: "NSE", 5: "MCX", 13: "NSE"}
 
 
 def _exchange_open(ex: int) -> bool:
-    n = datetime.now(IST)
-    if n.weekday() >= 5:
-        return False
-    h1, m1, h2, m2 = _EXCHANGE_HOURS.get(ex, (9, 0, 23, 30))
-    return n.replace(hour=h1, minute=m1, second=0, microsecond=0) <= n <= n.replace(hour=h2, minute=m2, second=0, microsecond=0)
+    from app.services import market_calendar
+    return market_calendar.is_open(_EXCHANGE_OF.get(ex, "MCX"))
 
 
 def _eval_and_broadcast() -> None:
@@ -127,6 +121,12 @@ def get_status() -> dict:
     s["last_tick_age_seconds"] = int(time.time() - s["last_tick_epoch"]) if s["last_tick_epoch"] else None
     s["server_time"] = datetime.now(timezone.utc).isoformat()
     s["market_open"] = is_market_open()
+    try:
+        from app.services import market_calendar
+        s["market"] = market_calendar.state("MCX")
+        s["market_nse"] = market_calendar.state("NSE")
+    except Exception as e:  # noqa: BLE001
+        s["market"] = {"state": "open" if s["market_open"] else "closed", "open": s["market_open"], "label": "", "reason": str(e)[:80]}
     s["connections"] = [c.describe() for c in list(_conns)]
     return s
 
@@ -473,6 +473,13 @@ def _run_feed_thread() -> None:
             backoff = min(backoff * 2, 120)
 
 
+# A rebuild that brings no tick back doubles the wait before the next one
+# (2, 4, 8, 15 min cap): a market that is open but quiet, or a broker outage,
+# should not cost a reconnect every two minutes. One tick resets it.
+_REBUILD_GRACE_MAX = 900
+_silent_rebuilds = [0]
+
+
 def _watchdog() -> None:
     log.info("Angel watchdog started.")
     while True:
@@ -480,10 +487,15 @@ def _watchdog() -> None:
         try:
             with _state_lock:
                 mode, last_tick = _state["mode"], _state["last_tick_epoch"]
+            if last_tick and last_tick > _last_rebuild_epoch[0]:
+                _silent_rebuilds[0] = 0                          # ticks came back
             if mode == "live" and is_market_open() and last_tick:
                 age = time.time() - last_tick
-                if age > STALE_BOARD_SECONDS and time.time() - _last_rebuild_epoch[0] > REBUILD_GRACE_SECONDS:
-                    log.warning("Watchdog: no tick for %.0fs during market hours - rebuilding feed", age)
+                grace = min(REBUILD_GRACE_SECONDS * (2 ** _silent_rebuilds[0]), _REBUILD_GRACE_MAX)
+                if age > STALE_BOARD_SECONDS and time.time() - _last_rebuild_epoch[0] > grace:
+                    log.warning("Watchdog: no tick for %.0fs during market hours - rebuilding feed (silent rebuilds so far %d, next wait %ds)",
+                                age, _silent_rebuilds[0], min(grace * 2, _REBUILD_GRACE_MAX))
+                    _silent_rebuilds[0] += 1
                     _set_state(mode="stale")
                     request_resubscribe_force(f"no tick for {int(age)}s")
         except Exception as e:  # noqa: BLE001

@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import logging
 import uuid
 
@@ -17,6 +18,8 @@ from app.services.market_data import quote_store
 from app.services.angel_feed import start_in_background as start_angel_feed
 from app.services.crude_iv_service import start_in_background as start_crude_iv
 from app.services.nse_mcx_paper import start_in_background as start_nse_mcx_paper
+from app.routes import market_calendar as market_calendar_route
+from app.services import market_calendar
 from app.services.ibkr_feed import start_in_background as start_ibkr_feed
 from app.services.premium_feed import start_in_background as start_premium_feed
 from app.services.signal_service import start_in_background as start_signals
@@ -38,6 +41,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users_route.router)
+app.include_router(market_calendar_route.router)
 app.include_router(pairs.router)
 app.include_router(feed.router)
 app.include_router(calculator.router)
@@ -114,6 +118,7 @@ async def _confine_traders(request, call_next):
 async def startup() -> None:
     Base.metadata.create_all(bind=engine)
     run_simple_migrations()
+    threading.Thread(target=market_calendar.ensure_loaded, daemon=True, name="market-calendar").start()
     migrate_ladders()
     restored = quote_store.restore_from_db()
     if restored:

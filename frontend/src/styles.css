@@ -6397,3 +6397,14 @@ body.dark .sc-silver .sc-card-head { color: #c7ced6; }
 .pp-ev-exit b { color: var(--red); }
 .pp-ev-shift b, .pp-ev-adjust b { color: var(--accent); }
 @media (max-width: 1200px) { .pp-tiles { grid-template-columns: repeat(3, 1fr); } .pp-two { grid-template-columns: 1fr; } }
+
+/* Market Holidays page */
+.hp-page .um-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.hp-actions { display: flex; gap: 8px; align-items: center; }
+.hp-now { margin: 10px 0; }
+.hp-form { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 18px; }
+.hp-form .bt-f input, .hp-form .bt-f select { width: 100%; }
+.hp-checks { flex-direction: column; align-items: flex-start; gap: 6px; }
+.hp-table tr.hp-today td { font-weight: 800; background: rgba(201,162,78,.10); }
+.hp-rowact { display: flex; gap: 4px; justify-content: center; }
+.hp-del { color: var(--red); }

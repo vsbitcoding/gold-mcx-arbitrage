@@ -186,6 +186,10 @@ export const api = {
             `&side=${side}&month=${month}&days=${days}` +
             (strike == null ? "" : `&strike=${strike}`)),
   nseMcxBacktest: (params) => request("/api/nse-mcx/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
+  marketHolidays: (year) => request(`/api/market-calendar${year ? `?year=${year}` : ""}`),
+  marketHolidaySave: (body) => request("/api/market-calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  marketHolidayDelete: (id) => request(`/api/market-calendar/${id}`, { method: "DELETE" }),
+  marketHolidayRefresh: (year) => request(`/api/market-calendar/refresh${year ? `?year=${year}` : ""}`, { method: "POST" }),
   nseMcxPaper: (commodity = "crude") => request(`/api/nse-mcx/paper?commodity=${commodity}`),
   nseMcxPaperSettings: (commodity, params) => request(`/api/nse-mcx/paper/settings?commodity=${commodity}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
   nseMcxPaperEnable: (commodity, enabled) => request(`/api/nse-mcx/paper/enable?commodity=${commodity}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }),

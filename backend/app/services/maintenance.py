@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import (activity, elec_service, crude_iv_history, live_feed, extra_instruments,
+from app.services import (activity, elec_service, market_calendar, crude_iv_history, live_feed, extra_instruments,
                           mcxccl_service, nse_mcx_history, options_history_service,
                           span_service)
 
@@ -251,6 +251,7 @@ def _loop() -> None:
                     threading.Thread(target=bhav_history.refresh_recent, daemon=True).start()
                     # NSE's side of the daily option comparison, same morning
                     threading.Thread(target=nse_opt_history.refresh_nse_recent, daemon=True).start()
+                    threading.Thread(target=market_calendar.ensure_loaded, daemon=True, name="market-calendar").start()
                 except Exception as e:  # noqa: BLE001
                     log.warning("maintenance: bhav refresh failed: %s", e)
 

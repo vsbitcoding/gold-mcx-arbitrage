@@ -175,6 +175,7 @@ export default function Header({
   const tickAge = feedStatus?.last_tick_age_seconds;
   const tokenSecs = feedStatus?.token_expires_in_seconds;
   const marketOpen = feedStatus?.market_open;
+  const market = feedStatus?.market;
 
   let label = "LIVE";
   let cls = "health-live";
@@ -193,9 +194,9 @@ export default function Header({
     label = "FEED DOWN";
     cls = "health-down";
   } else if (!marketOpen) {
-    label = "MARKET CLOSED";
+    label = market?.state === "holiday" ? "HOLIDAY" : "MARKET CLOSED";
     cls = "health-poll";
-    extra = "";
+    extra = market?.state === "holiday" && market?.next_open ? `till ${market.next_open.slice(11, 16)}` : "";
   } else if (tickAge !== null && tickAge > 30) {
     label = "STALE";
     cls = "health-warn";
@@ -210,7 +211,7 @@ export default function Header({
     ? [
         `Browser ↔ Server: ${wsState}`,
         `Server ↔ Angel One: ${feedMode || "—"}`,
-        `Market: ${marketOpen ? "OPEN" : "CLOSED"}`,
+        `Market: ${marketOpen ? "OPEN" : (market?.label || "CLOSED")}${market?.reason ? ` (${market.reason})` : ""}`,
         `Client: ${feedStatus.client_name || "—"}`,
         `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,
         `Last tick: ${tickAge === null ? "never" : tickAge + "s ago"}`,
@@ -338,6 +339,17 @@ export default function Header({
                   <span className="user-item-lbl">Manage Users</span>
                 </button>
               )}
+              {role === "admin" && (
+                <button className={`user-item ${page === "holidays" ? "on" : ""}`} role="menuitem"
+                  onClick={() => { setUserMenu(false); onNavigate("holidays"); }}>
+                  <span className="user-item-ic">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <span className="user-item-lbl">Market Holidays</span>
+                </button>
+              )}
               <button className="user-item danger" role="menuitem" onClick={() => { setUserMenu(false); onLogout(); }}>
                 <span className="user-item-ic">⎋</span>
                 <span className="user-item-lbl">Logout</span>
@@ -380,6 +392,10 @@ export default function Header({
                 <button className={`nav-drawer-item ${page === "users" ? "active" : ""}`} onClick={() => go("users")}>
                   <span className="nav-drawer-ic">👥</span>
                   <span className="nav-drawer-lbl">Manage Users</span>
+                </button>
+                <button className={`nav-drawer-item ${page === "holidays" ? "active" : ""}`} onClick={() => go("holidays")}>
+                  <span className="nav-drawer-ic">📅</span>
+                  <span className="nav-drawer-lbl">Market Holidays</span>
                 </button>
               </div>
             )}

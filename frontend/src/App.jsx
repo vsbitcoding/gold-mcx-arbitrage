@@ -17,6 +17,7 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog.jsx";
 import UsersPage from "./components/UsersPage.jsx";
+import HolidaysPage from "./components/HolidaysPage.jsx";
 import { api, getToken, clearToken, getRole, getPages, storeSession } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
 
@@ -35,7 +36,7 @@ function getStoredDensity() {
 // page plus Manage Users; a user only what the admin ticked.
 function allowedPages() {
   const pages = getPages();
-  if (pages === "all") return [...VALID_PAGES, "users"];
+  if (pages === "all") return [...VALID_PAGES, "users", "holidays"];
   return VALID_PAGES.filter((k) => pages.includes(k));
 }
 // The live board (Cross / Calendar / Signals) rides the rates socket, which the
@@ -310,6 +311,7 @@ function Dashboard() {
       {page === "intl" && <International />}
       {page === "autotrades" && <AutoTrades />}
         {page === "users" && getRole() === "admin" && <UsersPage />}
+        {page === "holidays" && getRole() === "admin" && <HolidaysPage />}
         {page === "options" && <OptionsSpread />}
         {page === "goldopt" && <GoldOptions />}
         {page === "stock" && <BullionStock />}
