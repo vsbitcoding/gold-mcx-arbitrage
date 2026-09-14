@@ -117,9 +117,9 @@ export default function HolidaysPage() {
                   <td>{cell(m, "pm")}</td>
                   <td className="bs-muted">{[n, m].filter(Boolean).some((x) => x.source === "manual") ? "edited" : "NSE list"}</td>
                   {admin && <td className="hp-rowact">
-                    {m && <button type="button" className="oh-chip" onClick={() => setForm(m)}>MCX</button>}
-                    {n && <button type="button" className="oh-chip" onClick={() => setForm(n)}>NSE</button>}
-                    {[m, n].filter(Boolean).map((x) => <button key={x.id} type="button" className="oh-chip hp-del" title={`Delete ${x.exchange} row`} onClick={() => remove(x)}>× {x.exchange}</button>)}
+                    {m && <button type="button" className="oh-chip" title="Edit the MCX sessions" onClick={() => setForm(m)}>Edit MCX</button>}
+                    {n && <button type="button" className="oh-chip" title="Edit the NSE row" onClick={() => setForm(n)}>Edit NSE</button>}
+                    {[m, n].filter(Boolean).map((x) => <button key={x.id} type="button" className="oh-chip hp-del" title={`Remove the ${x.exchange} holiday on this date`} onClick={() => remove(x)}>Delete {x.exchange}</button>)}
                   </td>}
                 </tr>); })}
             </tbody>
