@@ -341,10 +341,12 @@ def get_live(*, side="both", range_points=MAX_DISPLAY_RANGE, liquidity="all", mi
         message = "Waiting for live BANKEX and BANKNIFTY index quotes."
     elif not buy:
         message = "Both expiries are the same; an earlier-expiry sell leg cannot be selected."
-    elif any(not indices[i]["fresh"] for i in INDICES):
-        message = "Index quotes are stale; paper entries are paused."
     elif not market_open:
+        # Closed wins over stale: at 15:30 the index ticks stop in the same
+        # minute the session ends, and "stale" read as a fault to the client.
         message = "Market closed. Paper entry and square-off resume with fresh market quotes."
+    elif any(not indices[i]["fresh"] for i in INDICES):
+        message = "Index price feed paused (no BANKEX / BANKNIFTY tick for over a minute); paper entries wait for it."
     if state["capacity_limited"]:
         message = (message + " " if message else "") + "Some bank strikes exceed the feed subscription capacity."
     formula = {"points": "Sell Bid − Buy Ask",
