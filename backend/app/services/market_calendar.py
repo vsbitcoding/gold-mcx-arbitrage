@@ -12,7 +12,10 @@ segment carries the commodity sessions (morning closed / evening open), which
 match MCX's own circular. The admin can add or edit a day on the Market
 Holidays page; a manual row is never overwritten by a refresh.
 
-Sessions (IST): NSE 09:15-15:30; MCX morning 09:00-17:00, evening 17:00-23:30.
+Sessions (IST): NSE 09:15-15:40 (trading ends 15:30, the closing session
+runs to 15:40 and the option quotes keep coming until then; the client wants
+the board live and "Market closed" at 15:40, 18-Sep-2026); MCX morning
+09:00-17:00, evening 17:00-23:30.
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ log = logging.getLogger("market_calendar")
 IST = timezone(timedelta(hours=5, minutes=30))
 EXCHANGES = ("NSE", "MCX")
 SESSIONS = {
-    "NSE": ((9, 15, 15, 30),),
+    "NSE": ((9, 15, 15, 40),),
     "MCX": ((9, 0, 17, 0), (17, 0, 23, 30)),
 }
 NSE_HOLIDAY_URL = "https://www.nseindia.com/api/holiday-master?type=trading"
