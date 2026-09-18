@@ -1,7 +1,8 @@
 """BANKEX / BANKNIFTY monthly option comparison, using the shared live feed.
 
-The BANKEX strike is the anchor: match the same distance from each index's
-live ATM, CE above ATM and PE below. The earlier expiry is bought at ask;
+The BANKEX strike is the anchor: show its 500-point ATM and seven strikes on
+each side, matching the signed distance from BANKNIFTY's own 100-point ATM.
+Both CE and PE are available at every strike. The earlier expiry is bought at ask;
 the later expiry is sold at bid. The display divisor is NOT a contract lot
 size or an execution rule. Actual lots come from the instrument master.
 """
@@ -25,7 +26,10 @@ INDICES = ("BANKEX", "BANKNIFTY")
 EXCHANGES = {"BANKEX": "BFO", "BANKNIFTY": "NFO"}
 FRESH_SECONDS = 60
 SUBSCRIPTION_RADIUS = 6000
-MAX_DISPLAY_RANGE = 3000
+STRIKE_STEPS = {"BANKEX": 500, "BANKNIFTY": 100}
+STRIKES_EACH_SIDE = 7
+MAX_DISPLAY_RANGE = STRIKE_STEPS["BANKEX"] * STRIKES_EACH_SIDE
+DISPLAY_OFFSETS = tuple(range(-MAX_DISPLAY_RANGE, MAX_DISPLAY_RANGE + 1, STRIKE_STEPS["BANKEX"]))
 _lock = threading.RLock()
 _state = {"contracts": {}, "expiries": {}, "anchors": {}, "subscribed": set(),
           "requested": 0, "capacity_limited": False, "refreshed": 0.0}
@@ -192,6 +196,11 @@ def market_is_open() -> bool:
 
 
 def quote_leg(meta: dict) -> dict:
+    if not meta.get("security_id"):
+        # Preserve an exact window slot when the requested contract is absent.
+        # Its expected strike is useful to display; no token, lot or quote is invented.
+        return {**meta, "bid": None, "ask": None, "ltp": None, "volume": 0,
+                "oi": 0, "age_seconds": None, "fresh": False}
     q = quote_store.get(meta["security_id"])
     bid, ask = clean_sides(q)
     bid, ask = _positive(bid), _positive(ask)
@@ -210,7 +219,8 @@ def _indices(state: dict) -> dict:
     for index in INDICES:
         spot_meta = quote_leg({"security_id": INDEX_IDS[index]})
         spot = spot_meta["ltp"]
-        strikes = sorted({k[0] for k in state["contracts"].get(index, {})})
+        strikes = sorted({k[0] for k in state["contracts"].get(index, {})
+                          if k[0] % STRIKE_STEPS[index] == 0})
         # Match an actual listed strike, breaking a half-step tie upwards.
         atm = min(strikes, key=lambda k: (abs(k - spot), -k)) if strikes and spot else None
         first = next(iter(state["contracts"].get(index, {}).values()), {})
@@ -234,7 +244,7 @@ def _reason(pair: dict, indices: dict, subscribed: set) -> str | None:
     for index in INDICES:
         leg = pair[index.lower()]
         if not leg or not leg.get("security_id"):
-            return "Matching strike is not listed."
+            return f"Matching {index} strike is not listed."
         if leg["expiry"] < today.date().isoformat() or (leg["expiry"] == today.date().isoformat()
                 and (today.hour, today.minute) >= (15, 30)):
             return "Monthly contracts are rolling to the next expiry."
@@ -260,6 +270,16 @@ def _make_pair(bankex: dict, banknifty: dict, state: dict, indices: dict) -> dic
     return pair
 
 
+def _contract_or_slot(index: str, strike: float, side: str, state: dict) -> dict:
+    """Return the listed contract or an unpriced placeholder for this exact slot."""
+    return state["contracts"].get(index, {}).get((strike, side)) or {
+        "index": index, "security_id": None, "token": None,
+        "exchange": EXCHANGES[index], "exch": EXCHANGES[index], "kind": "bank_option",
+        "trading_symbol": None, "side": side, "strike": strike,
+        "expiry": state["expiries"].get(index), "lot_size": None,
+    }
+
+
 def get_entry_pair(bankex_security_id: str, banknifty_security_id: str, side: str) -> dict:
     with _lock:
         state = dict(_state)
@@ -272,18 +292,28 @@ def get_entry_pair(bankex_security_id: str, banknifty_security_id: str, side: st
     indices = _indices(state)
     if any(indices[i]["atm"] is None for i in INDICES):
         raise ValueError("Waiting for both live index quotes.")
+    if found["BANKEX"]["strike"] % STRIKE_STEPS["BANKEX"] != 0:
+        raise ValueError("BANKEX entries must use a 500-point strike from the Live view.")
     offsets = [found[i]["strike"] - indices[i]["atm"] for i in INDICES]
-    if offsets[0] != offsets[1] or (side == "CE" and offsets[0] < 0) or (side == "PE" and offsets[0] > 0):
+    if offsets[0] != offsets[1]:
         raise ValueError("ATM has changed. Select the matching pair from the refreshed Live view.")
+    if offsets[0] not in DISPLAY_OFFSETS:
+        raise ValueError("The pair is outside the fifteen-strike ATM window. Refresh the Live view.")
     pair = _make_pair(found["BANKEX"], found["BANKNIFTY"], state, indices)
     if not pair["tradable"]:
         raise ValueError(pair["reason"])
     return pair
 
 
-def get_live(*, side="both", range_points=2000, liquidity="liquid", min_volume=1,
+def get_live(*, side="both", range_points=MAX_DISPLAY_RANGE, liquidity="all", min_volume=1,
              max_spread_pct=10.0, bankex_lots=1, banknifty_lots=1,
              metric="divided", divisor=30.0) -> dict:
+    """Show a fixed fifteen-strike window, with both option types at each strike.
+
+    ``range_points`` remains accepted for older clients but cannot resize this
+    window. Default display keeps unlisted, stale and illiquid slots visible.
+    The explicit legacy ``liquid`` filter only hides rows, never substitutes strikes.
+    """
     with _lock:
         state = dict(_state)
     indices = _indices(state)
@@ -310,29 +340,39 @@ def get_live(*, side="both", range_points=2000, liquidity="liquid", min_volume=1
            "status": {"ready": all(indices[i]["atm"] and indices[i]["fresh"] for i in INDICES),
                       "message": message, "subscribed_options": sum(":" in s for s in state["subscribed"])},
            "rows": [], "bankex_strikes": [], "counts": {"candidates": 0, "shown": 0, "filtered": 0},
-           "formula": formula}
+           "formula": formula,
+           "window": {"strike_step": STRIKE_STEPS["BANKEX"],
+                      "strikes_each_side": STRIKES_EACH_SIDE, "strike_count": len(DISPLAY_OFFSETS)}}
     if any(indices[i]["atm"] is None for i in INDICES):
         return out
     bankex_atm, nifty_atm = indices["BANKEX"]["atm"], indices["BANKNIFTY"]["atm"]
     candidates = []
     lots = {"BANKEX": bankex_lots, "BANKNIFTY": banknifty_lots}
-    for (strike, option_type), be in state["contracts"].get("BANKEX", {}).items():
-        offset = strike - bankex_atm
-        if abs(offset) > range_points or (side != "both" and side != option_type):
-            continue
-        if (option_type == "CE" and offset < 0) or (option_type == "PE" and offset > 0):
-            continue
-        bn = state["contracts"].get("BANKNIFTY", {}).get((nifty_atm + offset, option_type))
-        if not bn:
-            continue  # never silently pair a different moneyness distance
+    for offset, option_type in ((offset, option_type) for offset in DISPLAY_OFFSETS
+                                for option_type in ("CE", "PE")
+                                if side == "both" or side == option_type):
+        be = _contract_or_slot("BANKEX", bankex_atm + offset, option_type, state)
+        bn = _contract_or_slot("BANKNIFTY", nifty_atm + offset, option_type, state)
         pair = _make_pair(be, bn, state, indices)
         beq = pair["bankex"]
         mid = (beq["bid"] + beq["ask"]) / 2 if beq["bid"] and beq["ask"] else None
         spread_pct = ((beq["ask"] - beq["bid"]) / mid * 100) if mid else None
         liquid = bool(mid and beq["fresh"] and beq["volume"] >= min_volume
                       and spread_pct <= max_spread_pct)
-        pair.update(id=f"{option_type}:{be['security_id']}:{bn['security_id']}",
-                    offset_points=offset, liquid=liquid, bankex_spread_pct=spread_pct)
+        liquidity_reason = None
+        if not beq["security_id"]:
+            liquidity_reason = "BANKEX strike is not listed."
+        elif not beq["fresh"]:
+            liquidity_reason = "Waiting for fresh BANKEX quotes."
+        elif not mid:
+            liquidity_reason = "BANKEX needs valid two-sided Bid/Ask quotes."
+        elif beq["volume"] < min_volume:
+            liquidity_reason = "BANKEX volume is below the selected minimum."
+        elif spread_pct > max_spread_pct:
+            liquidity_reason = "BANKEX Bid/Ask spread is above the selected maximum."
+        pair.update(id=f"{option_type}:{be['expiry']}:{be['strike']:g}:{bn['expiry']}:{bn['strike']:g}",
+                    offset_points=offset, liquid=liquid, liquidity_reason=liquidity_reason,
+                    bankex_spread_pct=spread_pct)
         buy_leg = pair[buy.lower()] if buy else {}
         sell_leg = pair[sell.lower()] if sell else {}
         buy_px, sell_px = buy_leg.get("ask"), sell_leg.get("bid")
@@ -350,7 +390,7 @@ def get_live(*, side="both", range_points=2000, liquidity="liquid", min_volume=1
                     display_value=round(values[metric], 4) if values[metric] is not None else None)
         candidates.append(pair)
     rows = [p for p in candidates if liquidity == "all" or p["liquid"]]
-    rows.sort(key=lambda p: (p["side"] != "CE", abs(p["offset_points"])))
+    rows.sort(key=lambda p: (p["offset_points"], p["side"] != "CE"))
     out["rows"] = rows
     out["bankex_strikes"] = sorted({p["bankex"]["strike"] for p in candidates})
     out["counts"] = {"candidates": len(candidates), "shown": len(rows), "filtered": len(candidates) - len(rows)}

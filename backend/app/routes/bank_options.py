@@ -23,8 +23,9 @@ class OpenPosition(BaseModel):
 @router.get("/live")
 def live(
     side: Literal["both", "CE", "PE"] = "both",
-    range_points: Annotated[int, Query(ge=100, le=3000)] = 2000,
-    liquidity: Literal["liquid", "all"] = "liquid",
+    range_points: Annotated[int, Query(ge=100, le=3500,
+        description="Legacy setting; the display always uses ATM ± seven 500-point BANKEX strikes.")] = 3500,
+    liquidity: Literal["liquid", "all"] = "all",
     min_volume: Annotated[int, Query(ge=0, le=1_000_000_000)] = 1,
     max_spread_pct: Annotated[float, Query(gt=0, le=200, allow_inf_nan=False)] = 10,
     bankex_lots: Annotated[int, Query(ge=1, le=100)] = 1,
