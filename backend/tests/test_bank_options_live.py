@@ -82,9 +82,10 @@ class BankOptionsLiveTests(unittest.TestCase):
             with self.subTest(side=side, offset=offset):
                 row = self.row(side, offset)
                 self.assertEqual((row["bankex"]["strike"], row["banknifty"]["strike"]), (be, bn))
-                self.assertEqual(row["buy_index"], "BANKEX")
-                self.assertEqual(row["buy_price"], 100)
-                self.assertEqual(row["sell_price"], 130)
+                # BANKEX (24-Sep) expires first: it is SOLD at bid, BANKNIFTY bought at ask
+                self.assertEqual(row["buy_index"], "BANKNIFTY")
+                self.assertEqual(row["buy_price"], 132)
+                self.assertEqual(row["sell_price"], 99)
                 self.assertTrue(row["tradable"])
 
     def test_fixed_fifteen_strikes_offer_ce_and_pe_on_both_sides(self):
@@ -145,38 +146,44 @@ class BankOptionsLiveTests(unittest.TestCase):
 
     def test_divisor_does_not_change_lots_or_rupee_credit(self):
         row = self.row("CE", 500, bankex_lots=2, banknifty_lots=3)
-        self.assertEqual(row["difference_points"], 30)
-        self.assertEqual(row["difference_divided"], 1)
-        self.assertEqual(row["value_rupees"], 5700)
-        self.assertEqual(row["display_value"], 1)
+        # sell BANKEX bid 99, buy BANKNIFTY ask 132: 99 - 132; rupees 99*30*2 - 132*30*3
+        self.assertEqual(row["difference_points"], -33)
+        self.assertEqual(row["difference_divided"], -1.1)
+        self.assertEqual(row["value_rupees"], -5940)
+        self.assertEqual(row["display_value"], -1.1)
         changed = self.row("CE", 500, divisor=15, bankex_lots=2, banknifty_lots=3)
-        self.assertEqual(changed["display_value"], 2)
-        self.assertEqual(changed["value_rupees"], 5700)
+        self.assertEqual(changed["display_value"], -2.2)
+        self.assertEqual(changed["value_rupees"], -5940)
         rupees = self.row("CE", 500, metric="rupees", bankex_lots=2, banknifty_lots=3)
-        self.assertEqual(rupees["display_value"], 5700)
+        self.assertEqual(rupees["display_value"], -5940)
 
     def test_reverse_expiry_reverses_prices(self):
         for meta in live._state["contracts"]["BANKEX"].values():
             meta["expiry"] = "2026-10-29"
         live._state["expiries"]["BANKEX"] = "2026-10-29"
         row = self.row("CE", 500)
-        self.assertEqual((row["buy_index"], row["sell_index"]), ("BANKNIFTY", "BANKEX"))
-        self.assertEqual((row["buy_price"], row["sell_price"]), (132, 99))
-        self.assertEqual(row["difference_points"], -33)
+        # BANKNIFTY (29-Sep) now expires first: sold at bid 130, BANKEX bought at ask 100
+        self.assertEqual((row["buy_index"], row["sell_index"]), ("BANKEX", "BANKNIFTY"))
+        self.assertEqual((row["buy_price"], row["sell_price"]), (100, 130))
+        self.assertEqual(row["difference_points"], 30)
 
     def test_atm_moves_from_real_spots_and_old_clicked_pair_revalidates(self):
         old = self.row("CE", 500)
         self.tick(live.INDEX_IDS["BANKEX"], 63610, 63610, 63610)
         latest = self.row("CE", 500)
         self.assertEqual(latest["bankex"]["strike"], 64000)
-        self.assertEqual(latest["banknifty"]["strike"], 56700)
+        # 64000 is 390 above BANKEX spot 63610 -> BANKNIFTY 56200 + 390 = 56590 -> 56600
+        self.assertEqual(latest["banknifty"]["strike"], 56600)
         self.assertEqual(live.get_live()["indices"]["BANKEX"]["atm"], 63500)
-        self.assertTrue(live.get_entry_pair(old["bankex"]["security_id"],
-                                            old["banknifty"]["security_id"], "CE")["tradable"])
+        # the pair clicked at spot 63500 (56700) no longer matches by points
+        with self.assertRaisesRegex(ValueError, "matching BANKNIFTY strike changed"):
+            live.get_entry_pair(old["bankex"]["security_id"], old["banknifty"]["security_id"], "CE")
+        self.assertTrue(live.get_entry_pair(latest["bankex"]["security_id"],
+                                            latest["banknifty"]["security_id"], "CE")["tradable"])
         self.tick(live.INDEX_IDS["BANKEX"], 63750, 63750, 63750)
         self.assertEqual(live.get_live()["indices"]["BANKEX"]["atm"], 64000)
         self.assertEqual(self.row("CE", 500)["bankex"]["strike"], 64500)
-        with self.assertRaisesRegex(ValueError, "ATM has changed"):
+        with self.assertRaisesRegex(ValueError, "matching BANKNIFTY strike changed"):
             live.get_entry_pair(old["bankex"]["security_id"], old["banknifty"]["security_id"], "CE")
 
     def test_banknifty_keeps_its_own_100_point_atm(self):
@@ -311,14 +318,15 @@ class BankOptionsLiveTests(unittest.TestCase):
              patch.object(ledger, "_now", return_value=self.now), TestClient(app) as client:
             row = next(r for r in client.get("/api/bank-options/live").json()["rows"]
                        if r["side"] == "CE" and r["offset_points"] == 500)
-            self.assertEqual(row["display_value"], 1)
+            self.assertEqual(row["display_value"], -1.1)
             body = {"bankex_security_id": row["bankex"]["security_id"],
                     "banknifty_security_id": row["banknifty"]["security_id"],
                     "side": "CE", "bankex_lots": 1, "banknifty_lots": 1, "request_id": "integration-1"}
             response = client.post("/api/bank-options/positions", json=body)
             self.assertEqual(response.status_code, 201, response.text)
             position = response.json()
-            self.assertEqual(position["entry_credit_rupees"], 900)
+            # sold BANKEX 99 x 30 = 2970, bought BANKNIFTY 132 x 30 = 3960
+            self.assertEqual(position["entry_credit_rupees"], -990)
             self.assertEqual(position["pnl_rupees"], -90)
             self.assertEqual(client.post("/api/bank-options/positions", json=body).json()["id"], position["id"])
             app.dependency_overrides[get_current_user] = lambda: "bob"
@@ -329,9 +337,10 @@ class BankOptionsLiveTests(unittest.TestCase):
             self.tick(body["banknifty_security_id"], 122, 123, volume=100)
             closed = client.post(f"/api/bank-options/positions/{position['id']}/close")
             self.assertEqual(closed.status_code, 200, closed.text)
-            self.assertEqual(closed.json()["pnl_rupees"], 810)
+            # BANKEX bought back at 121 (-22 x 30), BANKNIFTY sold at 122 (-10 x 30)
+            self.assertEqual(closed.json()["pnl_rupees"], -960)
             summary = client.get("/api/bank-options/positions").json()["summary"]
-            self.assertEqual((summary["open"], summary["closed"], summary["realised_pnl_rupees"]), (0, 1, 810))
+            self.assertEqual((summary["open"], summary["closed"], summary["realised_pnl_rupees"]), (0, 1, -960))
 
     def test_saved_legacy_strikes_remain_pinned_markable_and_closable(self):
         from sqlalchemy import create_engine
@@ -369,9 +378,10 @@ class BankOptionsLiveTests(unittest.TestCase):
                     saved = next(p for p in ledger.list_positions("alice")["positions"]
                                  if p["id"] == position["id"])
                     self.assertTrue(saved["can_close"])
-                    self.assertEqual(saved["pnl_rupees"], 660)
+                    # BANKEX sold 99 -> ask 120 (-21 x 30); BANKNIFTY bought 132 -> bid 125 (-7 x 30)
+                    self.assertEqual(saved["pnl_rupees"], -840)
                     closed = ledger.close_position("alice", position["id"])
-                    self.assertEqual((closed["status"], closed["pnl_rupees"]), ("closed", 660))
+                    self.assertEqual((closed["status"], closed["pnl_rupees"]), ("closed", -840))
 
     def test_shared_capacity_keeps_existing_screens_spots_and_pinned_contracts(self):
         from app.services import (subscriptions, pair_registry, bank_options_positions,

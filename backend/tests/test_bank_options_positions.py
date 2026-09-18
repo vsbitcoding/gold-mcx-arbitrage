@@ -82,16 +82,17 @@ class BankOptionsPositionsTests(unittest.TestCase):
 
     def test_entry_uses_ask_and_bid_and_marks_at_opposite_sides(self):
         p = self.create()
-        self.assertEqual(p["buy_index"], "BANKEX")
-        self.assertEqual(p["sell_index"], "BANKNIFTY")
-        self.assertEqual(p["bankex"]["entry_price"], 101.25)
-        self.assertEqual(p["banknifty"]["entry_price"], 121.1)
+        # BANKEX (24-Sep) expires first: sold at bid 99.75; BANKNIFTY (29-Sep) bought at ask 122.5
+        self.assertEqual(p["buy_index"], "BANKNIFTY")
+        self.assertEqual(p["sell_index"], "BANKEX")
+        self.assertEqual(p["bankex"]["entry_price"], 99.75)
+        self.assertEqual(p["banknifty"]["entry_price"], 122.5)
         self.assertEqual(p["bankex"]["quantity"], 60)
         self.assertEqual(p["banknifty"]["quantity"], 90)
-        self.assertEqual(p["entry_credit_rupees"], 4824)
+        self.assertEqual(p["entry_credit_rupees"], -5040)       # 99.75*60 - 122.5*90
         self.assertEqual(p["pnl_rupees"], -216)
-        self.assertEqual(p["bankex"]["current_price"], 99.75)
-        self.assertEqual(p["banknifty"]["current_price"], 122.5)
+        self.assertEqual(p["bankex"]["current_price"], 101.25)  # sold leg marks at ask
+        self.assertEqual(p["banknifty"]["current_price"], 121.1)  # bought leg marks at bid
         self.assertTrue(p["can_close"])
         self.assertTrue(p["created_at"].endswith("+00:00"))
 
@@ -99,10 +100,11 @@ class BankOptionsPositionsTests(unittest.TestCase):
         self.bankex.update(expiry="2026-10-29", lot_size=20)
         self.banknifty.update(expiry="2026-10-27", lot_size=15)
         p = self.create(side="PE")
-        self.assertEqual(p["buy_index"], "BANKNIFTY")
-        self.assertEqual(p["sell_index"], "BANKEX")
-        self.assertEqual(p["bankex"]["entry_price"], 99.75)
-        self.assertEqual(p["banknifty"]["entry_price"], 122.5)
+        # BANKNIFTY (27-Oct) expires first: sold at bid; BANKEX (29-Oct) bought at ask
+        self.assertEqual(p["buy_index"], "BANKEX")
+        self.assertEqual(p["sell_index"], "BANKNIFTY")
+        self.assertEqual(p["bankex"]["entry_price"], 101.25)
+        self.assertEqual(p["banknifty"]["entry_price"], 121.1)
         self.assertEqual(p["bankex"]["quantity"], 40)
         self.assertEqual(p["banknifty"]["quantity"], 45)
         self.assertEqual(p["pnl_rupees"], -123)
@@ -117,15 +119,16 @@ class BankOptionsPositionsTests(unittest.TestCase):
         self.assertEqual(latest["banknifty"]["strike"], 56700)
         self.assertEqual(latest["bankex"]["quantity"], 60)
         self.assertEqual(latest["banknifty"]["quantity"], 90)
-        self.assertEqual(latest["pnl_rupees"], 1074)
+        # BANKEX sold 99.75 -> ask 111 (-11.25 x 60); BANKNIFTY bought 122.5 -> bid 114 (-8.5 x 90)
+        self.assertEqual(latest["pnl_rupees"], -1440)
         subscriptions = positions.get_subscription_meta()
         self.assertEqual(set(subscriptions), {"BFO:100", "NFO:200"})
         self.assertEqual(subscriptions["BFO:100"]["strike"], 64000)
         self.assertEqual(subscriptions["NFO:200"]["exch"], "NFO")
         closed = positions.close_position("alice", p["id"])
-        self.assertEqual(closed["pnl_rupees"], 1074)
-        self.assertEqual(closed["bankex"]["exit_price"], 110)
-        self.assertEqual(closed["banknifty"]["exit_price"], 115)
+        self.assertEqual(closed["pnl_rupees"], -1440)
+        self.assertEqual(closed["bankex"]["exit_price"], 111)
+        self.assertEqual(closed["banknifty"]["exit_price"], 114)
         self.assertEqual(positions.get_subscription_meta(), {})
 
     def test_entry_rejects_stale_missing_crossed_or_invalid_quotes(self):
@@ -225,13 +228,13 @@ class BankOptionsPositionsTests(unittest.TestCase):
         self.banknifty.update(bid=114, ask=115)
         with ThreadPoolExecutor(max_workers=4) as executor:
             results = list(executor.map(lambda _: positions.close_position("alice", first["id"]), range(4)))
-        self.assertTrue(all(p["status"] == "closed" and p["pnl_rupees"] == 1074 for p in results))
+        self.assertTrue(all(p["status"] == "closed" and p["pnl_rupees"] == -1440 for p in results))
         self.assertEqual(len({p["closed_at"] for p in results}), 1)
         self.bankex.update(bid=1, ask=2, fresh=False)
         self.live.market_is_open.return_value = False
         response = positions.list_positions("alice")
-        self.assertEqual(response["positions"][0]["pnl_rupees"], 1074)
-        self.assertEqual(response["summary"]["realised_pnl_rupees"], 1074)
+        self.assertEqual(response["positions"][0]["pnl_rupees"], -1440)
+        self.assertEqual(response["summary"]["realised_pnl_rupees"], -1440)
         self.assertEqual(response["summary"]["open"], 0)
         self.assertEqual(response["summary"]["closed"], 1)
 
@@ -239,11 +242,12 @@ class BankOptionsPositionsTests(unittest.TestCase):
         self.bankex.update(bid=0.09, ask=0.1)
         self.banknifty.update(bid=0.3, ask=0.31)
         p = self.create(bankex_lots=1, banknifty_lots=1)
-        self.assertEqual(p["entry_credit_rupees"], 6)
+        self.assertEqual(p["entry_credit_rupees"], -6.6)      # 0.09*30 - 0.31*30
         self.assertEqual(p["pnl_rupees"], -0.6)
         self.bankex.update(bid=0.2, ask=0.21)
         self.banknifty.update(bid=0.19, ask=0.2)
-        self.assertEqual(positions.close_position("alice", p["id"])["pnl_rupees"], 6)
+        # BANKEX sold 0.09 -> ask 0.21 (-0.12 x 30); BANKNIFTY bought 0.31 -> bid 0.19 (-0.12 x 30)
+        self.assertEqual(positions.close_position("alice", p["id"])["pnl_rupees"], -7.2)
 
 
 if __name__ == "__main__":

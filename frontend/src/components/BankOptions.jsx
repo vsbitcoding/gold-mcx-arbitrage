@@ -8,7 +8,7 @@ const INDICES = ["BANKEX", "BANKNIFTY"];
 const STRIKE_OFFSETS = Array.from({ length: 15 }, (_, index) => (index - 7) * 500);
 const DEFAULTS = {
   side: "both", range_points: 3500, liquidity: "all", min_volume: 1,
-  max_spread_pct: 10, bankex_lots: 1, banknifty_lots: 1, metric: "divided", divisor: 30,
+  max_spread_pct: 10, bankex_lots: 1, banknifty_lots: 1, metric: "points", divisor: 30,
 };
 
 function numeric(value) {
@@ -121,9 +121,9 @@ function IndexCard({ name, value, buyIndex, sellIndex }) {
       </div>
       <div className="bo-index-body">
         <strong className="bo-spot" title={`Spot index · ${age(value?.age_seconds)}`}>{number(value?.spot)}</strong>
+        <strong className="bo-spot bo-expiry" title="Monthly expiry">{date(value?.expiry)}</strong>
         <dl className="bo-index-details">
           <div><dt>ATM</dt><dd>{number(value?.atm, 0)}</dd></div>
-          <div><dt>Monthly expiry</dt><dd>{date(value?.expiry)}</dd></div>
           <div><dt>Lot size</dt><dd>{number(value?.lot_size, 0)}</dd></div>
         </dl>
       </div>
@@ -240,10 +240,11 @@ export default function BankOptions() {
     const ce = pairs.find((row) => row.side === "CE" && Number(row.offset_points) === offset);
     const pe = pairs.find((row) => row.side === "PE" && Number(row.offset_points) === offset);
     const bankexAtm = board?.indices?.BANKEX?.atm;
-    const niftyAtm = board?.indices?.BANKNIFTY?.atm;
+    // The BANKNIFTY strike comes from the server: the same points from its
+    // spot as the BANKEX strike is from BANKEX's spot, on the 100-point ladder.
     return { offset, CE: ce, PE: pe,
-      bankex: numeric(bankexAtm) ? Number(bankexAtm) + offset : ce?.bankex?.strike ?? pe?.bankex?.strike,
-      banknifty: numeric(niftyAtm) ? Number(niftyAtm) + offset : ce?.banknifty?.strike ?? pe?.banknifty?.strike };
+      bankex: ce?.bankex?.strike ?? pe?.bankex?.strike ?? (numeric(bankexAtm) ? Number(bankexAtm) + offset : null),
+      banknifty: ce?.banknifty?.strike ?? pe?.banknifty?.strike ?? null };
   });
   const showCalls = settings.side !== "PE";
   const showPuts = settings.side !== "CE";
@@ -328,7 +329,7 @@ export default function BankOptions() {
   return (
     <section className="bo-page" aria-labelledby="bo-title">
       <header className="bo-head">
-        <div className="bo-title-block"><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · Matched distance from ATM</p></div>
+        <div className="bo-title-block"><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · BANKNIFTY strike matched by points from spot</p></div>
         <div className="bo-head-actions">
           {view === "live" && <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>}
           <div className="bo-tabs" role="tablist" aria-label="Bank options view" onKeyDown={onViewKey}>
@@ -350,15 +351,14 @@ export default function BankOptions() {
               </div>
               <div className="bo-controls" role="group" aria-label="Live comparison settings">
                 <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
-                <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
-                {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
+                <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
                 <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
                 <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
               </div>
             </div>
             <div className="bo-context-bar">
               <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
-              <span className="bo-direction-rule">Earlier expiry <strong>Buy at Ask</strong><span aria-hidden="true"> → </span>Later expiry <strong>Sell at Bid</strong></span>
+              <span className="bo-direction-rule">Earlier expiry <strong>Sell at Bid</strong><span aria-hidden="true"> → </span>Later expiry <strong>Buy at Ask</strong></span>
               <details className="bo-liquidity-settings">
                 <summary>Quote quality <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
                 <div className="bo-liquidity-fields">
@@ -377,7 +377,7 @@ export default function BankOptions() {
               <thead>
                 <tr className="bo-group-heading">
                   {showCalls && <th scope="colgroup" colSpan={4} className="bo-ce-heading"><span className="bo-side-tag">CE</span> Calls</th>}
-                  <th scope="colgroup" colSpan={3} className="bo-strike-heading">Matched strikes <span>Same ATM distance</span></th>
+                  <th scope="colgroup" colSpan={3} className="bo-strike-heading">Matched strikes <span>Same points from spot</span></th>
                   {showPuts && <th scope="colgroup" colSpan={4} className="bo-pe-heading"><span className="bo-side-tag">PE</span> Puts</th>}
                 </tr>
                 <tr className="bo-column-heading">
@@ -397,7 +397,7 @@ export default function BankOptions() {
               ))}</tbody>
             </table>
           </div>
-          <p className="bo-footnote">BANKEX ATM follows the nearest 500-point strike. Brackets show the difference in points. Paper P&amp;L uses each leg’s quantity.</p>
+          <p className="bo-footnote">BANKEX ATM follows the nearest 500-point strike. BANKNIFTY strike = BANKNIFTY spot + (BANKEX strike − BANKEX spot), rounded to 100. Earlier expiry sold at Bid, later expiry bought at Ask. Paper P&amp;L uses each leg’s quantity.</p>
         </div>
       ) : (
         <div id="bo-position-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-position-tab">

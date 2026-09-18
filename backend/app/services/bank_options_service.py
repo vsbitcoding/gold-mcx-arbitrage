@@ -1,10 +1,14 @@
 """BANKEX / BANKNIFTY monthly option comparison, using the shared live feed.
 
 The BANKEX strike is the anchor: show its 500-point ATM and seven strikes on
-each side, matching the signed distance from BANKNIFTY's own 100-point ATM.
-Both CE and PE are available at every strike. The earlier expiry is bought at ask;
-the later expiry is sold at bid. The display divisor is NOT a contract lot
-size or an execution rule. Actual lots come from the instrument master.
+each side. The BANKNIFTY strike is the one the same number of POINTS away
+from BANKNIFTY's spot as the BANKEX strike is from BANKEX's spot, rounded to
+BANKNIFTY's 100-point ladder (client's note, 18-Sep-2026: BANKEX 63,644 and
+64,500 is 856 up, so BANKNIFTY 56,327 + 856 = 57,183 -> 57,200). Both CE and
+PE are available at every strike. The EARLIER expiry is always sold at bid,
+the LATER expiry always bought at ask (client, 18-Sep). The display divisor
+is NOT a contract lot size or an execution rule. Actual lots come from the
+instrument master.
 """
 from __future__ import annotations
 
@@ -231,15 +235,26 @@ def _indices(state: dict) -> dict:
 
 
 def _direction(expiries: dict) -> tuple[str | None, str | None]:
+    """(buy_index, sell_index): the earlier expiry is SOLD, the later one BOUGHT."""
     a, b = expiries.get("BANKEX"), expiries.get("BANKNIFTY")
     if not a or not b or a == b:
         return None, None
-    return ("BANKEX", "BANKNIFTY") if a < b else ("BANKNIFTY", "BANKEX")
+    return ("BANKNIFTY", "BANKEX") if a < b else ("BANKEX", "BANKNIFTY")
+
+
+def match_banknifty_strike(bankex_strike: float, indices: dict) -> float | None:
+    """The BANKNIFTY strike the same points from its spot as the BANKEX strike
+    is from BANKEX's spot, on BANKNIFTY's 100-point ladder."""
+    be, bn = indices["BANKEX"].get("spot"), indices["BANKNIFTY"].get("spot")
+    if not be or not bn:
+        return None
+    step = STRIKE_STEPS["BANKNIFTY"]
+    return round((bn + (bankex_strike - be)) / step) * step
 
 
 def _reason(pair: dict, indices: dict, subscribed: set) -> str | None:
     if not pair["buy_index"]:
-        return "Both expiries are the same; there is no earlier-expiry buy leg."
+        return "Both expiries are the same; there is no earlier-expiry sell leg."
     today = _now()
     for index in INDICES:
         leg = pair[index.lower()]
@@ -294,10 +309,10 @@ def get_entry_pair(bankex_security_id: str, banknifty_security_id: str, side: st
         raise ValueError("Waiting for both live index quotes.")
     if found["BANKEX"]["strike"] % STRIKE_STEPS["BANKEX"] != 0:
         raise ValueError("BANKEX entries must use a 500-point strike from the Live view.")
-    offsets = [found[i]["strike"] - indices[i]["atm"] for i in INDICES]
-    if offsets[0] != offsets[1]:
-        raise ValueError("ATM has changed. Select the matching pair from the refreshed Live view.")
-    if offsets[0] not in DISPLAY_OFFSETS:
+    offset = found["BANKEX"]["strike"] - indices["BANKEX"]["atm"]
+    if found["BANKNIFTY"]["strike"] != match_banknifty_strike(found["BANKEX"]["strike"], indices):
+        raise ValueError("The spots have moved and the matching BANKNIFTY strike changed. Select the pair from the refreshed Live view.")
+    if offset not in DISPLAY_OFFSETS:
         raise ValueError("The pair is outside the fifteen-strike ATM window. Refresh the Live view.")
     pair = _make_pair(found["BANKEX"], found["BANKNIFTY"], state, indices)
     if not pair["tradable"]:
@@ -325,7 +340,7 @@ def get_live(*, side="both", range_points=MAX_DISPLAY_RANGE, liquidity="all", mi
     elif any(indices[i]["atm"] is None for i in INDICES):
         message = "Waiting for live BANKEX and BANKNIFTY index quotes."
     elif not buy:
-        message = "Both expiries are the same; an earlier-expiry buy leg cannot be selected."
+        message = "Both expiries are the same; an earlier-expiry sell leg cannot be selected."
     elif any(not indices[i]["fresh"] for i in INDICES):
         message = "Index quotes are stale; paper entries are paused."
     elif not market_open:
@@ -345,14 +360,14 @@ def get_live(*, side="both", range_points=MAX_DISPLAY_RANGE, liquidity="all", mi
                       "strikes_each_side": STRIKES_EACH_SIDE, "strike_count": len(DISPLAY_OFFSETS)}}
     if any(indices[i]["atm"] is None for i in INDICES):
         return out
-    bankex_atm, nifty_atm = indices["BANKEX"]["atm"], indices["BANKNIFTY"]["atm"]
+    bankex_atm = indices["BANKEX"]["atm"]
     candidates = []
     lots = {"BANKEX": bankex_lots, "BANKNIFTY": banknifty_lots}
     for offset, option_type in ((offset, option_type) for offset in DISPLAY_OFFSETS
                                 for option_type in ("CE", "PE")
                                 if side == "both" or side == option_type):
         be = _contract_or_slot("BANKEX", bankex_atm + offset, option_type, state)
-        bn = _contract_or_slot("BANKNIFTY", nifty_atm + offset, option_type, state)
+        bn = _contract_or_slot("BANKNIFTY", match_banknifty_strike(bankex_atm + offset, indices), option_type, state)
         pair = _make_pair(be, bn, state, indices)
         beq = pair["bankex"]
         mid = (beq["bid"] + beq["ask"]) / 2 if beq["bid"] and beq["ask"] else None
@@ -393,6 +408,7 @@ def get_live(*, side="both", range_points=MAX_DISPLAY_RANGE, liquidity="all", mi
     rows.sort(key=lambda p: (p["offset_points"], p["side"] != "CE"))
     out["rows"] = rows
     out["bankex_strikes"] = sorted({p["bankex"]["strike"] for p in candidates})
+    out["matching"] = "Same points from spot"
     out["counts"] = {"candidates": len(candidates), "shown": len(rows), "filtered": len(candidates) - len(rows)}
     if not rows and not message:
         out["status"]["message"] = "No BANKEX strikes currently meet the selected liquidity filters."

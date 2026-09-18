@@ -19,6 +19,7 @@
 .bo-sell { color: var(--series-2); background: var(--cg-status-tint); border-color: transparent; }
 .bo-index-updated { color: var(--text-muted); font-size: 10px; margin-left: auto; white-space: nowrap; }
 .bo-index-body { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bo-expiry { color: var(--text-secondary); }
 .bo-spot { font-size: 23px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.5px; line-height: 1.2; white-space: nowrap; }
 .bo-index-details { display: flex; align-items: center; gap: 12px; }
 .bo-index-details dt { font-size: 10px; color: var(--text-muted); margin-bottom: 3px; white-space: nowrap; }

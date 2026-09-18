@@ -211,8 +211,9 @@ def create_position(username: str, bankex_security_id: str, banknifty_security_i
         expiries = {index: _expiry(pair[index.lower()].get("expiry")) for index in _INDICES}
         if expiries["BANKEX"] == expiries["BANKNIFTY"]:
             raise ValueError("Equal expiries have no earlier-buy/later-sell direction.")
-        buy_index = min(expiries, key=expiries.get)
-        sell_index = "BANKNIFTY" if buy_index == "BANKEX" else "BANKEX"
+        # The earlier expiry is sold, the later expiry bought (client, 18-Sep).
+        sell_index = min(expiries, key=expiries.get)
+        buy_index = "BANKNIFTY" if sell_index == "BANKEX" else "BANKEX"
         data = {"request": request, "buy_index": buy_index, "sell_index": sell_index}
         credit = Decimal("0")
         for index, sid, lots in (("BANKEX", bankex_security_id, bankex_lots),
