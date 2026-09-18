@@ -113,7 +113,7 @@ function Field({ label, children }) {
 function IndexCard({ name, value, buyIndex, sellIndex }) {
   const action = buyIndex === name ? "Buy · Ask" : sellIndex === name ? "Sell · Bid" : "Awaiting expiry";
   return (
-    <div className="bo-index-card">
+    <div className={`bo-index-card bo-index-${name.toLowerCase()}`}>
       <div className="bo-index-price">
         <div className="bo-card-top"><h3>{name}</h3><span className={`bo-badge ${buyIndex === name ? "bo-buy" : sellIndex === name ? "bo-sell" : ""}`}>{action}</span></div>
         <div className="bo-spot">{number(value?.spot)}<span>{age(value?.age_seconds)}</span></div>
@@ -323,8 +323,20 @@ export default function BankOptions() {
 
   return (
     <section className="bo-page" aria-labelledby="bo-title">
-      <header className="bo-head">
-        <div><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · 15 strikes · 500-point steps</p></div>
+      <header className={`bo-head${view === "live" ? " bo-live-head" : ""}`}>
+        <div className="bo-title-block"><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · 15 strikes · 500-point steps</p></div>
+        {view === "live" && <>
+          <div className="bo-index-grid">
+            {INDICES.map((name) => <IndexCard key={name} name={name} value={board?.indices?.[name]} buyIndex={board?.buy_index} sellIndex={board?.sell_index} />)}
+          </div>
+          <div className="bo-controls" role="group" aria-label="Live comparison settings">
+            <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
+            <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
+            {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
+            <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
+            <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
+          </div>
+        </>}
         <div className="bo-tabs" role="tablist" aria-label="Bank options view" onKeyDown={onViewKey}>
           <button type="button" id="bo-live-tab" role="tab" tabIndex={view === "live" ? 0 : -1} aria-selected={view === "live"} aria-controls="bo-live-panel" className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button>
           <button type="button" id="bo-position-tab" role="tab" tabIndex={view === "positions" ? 0 : -1} aria-selected={view === "positions"} aria-controls="bo-position-panel" className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Position <span className="bo-paper-label">Paper</span></button>
@@ -336,38 +348,22 @@ export default function BankOptions() {
 
       {view === "live" ? (
         <div id="bo-live-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-live-tab">
-          <div className="bo-index-grid">
-            {INDICES.map((name) => <IndexCard key={name} name={name} value={board?.indices?.[name]} buyIndex={board?.buy_index} sellIndex={board?.sell_index} />)}
-          </div>
-          <div className="bo-direction">
+          <div className="bo-context-bar">
+            <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
             <span className="bo-direction-rule">Earlier expiry <strong>Buy at Ask</strong><span aria-hidden="true"> → </span>Later expiry <strong>Sell at Bid</strong></span>
+            <details className="bo-liquidity-settings">
+              <summary>Quote quality <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
+              <div className="bo-liquidity-fields">
+                <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
+                <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
+                <p>These limits label BANKEX liquidity. All 15 strikes remain visible. Both legs need fresh Bid/Ask quotes for a paper entry.</p>
+              </div>
+            </details>
             <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>
-          </div>
-
-          <div className="bo-toolbar">
-            <div className="bo-controls">
-              <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
-              <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
-              {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
-              <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
-              <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
-              <span className="bo-window-label">7 below ATM <span>·</span> ATM <span>·</span> 7 above ATM</span>
-            </div>
-            <div className="bo-toolbar-footer">
-              <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
-              <details className="bo-liquidity-settings">
-                <summary>Quote quality <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
-                <div className="bo-liquidity-fields">
-                  <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
-                  <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
-                  <p>These limits label BANKEX liquidity. All 15 strikes remain visible. Both legs need fresh Bid/Ask quotes for a paper entry.</p>
-                </div>
-              </details>
-            </div>
           </div>
           {invalid && <div className="bo-alert" role="alert">{invalid}</div>}
           {board?.status?.message && <div className={`bo-alert ${board.status.ready ? "bo-info" : ""}`}>{board.status.message}</div>}
-          <div className="bo-table-meta"><span>15 BANKEX strikes · Same signed ATM distance in BANKNIFTY</span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key">i</span> Quote details / liquidity</span></div>
+          <div className="bo-table-meta"><span>7 below ATM · ATM · 7 above ATM · Same distance in BANKNIFTY</span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key">i</span> Quote details / liquidity</span></div>
           <div className="bo-table-wrap" role="region" aria-label="Live matched options" tabIndex={0}>
             <table className={`bo-table bo-chain-table bo-comparison-table ${showCalls && showPuts ? "bo-both-sides" : "bo-single-side"}`}>
               <thead>

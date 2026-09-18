@@ -1,46 +1,54 @@
 .bo-page { color: var(--text-primary); }
-.bo-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
-.bo-head > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.bo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.bo-title-block { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
 .bo-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -.35px; }
 .bo-head p, .bo-position-toolbar p { color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.bo-live-head { display: grid; grid-template-columns: minmax(190px, 1.7fr) minmax(190px, 1fr) minmax(190px, 1fr) minmax(502px, 2.8fr) auto; grid-template-areas: "title bankex banknifty controls tabs"; gap: 8px; }
+.bo-live-head .bo-title-block { grid-area: title; }
+.bo-live-head .bo-index-bankex { grid-area: bankex; }
+.bo-live-head .bo-index-banknifty { grid-area: banknifty; }
+.bo-live-head .bo-controls { grid-area: controls; }
+.bo-live-head .bo-tabs { grid-area: tabs; justify-self: end; }
 .bo-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-surface); flex-shrink: 0; }
 .bo-tabs button { background: transparent; border: 0; border-radius: 4px; padding: 6px 16px; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
 .bo-tabs button.active { color: var(--on-accent); background: var(--accent); }
 .bo-paper-label { margin-left: 5px; font-size: 10px; text-transform: uppercase; opacity: .8; }
-.bo-index-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.bo-index-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+.bo-index-grid { display: contents; }
+.bo-index-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; min-width: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
 .bo-index-price { min-width: 0; }
 .bo-card-top { display: flex; align-items: center; gap: 8px; }
 .bo-card-top h3 { font-size: 11px; letter-spacing: .4px; }
 .bo-badge { display: inline-block; font-size: 10px; line-height: 1.4; padding: 2px 6px; background: var(--bg-surface-alt); border: 1px solid var(--border-light); border-radius: 4px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
 .bo-buy { color: var(--green); background: var(--green-bg); border-color: transparent; }
 .bo-sell { color: var(--series-2); background: var(--cg-status-tint); border-color: transparent; }
-.bo-spot { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 3px; line-height: 1.2; }
+.bo-spot { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 7px; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; line-height: 1.2; }
 .bo-spot > span { font-size: 10px; color: var(--text-muted); font-weight: 400; white-space: nowrap; }
-.bo-index-details { display: flex; gap: 22px; flex-shrink: 0; }
-.bo-index-details dt { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
-.bo-index-details dd { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bo-index-details { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; }
+.bo-index-details dt { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; }
+.bo-index-details dd { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bo-small { font-size: 10px; }
 .bo-muted { color: var(--text-muted); }
-.bo-direction { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 6px 2px; font-size: 10px; line-height: 1.4; color: var(--text-secondary); }
+.bo-direction-rule { font-size: 10px; line-height: 1.4; color: var(--text-secondary); }
 .bo-direction-rule > span { padding: 0 6px; color: var(--text-muted); }
-.bo-status { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); white-space: nowrap; }
+.bo-status { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .bo-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .bo-status.is-live { color: var(--green); }
-.bo-toolbar { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; }
-.bo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 10px; padding: 9px 12px; }
-.bo-window-label { margin-left: auto; align-self: center; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
-.bo-window-label > span { color: var(--text-muted); margin: 0 5px; }
+.bo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 8px 10px; min-width: 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; }
+.bo-controls .bo-field { flex: 1 1 68px; }
+.bo-controls .bo-field:first-child { flex: 1 1 88px; }
+.bo-controls .bo-field:nth-child(2) { flex: 2.2 1 134px; }
+.bo-controls .bo-field:last-child { flex: 1.2 1 82px; }
 .bo-field { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }
 .bo-field > label { color: var(--text-secondary); font-size: 10px; font-weight: 600; letter-spacing: .1px; }
 .bo-field select, .bo-field input { color: var(--text-primary); background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; font: inherit; font-size: 12px; min-height: 30px; padding: 4px 7px; max-width: 100%; }
 .bo-field input { width: 78px; }
+.bo-controls .bo-field input, .bo-controls .bo-field select { width: 100%; }
 .bo-field select { cursor: pointer; }
 .bo-field input:focus-visible, .bo-field select:focus-visible, .bo-page button:focus-visible, .bo-page summary:focus-visible, .bo-table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bo-toolbar-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; padding: 5px 12px; border-top: 1px solid var(--border-light); background: var(--accent-bg); border-radius: 0 0 7px 7px; }
+.bo-context-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; padding: 5px 9px; border: 1px solid var(--border); background: var(--bg-surface); border-radius: 6px; }
 .bo-calculation { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--accent-ink); font-size: 11px; line-height: 1.5; }
 .bo-calculation > span { font-size: 10px; }
-.bo-liquidity-settings { color: var(--text-secondary); }
+.bo-liquidity-settings { color: var(--text-secondary); margin-left: auto; }
 .bo-liquidity-settings[open] { flex-basis: 100%; }
 .bo-liquidity-settings summary { cursor: pointer; font-size: 11px; padding: 2px 0; }
 .bo-liquidity-settings summary > span { font-size: 10px; color: var(--text-muted); margin-left: 8px; }
@@ -145,22 +153,20 @@ body.density-compact .bo-comparison-table .bo-entry-cell { padding: 2px 5px; }
   .bo-page > .bo-panel { flex: 1; min-height: 140px; }
   .bo-panel > .bo-table-wrap { flex: 1; min-height: 110px; }
 }
+@media (max-width: 1359px) {
+  .bo-live-head { grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(502px, 2.8fr); grid-template-areas: "title title tabs" "bankex banknifty controls"; }
+}
 @media (max-width: 1200px) {
-  .bo-index-details { gap: 12px; }
-  .bo-spot { font-size: 20px; }
-  .bo-controls { gap: 8px; padding: 8px 10px; }
-  .bo-field input { width: 70px; }
   .bo-position-summary strong { font-size: 18px; }
-  .bo-window-label { font-size: 10px; }
 }
 @media (max-width: 900px), (max-height: 599px) {
   .bo-table-wrap { max-height: 65dvh; }
 }
 @media (max-width: 900px) {
-  .bo-index-card { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .bo-index-details { width: 100%; justify-content: space-between; }
-  .bo-controls .bo-field { flex: 1 1 135px; }
-  .bo-controls .bo-field input { width: 100%; }
+  .bo-live-head { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "title tabs" "bankex banknifty" "controls controls"; }
+  .bo-context-bar { gap: 6px 12px; }
+  .bo-direction-rule { order: 3; }
+  .bo-status { margin-left: auto; }
 }
 @media (max-width: 600px) {
   .bo-head { align-items: center; gap: 8px; }
@@ -169,23 +175,20 @@ body.density-compact .bo-comparison-table .bo-entry-cell { padding: 2px 5px; }
   .bo-tabs { gap: 1px; padding: 2px; }
   .bo-tabs button { min-height: 36px; padding: 6px 9px; font-size: 11px; }
   .bo-paper-label { display: block; font-size: 8px; margin: 1px 0 0; }
-  .bo-index-grid { gap: 6px; }
-  .bo-index-card { padding: 8px; gap: 8px; }
+  .bo-index-card { padding: 7px; gap: 5px; }
   .bo-card-top { flex-wrap: wrap; gap: 4px; }
   .bo-card-top h3 { font-size: 10px; }
   .bo-card-top .bo-badge { font-size: 9px; padding: 1px 4px; }
   .bo-spot { font-size: 19px; }
   .bo-spot > span { font-size: 9px; }
-  .bo-index-details { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
-  .bo-index-details > div:nth-child(2) { grid-column: 1 / -1; order: 1; }
+  .bo-index-details { grid-template-columns: auto 1fr auto; gap: 5px; }
   .bo-index-details dt { font-size: 9px; margin-bottom: 2px; }
-  .bo-index-details dd { font-size: 11px; }
-  .bo-direction { padding: 6px 2px; gap: 4px; font-size: 9px; }
+  .bo-index-details dd { font-size: 10px; }
+  .bo-direction-rule { font-size: 9px; }
   .bo-direction-rule > span { padding: 0 3px; }
   .bo-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; }
   .bo-field select, .bo-field input { font-size: 12px; min-height: 36px; width: 100%; }
-  .bo-window-label { grid-column: 1 / -1; margin: 0; text-align: center; }
-  .bo-toolbar-footer { padding: 5px 8px; }
+  .bo-context-bar { padding: 5px 8px; }
   .bo-calculation { font-size: 10px; }
   .bo-liquidity-settings summary { font-size: 10px; padding: 5px 0; }
   .bo-liquidity-settings summary > span { font-size: 9px; margin-left: 5px; }
