@@ -55,7 +55,8 @@
 .bo-liquidity-fields { display: flex; align-items: end; flex-wrap: wrap; gap: 10px 16px; padding: 10px 0 4px; }
 .bo-liquidity-fields input { width: 150px; }
 .bo-liquidity-fields p { font-size: 11px; color: var(--text-secondary); max-width: 460px; line-height: 1.5; }
-.bo-status-note { color: var(--yellow-ink, var(--text-secondary)); font-weight: 600; }
+.bo-status-note { color: var(--text-secondary); font-weight: 600; padding-left: 10px; border-left: 1px solid var(--border-light); }
+.bo-status-note.is-warning { color: var(--yellow-ink, var(--text-secondary)); }
 .bo-alert { position: relative; width: fit-content; max-width: 100%; background: var(--yellow-bg); color: var(--yellow-ink); padding: 8px 12px; margin: 6px 0; border-radius: 6px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .bo-alert.bo-info { background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-secondary); }
 .bo-alert.bo-error { background: var(--red-bg); color: var(--red); padding-right: 36px; }
