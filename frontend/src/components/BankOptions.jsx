@@ -371,7 +371,7 @@ export default function BankOptions() {
           </div>
           {invalid && <div className="bo-alert" role="alert">{invalid}</div>}
           {board?.status?.message && <div className={`bo-alert ${board.status.ready ? "bo-info" : ""}`}>{board.status.message}</div>}
-          <div className="bo-table-meta"><span className="bo-strike-guide"><strong>15 strikes</strong><span>7 below · ATM · 7 above</span><span>500-point steps</span></span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key">ⓘ</span> Quote details</span></div>
+          <div className="bo-table-meta"><span className="bo-strike-guide"><strong>15 strikes</strong><span>7 below · ATM · 7 above</span><span>500-point steps</span></span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key" aria-hidden="true">i</span> Quote details</span></div>
           <div className="bo-table-wrap" role="region" aria-label="Live matched options" tabIndex={0}>
             <table className={`bo-table bo-chain-table bo-comparison-table ${showCalls && showPuts ? "bo-both-sides" : "bo-single-side"}`}>
               <thead>

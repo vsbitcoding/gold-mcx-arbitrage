@@ -95,7 +95,7 @@
 .bo-raw-points { margin-left: 6px; font-size: 10px; color: var(--text-muted); font-weight: 400; }
 .bo-freshness-dot { display: inline-block; vertical-align: middle; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: var(--yellow-ink); }
 .bo-freshness-dot.is-fresh { background: var(--green); }
-.bo-quality-key { display: inline-block; color: var(--yellow-ink); font-size: 10px; font-weight: 700; margin: 0 3px 0 8px; }
+.bo-quality-key { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border: 1px solid currentColor; border-radius: 50%; color: var(--text-muted); font-size: 9px; font-weight: 600; line-height: 1; margin: 0 3px 0 8px; }
 .bo-entry-actions { display: flex; justify-content: center; gap: 4px; }
 .bo-entry-actions .bo-button { font-size: 11px; padding: 3px 8px; line-height: 1.3; background: transparent; color: var(--text-secondary); border-color: var(--border); border-radius: 5px; }
 .bo-entry-actions .bo-button:hover:not(:disabled) { background: var(--accent-bg); color: var(--accent-ink); border-color: var(--accent); }
