@@ -113,14 +113,15 @@ function IndexCard({ name, value, buyIndex, sellIndex }) {
   const action = buyIndex === name ? "Buy · Ask" : sellIndex === name ? "Sell · Bid" : "Awaiting expiry";
   return (
     <div className="bo-index-card">
-      <div className="bo-card-top"><h3>{name}</h3><span className={`bo-badge ${buyIndex === name ? "bo-buy" : sellIndex === name ? "bo-sell" : ""}`}>{action}</span></div>
-      <div className="bo-spot">{number(value?.spot)}<span>Spot index</span></div>
+      <div className="bo-index-price">
+        <div className="bo-card-top"><h3>{name}</h3><span className={`bo-badge ${buyIndex === name ? "bo-buy" : sellIndex === name ? "bo-sell" : ""}`}>{action}</span></div>
+        <div className="bo-spot">{number(value?.spot)}<span>{age(value?.age_seconds)}</span></div>
+      </div>
       <dl className="bo-index-details">
         <div><dt>ATM</dt><dd>{number(value?.atm, 0)}</dd></div>
         <div><dt>Monthly expiry</dt><dd>{date(value?.expiry)}</dd></div>
         <div><dt>Lot size</dt><dd>{number(value?.lot_size, 0)}</dd></div>
       </dl>
-      <span className="bo-small bo-muted">{age(value?.age_seconds)}</span>
     </div>
   );
 }
@@ -129,9 +130,8 @@ function OptionCell({ option, side }) {
   if (!option) return <span className="bo-muted">Contract unavailable</span>;
   return (
     <div className="bo-option-cell">
-      <strong>{number(option.strike, 0)} <span className="bo-small">{side}</span></strong>
+      <div className="bo-option-top"><strong>{number(option.strike, 0)} <span className="bo-small">{side}</span></strong><span className={`bo-quote-age ${option.fresh ? "bo-muted" : "bo-warning-text"}`}>{age(option.age_seconds)}</span></div>
       <span>Bid {number(option.bid)} <span className="bo-muted">/</span> Ask {number(option.ask)}</span>
-      <span className={`bo-small ${option.fresh ? "bo-muted" : "bo-warning-text"}`}>{age(option.age_seconds)}</span>
     </div>
   );
 }
@@ -156,6 +156,7 @@ export default function BankOptions() {
   const [settings, setSettings] = useState(DEFAULTS);
   const [strike, setStrike] = useState("all");
   const [positionFilter, setPositionFilter] = useState("open");
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -268,7 +269,7 @@ export default function BankOptions() {
       {actionError && <div className="bo-alert bo-error" role="alert">{actionError}<button type="button" className="bo-dismiss" aria-label="Dismiss error" onClick={() => setActionError(null)}>×</button></div>}
 
       {view === "live" ? (
-        <div id="bo-live-panel" role="tabpanel" aria-labelledby="bo-live-tab">
+        <div id="bo-live-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-live-tab">
           <div className="bo-index-grid">
             {INDICES.map((name) => <IndexCard key={name} name={name} value={board?.indices?.[name]} buyIndex={board?.buy_index} sellIndex={board?.sell_index} />)}
           </div>
@@ -277,39 +278,46 @@ export default function BankOptions() {
             <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>
           </div>
 
-          <div className="bo-controls">
-            <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
-            <Field label="BANKEX strike"><select value={strike} onChange={(event) => setStrike(event.target.value)}><option value="all">All strikes</option>{strikes.map((value) => <option key={value} value={String(value)}>{number(value, 0)}</option>)}{selectedOutsideRange && <option value={strike}>{number(strike, 0)} · outside range</option>}</select></Field>
-            <Field label="Distance from ATM"><select value={settings.range_points} onChange={(event) => update("range_points", Number(event.target.value))}><option value={1000}>Up to 1,000 points</option><option value={2000}>Up to 2,000 points</option><option value={3000}>Up to 3,000 points</option></select></Field>
-            <Field label="BANKEX liquidity"><select value={settings.liquidity} onChange={(event) => update("liquidity", event.target.value)}><option value="liquid">Liquid strikes</option><option value="all">All monitored strikes</option></select></Field>
-            <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
-            {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
-            <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
-            <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
-          </div>
-          <div className="bo-calculation"><span>Calculation</span><strong>{formula}</strong>{settings.metric === "rupees" && <span>Net premium, before charges</span>}</div>
-          <details className="bo-liquidity-settings">
-            <summary>Liquidity settings <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
-            <div className="bo-liquidity-fields">
-              <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
-              <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
-              <p>Liquid strikes need fresh BANKEX Bid/Ask quotes and must meet these volume and spread limits. Both legs need fresh quotes to add a paper position.</p>
+          <div className={`bo-toolbar${filtersExpanded ? " is-expanded" : ""}`}>
+            <div className="bo-controls">
+              <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
+              <Field label="BANKEX strike"><select value={strike} onChange={(event) => setStrike(event.target.value)}><option value="all">All strikes</option>{strikes.map((value) => <option key={value} value={String(value)}>{number(value, 0)}</option>)}{selectedOutsideRange && <option value={strike}>{number(strike, 0)} · outside range</option>}</select></Field>
+              <div className="bo-extra-controls" id="bo-extra-filters">
+                <Field label="Distance from ATM"><select value={settings.range_points} onChange={(event) => update("range_points", Number(event.target.value))}><option value={1000}>Up to 1,000 points</option><option value={2000}>Up to 2,000 points</option><option value={3000}>Up to 3,000 points</option></select></Field>
+                <Field label="BANKEX liquidity"><select value={settings.liquidity} onChange={(event) => update("liquidity", event.target.value)}><option value="liquid">Liquid strikes</option><option value="all">All monitored strikes</option></select></Field>
+                <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
+                {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
+                <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
+                <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
+              </div>
+              <button type="button" className="bo-filter-toggle" aria-expanded={filtersExpanded} aria-controls="bo-extra-filters" onClick={() => setFiltersExpanded((value) => !value)}>{filtersExpanded ? "Fewer filters" : "More filters & lots"}<span aria-hidden="true">{filtersExpanded ? "−" : "+"}</span></button>
             </div>
-          </details>
+            <div className="bo-toolbar-footer">
+              <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
+              <details className="bo-liquidity-settings">
+                <summary>Liquidity settings <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
+                <div className="bo-liquidity-fields">
+                  <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
+                  <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
+                  <p>Liquid strikes need fresh BANKEX Bid/Ask quotes and must meet these volume and spread limits. Both legs need fresh quotes to add a paper position.</p>
+                </div>
+              </details>
+            </div>
+          </div>
           {invalid && <div className="bo-alert" role="alert">{invalid}</div>}
           {board?.status?.message && <div className={`bo-alert ${board.status.ready ? "bo-info" : ""}`}>{board.status.message}</div>}
           <div className="bo-table-meta"><span>{rows.length} pairs{numeric(board?.counts?.filtered) && Number(board.counts.filtered) > 0 ? ` · ${number(board.counts.filtered, 0)} hidden by liquidity filters` : ""}</span><span>ATM follows spot · Prices in premium points</span></div>
           <div className="bo-table-wrap" role="region" aria-label="Live matched options" tabIndex={0}>
             <table className="bo-table">
-              <thead><tr><th scope="col">Option</th><th scope="col">ATM distance</th><th scope="col">BANKEX</th><th scope="col">BANKNIFTY</th><th scope="col">Buy Ask</th><th scope="col">Sell Bid</th>{settings.metric !== "points" && <th scope="col">Difference (pts)</th>}<th scope="col" className="bo-value-col">{valueLabel}</th><th scope="col">Paper position</th></tr></thead>
+              <thead><tr><th scope="col">Option</th><th scope="col">ATM distance</th><th scope="col">BANKEX</th><th scope="col">BANKNIFTY</th><th scope="col">Buy Ask<span className="bo-th-sub">{board?.buy_index || "—"}</span></th><th scope="col">Sell Bid<span className="bo-th-sub">{board?.sell_index || "—"}</span></th>{settings.metric !== "points" && <th scope="col">Difference (pts)</th>}<th scope="col" className="bo-value-col">{valueLabel}</th><th scope="col">Paper position</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className={Number(row.offset_points) === 0 ? "bo-atm-row" : ""}>
                     <td><span className={`bo-side ${row.side === "CE" ? "bo-call" : "bo-put"}`}>{row.side}</span></td>
-                    <td><strong>{Number(row.offset_points) === 0 ? "ATM" : `${number(Math.abs(Number(row.offset_points)), 0)} pts`}</strong>{Number(row.offset_points) !== 0 && <span className="bo-cell-sub">{row.side === "CE" ? "Above ATM" : "Below ATM"}</span>}</td>
+                    <td><strong>{Number(row.offset_points) === 0 ? "ATM" : `${number(Math.abs(Number(row.offset_points)), 0)} pts`}</strong>{Number(row.offset_points) !== 0 && <span className="bo-offset-direction" title={row.side === "CE" ? "Above ATM" : "Below ATM"}><span aria-hidden="true">{row.side === "CE" ? "↑" : "↓"}</span><span className="bo-sr-only">{row.side === "CE" ? "Above ATM" : "Below ATM"}</span></span>}</td>
                     <td><OptionCell option={row.bankex} side={row.side} /></td><td><OptionCell option={row.banknifty} side={row.side} /></td>
-                    <td><strong>{number(row.buy_price)}</strong><span className="bo-cell-sub">{row.buy_index || "—"}</span></td>
-                    <td><strong>{number(row.sell_price)}</strong><span className="bo-cell-sub">{row.sell_index || "—"}</span></td>
+                    <td><strong>{number(row.buy_price)}</strong></td>
+                    <td><strong>{number(row.sell_price)}</strong></td>
                     {settings.metric !== "points" && <td className={tone(row.difference_points)}>{number(row.difference_points)}</td>}
                     <td className={`bo-value-col ${tone(row.display_value)}`}><strong>{settings.metric === "rupees" ? money(row.display_value) : number(row.display_value, settings.metric === "divided" ? 4 : 2)}</strong></td>
                     <td><button type="button" className="bo-button" disabled={!canAdd || !row.tradable || !!pending} onClick={() => addPosition(row)}>{pending === `open:${row.id}` ? "Saving…" : "Add position"}</button>{row.reason && <span className="bo-row-reason">{row.reason}</span>}</td>
@@ -322,7 +330,7 @@ export default function BankOptions() {
           <p className="bo-footnote">Matching uses the same point distance from each index’s ATM. Divide by changes the displayed difference; paper quantities and P&amp;L use each contract’s lot size.</p>
         </div>
       ) : (
-        <div id="bo-position-panel" role="tabpanel" aria-labelledby="bo-position-tab">
+        <div id="bo-position-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-position-tab">
           <div className="bo-position-summary">
             <div><span>Open positions</span><strong>{number(summary?.open, 0)}</strong></div>
             <div><span>Open P&amp;L</span><strong className={tone(summary?.open_pnl_rupees)}>{money(summary?.open_pnl_rupees)}</strong></div>

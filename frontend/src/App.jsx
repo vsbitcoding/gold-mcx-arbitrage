@@ -275,7 +275,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${page === "bankoptions" ? " bo-workspace" : ""}`}>
       <Header
         role={getRole()}
         pages={getPages()}
