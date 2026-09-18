@@ -194,19 +194,6 @@ function QuoteDetails({ row, unavailable, onClose }) {
   );
 }
 
-function PositionLeg({ name, leg, side, closed }) {
-  if (!leg) return <span className="bo-muted">—</span>;
-  const action = String(leg.action || "").toLowerCase();
-  return (
-    <div className="bo-position-leg">
-      <div><span className={`bo-badge ${action === "buy" ? "bo-buy" : "bo-sell"}`}>{action || "—"}</span> <strong>{number(leg.strike, 0)} {side}</strong></div>
-      <span className="bo-small bo-muted">{date(leg.expiry)} · {leg.lots} lot{Number(leg.lots) === 1 ? "" : "s"} × {leg.lot_size} = {leg.quantity} units</span>
-      <span className="bo-small">Entry {number(leg.entry_price)} <span className="bo-muted">→ {closed ? "Exit" : action === "buy" ? "Bid" : "Ask"}</span> {number(closed ? leg.exit_price : leg.current_price)}</span>
-      <span className="bo-sr-only">{name}</span>
-    </div>
-  );
-}
-
 export default function BankOptions() {
   const confirm = useConfirm();
   const toast = useToast();
@@ -409,19 +396,29 @@ export default function BankOptions() {
           <div className="bo-position-toolbar"><div><h3>Paper positions</h3><p>Strikes and quantities stay fixed at entry. P&amp;L is in rupees, before charges.</p></div><Field label="Show positions"><select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)}><option value="open">Open</option><option value="closed">Closed</option><option value="expired">Expired</option><option value="all">All positions</option></select></Field></div>
           <div className="bo-table-wrap" role="region" aria-label="Paper positions" tabIndex={0}>
             <table className="bo-table bo-position-table">
-              <thead><tr><th scope="col">Opened (IST)</th><th scope="col">BANKEX</th><th scope="col">BANKNIFTY</th><th scope="col">Entry net premium</th><th scope="col">P&amp;L (₹)</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+              <thead><tr><th scope="col">Opened (IST)</th><th scope="col">Index</th><th scope="col">Buy / Sell</th><th scope="col">Strike</th><th scope="col">Lots</th><th scope="col">Entry</th><th scope="col">Value<span className="bo-th-sub">Bid if bought · Ask if sold</span></th><th scope="col">Current price<span className="bo-th-sub">LTP</span></th><th scope="col">P&amp;L (₹)</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
               <tbody>{positionRows.map((position) => {
                 const closed = String(position.status).toLowerCase() === "closed";
                 const expired = String(position.status).toLowerCase() === "expired";
-                return <tr key={position.id}>
-                  <td>{date(position.created_at, true)}{closed && <span className="bo-cell-sub">Closed {date(position.closed_at, true)}</span>}</td>
-                  <td><PositionLeg name="BANKEX" leg={position.bankex} side={position.side} closed={closed} /></td>
-                  <td><PositionLeg name="BANKNIFTY" leg={position.banknifty} side={position.side} closed={closed} /></td>
-                  <td>{money(position.entry_credit_rupees)}</td>
-                  <td className={tone(position.pnl_rupees)}><strong>{money(position.pnl_rupees)}</strong><span className="bo-cell-sub">{closed ? "Realised" : expired ? "Expired · no settlement" : position.mark_fresh && !positions.error && !positions.refreshing ? "Live" : "Stale / unavailable"}</span></td>
-                  <td><span className={`bo-badge ${closed ? "" : position.mark_fresh && !expired ? "bo-buy" : "bo-warning-text"}`}>{closed ? "Closed" : expired ? "Expired" : "Open"}</span>{position.reason && <span className="bo-row-reason">{position.reason}</span>}</td>
-                  <td>{!closed && !expired ? <button type="button" className="bo-button bo-close-button" disabled={!position.can_close || !!positions.error || positions.refreshing || !!pending} onClick={() => closePosition(position)}>{pending === `close:${position.id}` ? "Closing…" : "Close position"}</button> : <span className="bo-muted">—</span>}</td>
-                </tr>;
+                const legs = [["BANKNIFTY", position.banknifty], ["BANKEX", position.bankex]];
+                return legs.map(([name, leg], i) => {
+                  const action = String(leg?.action || "").toLowerCase();
+                  return (
+                    <tr key={`${position.id}-${name}`} className={`bo-pos-row ${i === 0 ? "bo-pos-first" : "bo-pos-last"}`}>
+                      {i === 0 && <td rowSpan={2} className="bo-pos-span">{date(position.created_at, true)}{closed && <span className="bo-cell-sub">Closed {date(position.closed_at, true)}</span>}<span className="bo-cell-sub">#{position.id} · {position.side}</span></td>}
+                      <td><strong>{i + 1}. {name}</strong><span className="bo-cell-sub">{date(leg?.expiry)}</span></td>
+                      <td><span className={`bo-badge ${action === "buy" ? "bo-buy" : "bo-sell"}`}>{action || "—"}</span></td>
+                      <td><strong>{number(leg?.strike, 0)} {position.side}</strong></td>
+                      <td>{number(leg?.lots, 0)}<span className="bo-cell-sub">× {leg?.lot_size} = {leg?.quantity}</span></td>
+                      <td>{number(leg?.entry_price)}</td>
+                      <td><strong>{number(closed ? leg?.exit_price : leg?.current_price)}</strong>{!closed && !expired && <span className="bo-cell-sub">{action === "buy" ? "Bid" : "Ask"}</span>}{closed && <span className="bo-cell-sub">exit</span>}</td>
+                      <td>{closed || expired ? <span className="bo-muted">—</span> : number(leg?.ltp)}</td>
+                      {i === 0 && <td rowSpan={2} className={`bo-pos-span ${tone(position.pnl_rupees)}`}><strong>{money(position.pnl_rupees)}</strong><span className="bo-cell-sub">{closed ? "Realised" : expired ? "Expired · no settlement" : position.mark_fresh && !positions.error && !positions.refreshing ? "Live" : "Stale / unavailable"}</span><span className="bo-cell-sub">Entry net {money(position.entry_credit_rupees)}</span></td>}
+                      {i === 0 && <td rowSpan={2} className="bo-pos-span"><span className={`bo-badge ${closed ? "" : position.mark_fresh && !expired ? "bo-buy" : "bo-warning-text"}`}>{closed ? "Closed" : expired ? "Expired" : "Open"}</span>{position.reason && <span className="bo-row-reason">{position.reason}</span>}</td>}
+                      {i === 0 && <td rowSpan={2} className="bo-pos-span">{!closed && !expired ? <button type="button" className="bo-button bo-close-button" disabled={!position.can_close || !!positions.error || positions.refreshing || !!pending} onClick={() => closePosition(position)}>{pending === `close:${position.id}` ? "Closing…" : "Close position"}</button> : <span className="bo-muted">—</span>}</td>}
+                    </tr>
+                  );
+                });
               })}</tbody>
             </table>
             {!positionRows.length && <div className="bo-empty"><strong>{!positions.data ? positions.error ? "Positions could not be loaded" : "Loading paper positions…" : `No ${positionFilter === "all" ? "" : `${positionFilter} `}positions`}</strong><p>{positionFilter === "closed" ? "Closed paper positions and realised P&L will appear here." : "Choose a matched pair in Live and add a paper position to track it here."}</p>{positions.data && positionFilter !== "closed" && <button type="button" className="bo-button" onClick={() => setView("live")}>View live pairs</button>}</div>}

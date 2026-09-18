@@ -151,7 +151,16 @@ def _serialize(row: BankOptionPosition, *, mark: dict | None = None) -> dict:
     }
     for index in _INDICES:
         key = index.lower()
-        result[key] = {**data[key], "current_price": mark["prices"][index]}
+        # current_price = the exit side (Bid for a bought leg, Ask for a sold
+        # leg) = the client's "Value"; ltp = the last traded price he reads as
+        # "Current price" (note, 18-Sep).
+        ltp = None
+        if row.status == "open":
+            try:
+                ltp = _live().quote_leg(data[key]).get("ltp")
+            except Exception:  # noqa: BLE001
+                ltp = None
+        result[key] = {**data[key], "current_price": mark["prices"][index], "ltp": ltp}
     return result
 
 

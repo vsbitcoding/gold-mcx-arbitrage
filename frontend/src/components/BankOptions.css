@@ -249,3 +249,8 @@ body.density-compact .bo-comparison-table .bo-entry-cell { padding: 2px 5px; }
   .bo-position-toolbar select { flex: 1; }
   .bo-footnote { font-size: 10px; }
 }
+
+/* Position table: two leg rows per position (client's note, 18-Sep) */
+.bo-pos-first td { border-top: 2px solid var(--border); }
+.bo-pos-last td { border-bottom: 1px solid var(--border-light); }
+.bo-pos-span { vertical-align: middle; }
