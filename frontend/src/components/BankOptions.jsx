@@ -114,15 +114,19 @@ function IndexCard({ name, value, buyIndex, sellIndex }) {
   const action = buyIndex === name ? "Buy · Ask" : sellIndex === name ? "Sell · Bid" : "Awaiting expiry";
   return (
     <div className={`bo-index-card bo-index-${name.toLowerCase()}`}>
-      <div className="bo-index-price">
-        <div className="bo-card-top"><h3>{name}</h3><span className={`bo-badge ${buyIndex === name ? "bo-buy" : sellIndex === name ? "bo-sell" : ""}`}>{action}</span></div>
-        <div className="bo-spot">{number(value?.spot)}<span>{age(value?.age_seconds)}</span></div>
+      <div className="bo-card-top">
+        <h3>{name}</h3>
+        <span className={`bo-badge ${buyIndex === name ? "bo-buy" : sellIndex === name ? "bo-sell" : ""}`}>{action}</span>
+        <span className="bo-index-updated">{age(value?.age_seconds)}</span>
       </div>
-      <dl className="bo-index-details">
-        <div><dt>ATM</dt><dd>{number(value?.atm, 0)}</dd></div>
-        <div><dt>Monthly expiry</dt><dd>{date(value?.expiry)}</dd></div>
-        <div><dt>Lot size</dt><dd>{number(value?.lot_size, 0)}</dd></div>
-      </dl>
+      <div className="bo-index-body">
+        <strong className="bo-spot" title={`Spot index · ${age(value?.age_seconds)}`}>{number(value?.spot)}</strong>
+        <dl className="bo-index-details">
+          <div><dt>ATM</dt><dd>{number(value?.atm, 0)}</dd></div>
+          <div><dt>Monthly expiry</dt><dd>{date(value?.expiry)}</dd></div>
+          <div><dt>Lot size</dt><dd>{number(value?.lot_size, 0)}</dd></div>
+        </dl>
+      </div>
     </div>
   );
 }
@@ -155,7 +159,7 @@ function QuoteCells({ row, side, strikePair, metric, canAdd, pending, onAdd, onD
       <td className="bo-entry-cell">
         <div className="bo-entry-actions">
           <button type="button" className="bo-button" aria-label={`Add ${label} paper position`} disabled={!canAdd || !hasContracts || !row?.tradable || !!pending} onClick={() => onAdd(row)}>{pending === `open:${row?.id}` ? "Saving…" : `Add ${side}`}</button>
-          <button type="button" className={`bo-info-button ${fresh && row?.liquid !== false ? "bo-quality-good" : "bo-quality-warning"}`} aria-label={`Quote details for ${label}: ${quality}`} title={`${quality} · ${reason}`} onClick={() => onDetails(row || { side, reason, bankex: { strike: strikePair.bankex }, banknifty: { strike: strikePair.banknifty } })}>i</button>
+          <button type="button" className={`bo-info-button ${fresh && row?.liquid !== false ? "bo-quality-good" : "bo-quality-warning"}`} aria-label={`Quote details for ${label}: ${quality}`} title={`${quality} · ${reason}`} onClick={() => onDetails(row || { side, reason, bankex: { strike: strikePair.bankex }, banknifty: { strike: strikePair.banknifty } })}><span aria-hidden="true">i</span></button>
         </div>
       </td>
     </>
@@ -323,23 +327,14 @@ export default function BankOptions() {
 
   return (
     <section className="bo-page" aria-labelledby="bo-title">
-      <header className={`bo-head${view === "live" ? " bo-live-head" : ""}`}>
-        <div className="bo-title-block"><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · 15 strikes · 500-point steps</p></div>
-        {view === "live" && <>
-          <div className="bo-index-grid">
-            {INDICES.map((name) => <IndexCard key={name} name={name} value={board?.indices?.[name]} buyIndex={board?.buy_index} sellIndex={board?.sell_index} />)}
+      <header className="bo-head">
+        <div className="bo-title-block"><h2 id="bo-title">BANKEX / BANKNIFTY</h2><p>Monthly options · Matched distance from ATM</p></div>
+        <div className="bo-head-actions">
+          {view === "live" && <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>}
+          <div className="bo-tabs" role="tablist" aria-label="Bank options view" onKeyDown={onViewKey}>
+            <button type="button" id="bo-live-tab" role="tab" tabIndex={view === "live" ? 0 : -1} aria-selected={view === "live"} aria-controls="bo-live-panel" className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button>
+            <button type="button" id="bo-position-tab" role="tab" tabIndex={view === "positions" ? 0 : -1} aria-selected={view === "positions"} aria-controls="bo-position-panel" className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Position <span className="bo-paper-label">Paper</span></button>
           </div>
-          <div className="bo-controls" role="group" aria-label="Live comparison settings">
-            <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
-            <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
-            {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
-            <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
-            <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
-          </div>
-        </>}
-        <div className="bo-tabs" role="tablist" aria-label="Bank options view" onKeyDown={onViewKey}>
-          <button type="button" id="bo-live-tab" role="tab" tabIndex={view === "live" ? 0 : -1} aria-selected={view === "live"} aria-controls="bo-live-panel" className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button>
-          <button type="button" id="bo-position-tab" role="tab" tabIndex={view === "positions" ? 0 : -1} aria-selected={view === "positions"} aria-controls="bo-position-panel" className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Position <span className="bo-paper-label">Paper</span></button>
         </div>
       </header>
 
@@ -348,29 +343,42 @@ export default function BankOptions() {
 
       {view === "live" ? (
         <div id="bo-live-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-live-tab">
-          <div className="bo-context-bar">
-            <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
-            <span className="bo-direction-rule">Earlier expiry <strong>Buy at Ask</strong><span aria-hidden="true"> → </span>Later expiry <strong>Sell at Bid</strong></span>
-            <details className="bo-liquidity-settings">
-              <summary>Quote quality <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
-              <div className="bo-liquidity-fields">
-                <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
-                <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
-                <p>These limits label BANKEX liquidity. All 15 strikes remain visible. Both legs need fresh Bid/Ask quotes for a paper entry.</p>
+          <div className="bo-workbench">
+            <div className="bo-workbench-main">
+              <div className="bo-index-grid">
+                {INDICES.map((name) => <IndexCard key={name} name={name} value={board?.indices?.[name]} buyIndex={board?.buy_index} sellIndex={board?.sell_index} />)}
               </div>
-            </details>
-            <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>
+              <div className="bo-controls" role="group" aria-label="Live comparison settings">
+                <Field label="Option side"><select value={settings.side} onChange={(event) => update("side", event.target.value)}><option value="both">CE + PE</option><option value="CE">CE · Calls</option><option value="PE">PE · Puts</option></select></Field>
+                <Field label="Calculation"><select value={settings.metric} onChange={(event) => update("metric", event.target.value)}><option value="divided">Difference ÷ divisor</option><option value="points">Difference in points</option><option value="rupees">Net premium in ₹</option></select></Field>
+                {settings.metric === "divided" && <Field label="Divide by"><input type="number" min="0.01" max="1000000" step="any" value={settings.divisor} onChange={(event) => update("divisor", event.target.value)} /></Field>}
+                <Field label="BANKEX lots"><input type="number" min="1" max="100" step="1" value={settings.bankex_lots} onChange={(event) => update("bankex_lots", event.target.value)} /></Field>
+                <Field label="BANKNIFTY lots"><input type="number" min="1" max="100" step="1" value={settings.banknifty_lots} onChange={(event) => update("banknifty_lots", event.target.value)} /></Field>
+              </div>
+            </div>
+            <div className="bo-context-bar">
+              <div className="bo-calculation"><strong>{formula}</strong>{settings.metric === "rupees" && <span>Before charges</span>}</div>
+              <span className="bo-direction-rule">Earlier expiry <strong>Buy at Ask</strong><span aria-hidden="true"> → </span>Later expiry <strong>Sell at Bid</strong></span>
+              <details className="bo-liquidity-settings">
+                <summary>Quote quality <span>Min volume {number(settings.min_volume, 0)} · Max spread {number(settings.max_spread_pct, 1)}%</span></summary>
+                <div className="bo-liquidity-fields">
+                  <Field label="Minimum traded volume"><input type="number" min="0" max="1000000000" step="1" value={settings.min_volume} onChange={(event) => update("min_volume", event.target.value)} /></Field>
+                  <Field label="Maximum bid/ask spread (%)"><input type="number" min="0.01" max="200" step="any" value={settings.max_spread_pct} onChange={(event) => update("max_spread_pct", event.target.value)} /></Field>
+                  <p>These limits label BANKEX liquidity. All 15 strikes remain visible. Both legs need fresh Bid/Ask quotes for a paper entry.</p>
+                </div>
+              </details>
+            </div>
           </div>
           {invalid && <div className="bo-alert" role="alert">{invalid}</div>}
           {board?.status?.message && <div className={`bo-alert ${board.status.ready ? "bo-info" : ""}`}>{board.status.message}</div>}
-          <div className="bo-table-meta"><span>7 below ATM · ATM · 7 above ATM · Same distance in BANKNIFTY</span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key">i</span> Quote details / liquidity</span></div>
+          <div className="bo-table-meta"><span className="bo-strike-guide"><strong>15 strikes</strong><span>7 below · ATM · 7 above</span><span>500-point steps</span></span><span><span className="bo-freshness-dot is-fresh" /> Fresh <span className="bo-freshness-dot" /> Awaiting / stale <span className="bo-quality-key">ⓘ</span> Quote details</span></div>
           <div className="bo-table-wrap" role="region" aria-label="Live matched options" tabIndex={0}>
             <table className={`bo-table bo-chain-table bo-comparison-table ${showCalls && showPuts ? "bo-both-sides" : "bo-single-side"}`}>
               <thead>
                 <tr className="bo-group-heading">
-                  {showCalls && <th scope="colgroup" colSpan={4} className="bo-ce-heading">CE · Calls</th>}
-                  <th scope="colgroup" colSpan={3} className="bo-strike-heading">Strike pairing · 500-point steps</th>
-                  {showPuts && <th scope="colgroup" colSpan={4} className="bo-pe-heading">PE · Puts</th>}
+                  {showCalls && <th scope="colgroup" colSpan={4} className="bo-ce-heading"><span className="bo-side-tag">CE</span> Calls</th>}
+                  <th scope="colgroup" colSpan={3} className="bo-strike-heading">Matched strikes <span>Same ATM distance</span></th>
+                  {showPuts && <th scope="colgroup" colSpan={4} className="bo-pe-heading"><span className="bo-side-tag">PE</span> Puts</th>}
                 </tr>
                 <tr className="bo-column-heading">
                   {showCalls && <><th scope="col">Buy Ask<span className="bo-th-sub">{board?.buy_index || "—"}</span></th><th scope="col">Sell Bid<span className="bo-th-sub">{board?.sell_index || "—"}</span></th><th scope="col">{valueLabel}</th><th scope="col">Paper position</th></>}
@@ -382,14 +390,14 @@ export default function BankOptions() {
                 <tr key={group.offset} data-offset={group.offset} className={group.offset === 0 ? "bo-atm-row" : ""}>
                   {showCalls && <QuoteCells row={group.CE} side="CE" strikePair={group} metric={settings.metric} canAdd={canAdd} pending={pending} onAdd={addPosition} onDetails={setQuoteDetails} />}
                   <td className="bo-strike-column bo-group-start"><strong>{number(group.bankex, 0)}</strong></td>
-                  <td className="bo-strike-column bo-distance-cell" title={group.offset === 0 ? "At the money" : group.offset < 0 ? "Below ATM" : "Above ATM"}><strong>{group.offset === 0 ? "ATM" : `${group.offset > 0 ? "+" : "−"}${number(Math.abs(group.offset), 0)}`}</strong></td>
+                  <td className="bo-strike-column bo-distance-cell" title={group.offset === 0 ? "At the money" : group.offset < 0 ? "Below ATM" : "Above ATM"}><strong className={group.offset === 0 ? "bo-atm-badge" : ""}>{group.offset === 0 ? "ATM" : `${group.offset > 0 ? "+" : "−"}${number(Math.abs(group.offset), 0)}`}</strong></td>
                   <td className="bo-strike-column"><strong>{number(group.banknifty, 0)}</strong></td>
                   {showPuts && <QuoteCells row={group.PE} side="PE" strikePair={group} metric={settings.metric} canAdd={canAdd} pending={pending} onAdd={addPosition} onDetails={setQuoteDetails} />}
                 </tr>
               ))}</tbody>
             </table>
           </div>
-          <p className="bo-footnote">BANKEX ATM uses the nearest 500-point strike. Both CE and PE use these same 15 strikes. Brackets show the raw difference in points; paper P&amp;L uses each leg’s quantity.</p>
+          <p className="bo-footnote">BANKEX ATM follows the nearest 500-point strike. Brackets show the difference in points. Paper P&amp;L uses each leg’s quantity.</p>
         </div>
       ) : (
         <div id="bo-position-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-position-tab">
