@@ -593,3 +593,26 @@ class MarketHoliday(Base):
     source = Column(String(16), nullable=False, default="manual")   # nse | manual
     updated_by = Column(String(64), nullable=True)
     __table_args__ = (UniqueConstraint("date", "exchange", name="uq_market_holiday"),)
+
+
+class BankOptionPosition(Base):
+    """A user's manual BANKEX/BANKNIFTY paper pair, never a broker order.
+
+    ``data`` freezes both contracts, directions, lot sizes, quantities and
+    fills. Live ATM movement must never replace an already held contract.
+    """
+    __tablename__ = "bank_option_positions"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String(64), nullable=False, index=True)
+    request_id = Column(String(80), nullable=False)
+    status = Column(String(12), nullable=False, default="open", index=True)
+    side = Column(String(2), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    closed_at = Column(DateTime, nullable=True)
+    realised_pnl_rupees = Column(Float, nullable=True)
+    data = Column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("username", "request_id", name="uq_bank_position_request"),
+    )

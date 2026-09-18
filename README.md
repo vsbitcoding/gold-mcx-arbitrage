@@ -49,6 +49,13 @@ Increase Spread = (Big.ask × big_mult) − (Small.bid × small_mult)
 ### Calculator
 Live GOLDBEES / SILVERBEES ETF vs MCX Gold/Silver fair-value comparison.
 
+### BANKEX / BANKNIFTY
+Current-monthly CE/PE comparison at matching distances from live ATM, with
+liquidity/strike filters, a calculation dropdown and editable divisor (default
+30). Earlier expiry uses Buy Ask; later expiry uses Sell Bid. The **Position**
+view saves manual paper positions with fixed quantities, live P&L and square-off.
+See [rules, defaults and API](docs/BANK_OPTIONS.md).
+
 ### Other
 - **Activity** audit log (every fire / exit / cap change / block reason).
 - **Settings** — account balance, max-usage %, per-pair margin.

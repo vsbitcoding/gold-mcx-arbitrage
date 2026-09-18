@@ -173,6 +173,12 @@ class _Conn:
         self.index_tokens = index_tokens    # exchangeType -> index tokens (LTP)
         self.jwt, self.feed_token, self.creds = auth
         self.subs = subs
+        from app.services.angel_master import WS_EXCHANGE_TYPE
+        self.wire_ids = {
+            (WS_EXCHANGE_TYPE.get(subscriptions.exchange_of(sid, meta), 5),
+             str(meta.get("token") or str(sid).split(":")[-1])): sid
+            for sid, meta in subs.items()
+        }
         self.ws = None
         self.thread = None
         self.connected = False
@@ -225,7 +231,10 @@ class _Conn:
         self.last_msg = now
         try:
             tok = str(msg.get("token") or "")
-            meta = self.subs.get(tok)
+            # Exchange tokens are not globally unique. New bank instruments
+            # use NFO:/BFO: storage keys while the wire still sends raw tokens.
+            sid = self.wire_ids.get((msg.get("exchange_type"), tok), tok)
+            meta = self.subs.get(sid)
             if not meta:
                 return
             ltp = float(msg.get("last_traded_price") or 0) / 100.0
@@ -235,7 +244,7 @@ class _Conn:
             if mode in (2, 3):
                 pc = float(msg.get("closed_price") or 0) / 100.0
                 if pc > 0:
-                    prev_close_store[tok] = pc
+                    prev_close_store[sid] = pc
             if mode == 3:
                 b = a = 0.0
                 for lvl in (msg.get("best_5_buy_data") or []) + (msg.get("best_5_sell_data") or []):
@@ -271,7 +280,10 @@ class _Conn:
                 log.info("FIRST tick %s/%s: ltp=%s bid=%s ask=%s", meta.get("short", "?"), tok, ltp, bid, ask)
             # Every packet is the whole truth of the book right now - a side that
             # emptied is written as empty, never kept from an earlier packet.
-            quote_store.update(tok, bid=bid, ask=ask, ltp=ltp, ts=now, volume=volume, oi=oi)
+            quote_store.update(sid, bid=bid, ask=ask, ltp=ltp, ts=now, volume=volume, oi=oi)
+            if meta.get("kind") == "bank_option" or meta.get("underlying") in ("BANKEX", "BANKNIFTY"):
+                from app.services import bank_options_service
+                bank_options_service.note_live_tick(sid, now)
             _set_state(last_tick_epoch=now, ws_connected=True, mode="live")
             if now - _last_eval[0] > 0.5:
                 _last_eval[0] = now
@@ -352,7 +364,8 @@ def _plan(subs: dict[str, dict]) -> list[tuple[dict[int, list[str]], dict[int, l
     idx_by_ex: dict[int, list[str]] = {}
     for sid, meta in subs.items():
         ex = WS_EXCHANGE_TYPE.get(subscriptions.exchange_of(sid, meta), 5)
-        (idx_by_ex if meta.get("kind") == "index" else by_ex).setdefault(ex, []).append(str(sid))
+        token = str(meta.get("token") or str(sid).split(":")[-1])
+        (idx_by_ex if meta.get("kind") == "index" else by_ex).setdefault(ex, []).append(token)
     # MCX first so the board's socket is the first to open, then the rest
     order = sorted(by_ex, key=lambda e: (0 if e == 5 else 1, -len(by_ex[e])))
     plans: list = []
@@ -401,6 +414,8 @@ def _run_feed_thread() -> None:
             _force_login[0] = False
             _set_state(client_id=creds.get("ANGEL_CLIENT_CODE", ""), client_name="Angel One",
                        token_expiry_epoch=_jwt_expiry(jwt), last_token_refresh_epoch=time.time())
+            from app.services import bank_options_service
+            bank_options_service.seed_spots(jwt, creds)
             subs, n_pairs = subscriptions.build()
             _set_state(instruments=subs)
             plans = _plan(subs)
@@ -419,6 +434,8 @@ def _run_feed_thread() -> None:
             while not _resub.is_set():
                 time.sleep(1.0)
                 now = time.time()
+                if bank_options_service.subscription_update_needed():
+                    request_resubscribe("bank monthly expiry or subscription window changed")
                 if now - last_beat >= HEARTBEAT_SECONDS:
                     last_beat = now
                     for c in _conns:

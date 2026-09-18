@@ -73,7 +73,10 @@ async function request(path, opts = {}) {
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
+      const detail = Array.isArray(err.detail)
+        ? err.detail.map((item) => `${(item.loc || []).slice(1).join(".")}: ${item.msg || "Invalid value"}`).join("; ")
+        : err.detail;
+      throw new Error(detail || `HTTP ${res.status}`);
     }
     return res.status === 204 ? null : res.json();
   }
@@ -155,6 +158,20 @@ export const api = {
   calcQuotes: () => request("/api/calculator/quotes"),
   // Options spread (Nifty / Sensex PE) — side: "below" (ATM+9) | "above" (ATM+15)
   optionsSpread: (side) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : "")),
+  bankOptionsLive: (params = {}, signal) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") q.set(key, value);
+    });
+    return request(`/api/bank-options/live?${q.toString()}`, { signal });
+  },
+  bankOptionsPositions: (signal) => request("/api/bank-options/positions", { signal }),
+  bankOptionsOpen: (body) => request("/api/bank-options/positions", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }),
+  bankOptionsClose: (id) => request(`/api/bank-options/positions/${encodeURIComponent(id)}/close`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  }),
   // Stored 10:00/15:00 IST board snapshots (weekday compare) — fetched on demand, no polling
   optionsHistory: (p = {}) => {
     const q = new URLSearchParams();

@@ -34,8 +34,10 @@ from datetime import date
 log = logging.getLogger("angel_master")
 
 # Spot indices on Angel's socket (exchangeType 1 = NSE, 3 = BSE).
-INDEX_IDS = {"NIFTY": "99926000", "SENSEX": "99919000", "INDIA VIX": "99926017"}
-INDEX_EXCHANGE = {"99926000": "NSE", "99919000": "BSE", "99926017": "NSE"}
+INDEX_IDS = {"NIFTY": "99926000", "SENSEX": "99919000", "INDIA VIX": "99926017",
+             "BANKNIFTY": "99926009", "BANKEX": "99919012"}
+INDEX_EXCHANGE = {"99926000": "NSE", "99919000": "BSE", "99926017": "NSE",
+                  "99926009": "NSE", "99919012": "BSE"}
 
 # Angel exchangeType codes for its WebSocket 2.0.
 WS_EXCHANGE_TYPE = {"NSE": 1, "NFO": 2, "BSE": 3, "BFO": 4, "MCX": 5, "NCX": 7, "CDS": 13}
@@ -105,7 +107,7 @@ def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
                             "expiry": _sem_expiry(d, "23:30"), "strike": f"{strike:.5f}",
                             "otype": otype, "tick": r.get("tick_size") or "", "name": name})
             segment[token] = "MCX"
-        elif seg in ("NFO", "BFO") and typ == "OPTIDX" and name in ("NIFTY", "SENSEX"):
+        elif seg in ("NFO", "BFO") and typ == "OPTIDX" and name in ("NIFTY", "SENSEX", "BANKNIFTY", "BANKEX"):
             d = parse_expiry(r.get("expiry"))
             sym = r.get("symbol") or ""
             otype = sym[-2:] if sym[-2:] in ("CE", "PE") else ""
@@ -119,7 +121,12 @@ def _rows_from_master(master: list[dict]) -> tuple[list[dict], dict[str, str]]:
                         "custom": f"{name} {d.strftime('%d %b').upper()} {strike:g} {'CALL' if otype == 'CE' else 'PUT'}",
                         "expiry": _sem_expiry(d, "15:30"), "strike": f"{strike:.5f}",
                         "otype": otype, "tick": r.get("tick_size") or "", "name": name})
-            segment[token] = seg
+            if name in ("BANKEX", "BANKNIFTY"):
+                # Bank quotes use exchange-qualified keys. Do not let a new
+                # BFO/NFO token overwrite a legacy MCX token's segment lookup.
+                segment[f"{seg}:{token}"] = seg
+            else:
+                segment[token] = seg
         elif seg == "NSE" and r.get("symbol") in _ETF_SYMBOLS:
             base = r["symbol"][:-3]
             out.append({"exch": "NSE", "seg": "E", "sid": token, "inst": "EQUITY",

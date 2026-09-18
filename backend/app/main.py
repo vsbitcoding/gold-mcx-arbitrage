@@ -19,6 +19,7 @@ from app.services.angel_feed import start_in_background as start_angel_feed
 from app.services.crude_iv_service import start_in_background as start_crude_iv
 from app.services.nse_mcx_paper import start_in_background as start_nse_mcx_paper
 from app.routes import market_calendar as market_calendar_route
+from app.routes import bank_options as bank_options_route
 from app.services import market_calendar
 from app.services.ibkr_feed import start_in_background as start_ibkr_feed
 from app.services.premium_feed import start_in_background as start_premium_feed
@@ -42,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users_route.router)
 app.include_router(market_calendar_route.router)
+app.include_router(bank_options_route.router)
 app.include_router(pairs.router)
 app.include_router(feed.router)
 app.include_router(calculator.router)

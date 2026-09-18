@@ -1,0 +1,318 @@
+"""Offline contract, quote and API checks for the bank-index board."""
+import copy
+import os
+import unittest
+from contextlib import ExitStack
+from datetime import datetime
+from unittest.mock import patch
+
+os.environ["DATABASE_URL"] = "sqlite://"
+os.environ["ANGEL_ENABLED"] = "false"
+os.environ["IBKR_ENABLED"] = "false"
+os.environ["IBKR_FEED_ENABLED"] = "false"
+os.environ["PREMIUM_FEED_ENABLED"] = "false"
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from app.security import get_current_user
+from app.services import angel_master, bank_options_service as live
+from app.services.market_data import Quote, QuoteStore
+from app.routes import bank_options
+
+
+def master_contract(index, strike, side, expiry="24SEP2026", token=None, lot=30):
+    return {"name": index, "exch_seg": "BFO" if index == "BANKEX" else "NFO",
+            "instrumenttype": "OPTIDX", "token": token or f"{index}-{strike}-{side}-{expiry}",
+            "symbol": f"{index}{strike}{side}", "strike": str(strike * 100),
+            "lotsize": str(lot), "expiry": expiry}
+
+
+class BankOptionsLiveTests(unittest.TestCase):
+    def setUp(self):
+        self.old_state = copy.deepcopy(live._state)
+        self.old_seen = dict(live._live_seen)
+        self.addCleanup(lambda: (live._state.clear(), live._state.update(self.old_state),
+                                 live._live_seen.clear(), live._live_seen.update(self.old_seen)))
+        live._live_seen.clear()
+        self.now = datetime(2026, 9, 18, 10, 30, tzinfo=live.IST)
+        self.epoch = self.now.timestamp()
+        self.quotes = QuoteStore()
+        self.quotes._writer_started = True
+        for name, value in (("quote_store", self.quotes),):
+            p = patch.object(live, name, value)
+            p.start(); self.addCleanup(p.stop)
+        for target, kw in (("_now", {"side_effect": lambda: self.now}),
+                           ("market_is_open", {"return_value": True})):
+            p = patch.object(live, target, **kw)
+            p.start(); self.addCleanup(p.stop)
+        p = patch.object(live.time, "time", side_effect=lambda: self.epoch)
+        p.start(); self.addCleanup(p.stop)
+        self.master = []
+        for index, base, expiry in (("BANKEX", 63500, "24SEP2026"),
+                                     ("BANKNIFTY", 56200, "29SEP2026")):
+            for offset in range(-1500, 1600, 100):
+                for side in ("CE", "PE"):
+                    self.master.append(master_contract(index, base + offset, side, expiry))
+            self.tick(live.INDEX_IDS[index], base, base, base)
+        self.reload()
+        for index, contracts in live._state["contracts"].items():
+            for meta in contracts.values():
+                self.tick(meta["security_id"], 99 if index == "BANKEX" else 130,
+                          100 if index == "BANKEX" else 132, volume=100)
+
+    def reload(self):
+        csv_text, _ = angel_master.build_csv(self.master)
+        with patch.object(live, "_download_csv", return_value=csv_text):
+            live.refresh()
+        live.set_subscribed(live.get_subscription_meta())
+
+    def tick(self, sid, bid, ask, ltp=9999, volume=0, age=0, live_tick=True):
+        self.quotes.update(sid, bid, ask, ltp, self.epoch - age, volume=volume, oi=100)
+        if live_tick:
+            live.note_live_tick(sid, self.epoch - age)
+
+    def row(self, side, offset, **kwargs):
+        return next(r for r in live.get_live(**kwargs)["rows"]
+                    if r["side"] == side and r["offset_points"] == offset)
+
+    def test_handwritten_ce_and_pe_pairing(self):
+        expected = [("CE", 500, 64000, 56700), ("CE", 1000, 64500, 57200),
+                    ("PE", -500, 63000, 55700), ("PE", -1000, 62500, 55200)]
+        for side, offset, be, bn in expected:
+            with self.subTest(side=side, offset=offset):
+                row = self.row(side, offset)
+                self.assertEqual((row["bankex"]["strike"], row["banknifty"]["strike"]), (be, bn))
+                self.assertEqual(row["buy_index"], "BANKEX")
+                self.assertEqual(row["buy_price"], 100)
+                self.assertEqual(row["sell_price"], 130)
+                self.assertTrue(row["tradable"])
+
+    def test_divisor_does_not_change_lots_or_rupee_credit(self):
+        row = self.row("CE", 500, bankex_lots=2, banknifty_lots=3)
+        self.assertEqual(row["difference_points"], 30)
+        self.assertEqual(row["difference_divided"], 1)
+        self.assertEqual(row["value_rupees"], 5700)
+        self.assertEqual(row["display_value"], 1)
+        changed = self.row("CE", 500, divisor=15, bankex_lots=2, banknifty_lots=3)
+        self.assertEqual(changed["display_value"], 2)
+        self.assertEqual(changed["value_rupees"], 5700)
+        rupees = self.row("CE", 500, metric="rupees", bankex_lots=2, banknifty_lots=3)
+        self.assertEqual(rupees["display_value"], 5700)
+
+    def test_reverse_expiry_reverses_prices(self):
+        for meta in live._state["contracts"]["BANKEX"].values():
+            meta["expiry"] = "2026-10-29"
+        live._state["expiries"]["BANKEX"] = "2026-10-29"
+        row = self.row("CE", 500)
+        self.assertEqual((row["buy_index"], row["sell_index"]), ("BANKNIFTY", "BANKEX"))
+        self.assertEqual((row["buy_price"], row["sell_price"]), (132, 99))
+        self.assertEqual(row["difference_points"], -33)
+
+    def test_atm_moves_from_real_spots_and_old_clicked_pair_revalidates(self):
+        old = self.row("CE", 500)
+        self.tick(live.INDEX_IDS["BANKEX"], 63610, 63610, 63610)
+        latest = self.row("CE", 500)
+        self.assertEqual(latest["bankex"]["strike"], 64100)
+        self.assertEqual(latest["banknifty"]["strike"], 56700)
+        with self.assertRaisesRegex(ValueError, "ATM has changed"):
+            live.get_entry_pair(old["bankex"]["security_id"], old["banknifty"]["security_id"], "CE")
+
+    def test_never_guess_missing_spot(self):
+        self.quotes._quotes.pop(live.INDEX_IDS["BANKEX"])
+        result = live.get_live()
+        self.assertIsNone(result["indices"]["BANKEX"]["atm"])
+        self.assertEqual(result["rows"], [])
+        self.assertFalse(result["status"]["ready"])
+
+    def test_liquidity_is_real_quotes_not_500_strike_spacing(self):
+        row = self.row("CE", 100)
+        self.assertTrue(row["liquid"])
+        sid = row["bankex"]["security_id"]
+        self.tick(sid, 50, 100, volume=1000)
+        self.assertFalse(any(r["id"] == row["id"] for r in live.get_live()["rows"]))
+        all_row = self.row("CE", 100, liquidity="all")
+        self.assertFalse(all_row["liquid"])
+        self.assertGreater(all_row["bankex_spread_pct"], 10)
+
+    def test_stale_missing_crossed_books_never_create_spread_or_position(self):
+        row = self.row("CE", 500)
+        sid = row["banknifty"]["security_id"]
+        for bid, ask, age in ((130, 132, 61), (0, 132, 0), (140, 132, 0)):
+            with self.subTest(bid=bid, ask=ask, age=age):
+                self.tick(sid, bid, ask, volume=100, age=age)
+                changed = self.row("CE", 500, liquidity="all")
+                self.assertFalse(changed["tradable"])
+                self.assertIsNone(changed["display_value"])
+                with self.assertRaises(ValueError):
+                    live.get_entry_pair(row["bankex"]["security_id"], sid, "CE")
+
+    def test_restored_quotes_cannot_be_fresh_or_executable(self):
+        row = self.row("CE", 500)
+        live._live_seen.pop(row["bankex"]["security_id"])
+        changed = self.row("CE", 500, liquidity="all")
+        self.assertFalse(changed["bankex"]["fresh"])
+        self.assertFalse(changed["tradable"])
+        self.assertIsNone(changed["difference_points"])
+
+    def test_closed_market_equal_expiry_or_missing_subscription_blocks_entries(self):
+        with patch.object(live, "market_is_open", return_value=False):
+            self.assertFalse(self.row("CE", 500)["tradable"])
+        live._state["expiries"]["BANKEX"] = live._state["expiries"]["BANKNIFTY"]
+        self.assertIsNone(self.row("CE", 500)["buy_index"])
+        self.assertIsNone(self.row("CE", 500)["difference_points"])
+        live._state["expiries"]["BANKEX"] = "2026-09-24"
+        sid = self.row("CE", 500)["banknifty"]["security_id"]
+        live._state["subscribed"].remove(sid)
+        self.assertFalse(self.row("CE", 500)["tradable"])
+
+    def test_monthly_expiry_uses_actual_date_and_rolls_after_close(self):
+        dates = ["2026-09-17", "2026-09-24", "2026-10-29", "2026-11-26"]
+        self.assertEqual(live._monthly_expiry(dates, self.now), "2026-09-24")
+        self.assertEqual(live._monthly_expiry(dates, datetime(2026, 9, 24, 15, 29, tzinfo=live.IST)), "2026-09-24")
+        self.assertEqual(live._monthly_expiry(dates, datetime(2026, 9, 24, 15, 30, tzinfo=live.IST)), "2026-10-29")
+        self.assertEqual(live._monthly_expiry(["2026-11-23", "2026-12-29"],
+                         datetime(2026, 11, 1, tzinfo=live.IST)), "2026-11-23")
+
+    def test_master_accepts_banks_and_preserves_other_indices(self):
+        fixtures = [master_contract(i, 50000, "CE", token=str(n), lot=30 + n)
+                    for n, i in enumerate(("BANKEX", "BANKNIFTY", "NIFTY", "SENSEX"), 1)]
+        rows, segments = angel_master._rows_from_master(fixtures)
+        self.assertEqual(len(rows), 4)
+        self.assertEqual({r["name"] for r in rows}, {"BANKEX", "BANKNIFTY", "NIFTY", "SENSEX"})
+        self.assertEqual(segments["BFO:1"], "BFO")
+        self.assertEqual(segments["NFO:2"], "NFO")
+        self.assertEqual(rows[0]["lot"], "31")
+        fixtures.append({"name": "GOLD", "exch_seg": "MCX", "instrumenttype": "FUTCOM",
+                         "token": "1", "symbol": "GOLD30SEP26FUT", "expiry": "30SEP2026"})
+        _, segments = angel_master._rows_from_master(fixtures)
+        self.assertEqual(segments["1"], "MCX")
+        self.assertEqual(segments["BFO:1"], "BFO")
+
+    def test_live_api_to_persistent_position_to_realised_close(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+        from app.models import BankOptionPosition
+        from app.services import bank_options_positions as ledger
+        engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+        self.addCleanup(engine.dispose)
+        BankOptionPosition.__table__.create(engine)
+        app = FastAPI()
+        app.include_router(bank_options.router)
+        app.dependency_overrides[get_current_user] = lambda: "alice"
+        with patch.object(ledger, "SessionLocal", sessionmaker(bind=engine)), \
+             patch.object(ledger, "_now", return_value=self.now), TestClient(app) as client:
+            row = next(r for r in client.get("/api/bank-options/live").json()["rows"]
+                       if r["side"] == "CE" and r["offset_points"] == 500)
+            self.assertEqual(row["display_value"], 1)
+            body = {"bankex_security_id": row["bankex"]["security_id"],
+                    "banknifty_security_id": row["banknifty"]["security_id"],
+                    "side": "CE", "bankex_lots": 1, "banknifty_lots": 1, "request_id": "integration-1"}
+            response = client.post("/api/bank-options/positions", json=body)
+            self.assertEqual(response.status_code, 201, response.text)
+            position = response.json()
+            self.assertEqual(position["entry_credit_rupees"], 900)
+            self.assertEqual(position["pnl_rupees"], -90)
+            self.assertEqual(client.post("/api/bank-options/positions", json=body).json()["id"], position["id"])
+            app.dependency_overrides[get_current_user] = lambda: "bob"
+            self.assertEqual(client.get("/api/bank-options/positions").json()["positions"], [])
+            self.assertEqual(client.post(f"/api/bank-options/positions/{position['id']}/close").status_code, 404)
+            app.dependency_overrides[get_current_user] = lambda: "alice"
+            self.tick(body["bankex_security_id"], 120, 121, volume=100)
+            self.tick(body["banknifty_security_id"], 122, 123, volume=100)
+            closed = client.post(f"/api/bank-options/positions/{position['id']}/close")
+            self.assertEqual(closed.status_code, 200, closed.text)
+            self.assertEqual(closed.json()["pnl_rupees"], 810)
+            summary = client.get("/api/bank-options/positions").json()["summary"]
+            self.assertEqual((summary["open"], summary["closed"], summary["realised_pnl_rupees"]), (0, 1, 810))
+
+    def test_shared_capacity_keeps_existing_screens_spots_and_pinned_contracts(self):
+        from app.services import (subscriptions, pair_registry, bank_options_positions,
+            elec_service, extra_instruments, goldopt_service, mcx_opt_stream,
+            metals_service, options_service, othercomm_service, paper_trades, price_service)
+        existing = {str(n): {"exch": "MCX"} for n in range(2996)}
+        pinned = {"BFO:pinned": {"exch": "BFO", "kind": "bank_option"},
+                  "NFO:pinned": {"exch": "NFO", "kind": "bank_option"}}
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(pair_registry, "refresh", return_value=1))
+            stack.enter_context(patch.object(pair_registry, "get_subscriptions", return_value=existing))
+            for service in (elec_service, extra_instruments, goldopt_service, mcx_opt_stream,
+                            metals_service, options_service, othercomm_service, paper_trades):
+                stack.enter_context(patch.object(service, "refresh"))
+                stack.enter_context(patch.object(service, "get_subscription_meta", return_value={}))
+            stack.enter_context(patch.object(price_service, "refresh"))
+            stack.enter_context(patch.object(live, "refresh"))
+            stack.enter_context(patch.object(bank_options_positions, "get_subscription_meta", return_value=pinned))
+            result, _ = subscriptions.build()
+        self.assertEqual(len(result), 3000)
+        self.assertTrue(set(existing).issubset(result))
+        self.assertTrue(set(pinned).issubset(result))
+        self.assertTrue({live.INDEX_IDS[i] for i in live.INDICES}.issubset(result))
+        self.assertTrue(live._state["capacity_limited"])
+        from app.services import angel_ws_feed
+        plans = angel_ws_feed._plan(result)
+        self.assertEqual(len(plans), 3)
+        self.assertTrue(all(sum(len(tokens) for group in plan for tokens in group.values()) <= 1000
+                            for plan in plans))
+
+
+class BankOptionsRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.app = FastAPI()
+        self.app.include_router(bank_options.router)
+        self.app.dependency_overrides[get_current_user] = lambda: "alice"
+        self.client = TestClient(self.app)
+        self.addCleanup(self.client.close)
+
+    def test_query_validation_rejects_invalid_calculations(self):
+        with patch.object(live, "get_live", return_value={}) as read:
+            for query in ("divisor=0", "divisor=nan", "divisor=inf", "max_spread_pct=nan",
+                          "range_points=9000", "bankex_lots=0", "metric=unknown", "side=call"):
+                with self.subTest(query=query):
+                    self.assertEqual(self.client.get("/api/bank-options/live?" + query).status_code, 422)
+            read.assert_not_called()
+            self.assertEqual(self.client.get("/api/bank-options/live?divisor=30&side=PE").status_code, 200)
+
+    def test_positions_require_auth_and_do_not_accept_client_fill_prices(self):
+        body = {"bankex_security_id": "BFO:1", "banknifty_security_id": "NFO:2",
+                "side": "CE", "request_id": "test", "buy_price": 1}
+        self.assertEqual(self.client.post("/api/bank-options/positions", json=body).status_code, 422)
+        self.app.dependency_overrides.clear()
+        self.assertEqual(self.client.get("/api/bank-options/positions").status_code, 401)
+
+    def test_page_permission_surface(self):
+        from app import security
+        with patch.object(security, "perms_of", return_value={"active": True, "role": "user", "pages": ["bankoptions"]}):
+            self.assertTrue(security.may("alice", "/api/bank-options/live"))
+            self.assertTrue(security.may("alice", "/api/bank-options/positions/1/close"))
+            self.assertFalse(security.may("alice", "/api/nse-mcx"))
+        with patch.object(security, "perms_of", return_value={"active": True, "role": "user", "pages": ["options"]}):
+            self.assertFalse(security.may("alice", "/api/bank-options/live"))
+
+
+class BankOptionWireTests(unittest.TestCase):
+    def test_exchange_qualified_tokens_on_wire_and_in_quote_store(self):
+        from app.services import angel_ws_feed as feed
+        subs = {"NFO:123": {"exch": "NFO", "token": "123", "kind": "bank_option"},
+                "BFO:123": {"exch": "BFO", "token": "123", "kind": "bank_option"},
+                "99919012": {"exch": "BSE", "kind": "index"}}
+        plans = feed._plan(subs)
+        wire = {ex: tokens for groups, indices in plans for ex, tokens in {**groups, **indices}.items()}
+        self.assertEqual(wire[2], ["123"])
+        self.assertEqual(wire[4], ["123"])
+        conn = feed._Conn(0, plans[0][0], plans[0][1], ("", "", {}), subs)
+        with patch.object(feed.quote_store, "update") as update, patch.object(feed, "_set_state"), \
+             patch.object(feed, "_eval_and_broadcast"), patch.object(live, "note_live_tick"):
+            for exchange in (2, 4):
+                conn._on_data(None, {"token": "123", "exchange_type": exchange,
+                    "subscription_mode": 3, "last_traded_price": 10000,
+                    "volume_trade_for_the_day": 20, "last_traded_timestamp": 1,
+                    "best_5_buy_data": [{"flag": 1, "price": 9900}],
+                    "best_5_sell_data": [{"flag": 0, "price": 10100}]})
+            self.assertEqual([call.args[0] for call in update.call_args_list], ["NFO:123", "BFO:123"])
+            self.assertEqual(update.call_args.kwargs["bid"], 99)
+            self.assertEqual(update.call_args.kwargs["ask"], 101)
+
+
+if __name__ == "__main__":
+    unittest.main()

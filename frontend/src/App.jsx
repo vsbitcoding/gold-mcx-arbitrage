@@ -7,6 +7,7 @@ import MakingPrice from "./components/MakingPrice.jsx";
 import PremiumInputs from "./components/PremiumInputs.jsx";
 import OptionsSpread from "./components/OptionsSpread.jsx";
 import GoldOptions from "./components/GoldOptions.jsx";
+import BankOptions from "./components/BankOptions.jsx";
 import BullionStock from "./components/BullionStock.jsx";
 import McxNymex from "./components/McxNymex.jsx";
 import NseMcxCrude from "./components/NseMcxCrude.jsx";
@@ -22,7 +23,7 @@ import { api, getToken, clearToken, getRole, getPages, storeSession } from "./ap
 import { createLiveSocket } from "./api/livesocket.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
-const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "stock", "mcxnymex", "nsemcx", "ivcalc", "intl", "autotrades"];
+const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "bankoptions", "stock", "mcxnymex", "nsemcx", "ivcalc", "intl", "autotrades"];
 // The two crude tabs became one page with a switch inside; a saved old key lands there.
 const LEGACY_PAGES = { crude: "mcxnymex", crudeinr: "mcxnymex" };
 
@@ -87,7 +88,7 @@ function Dashboard() {
   // Global keyboard shortcuts: '/' focus search, ← → flip tabs (dashboard only)
   useEffect(() => {
     function onKey(e) {
-      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) return;
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT" || e.target.isContentEditable)) return;
       if (e.key === "/") {
         const el = document.querySelector('.search-container input');
         if (el) { e.preventDefault(); el.focus(); }
@@ -314,6 +315,7 @@ function Dashboard() {
         {page === "holidays" && getRole() === "admin" && <HolidaysPage />}
         {page === "options" && <OptionsSpread />}
         {page === "goldopt" && <GoldOptions />}
+        {page === "bankoptions" && <BankOptions />}
         {page === "stock" && <BullionStock />}
       </div>
     </div>

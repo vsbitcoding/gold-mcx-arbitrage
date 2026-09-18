@@ -106,6 +106,7 @@ PAGES: list[tuple[str, str]] = [
     ("mcxnymex", "MCX vs NYMEX"), ("making", "Making Price"),
     ("stock", "Bullion Stock"), ("intl", "COMEX + NYMEX"),
     ("ivcalc", "IV Calculator"), ("options", "Nifty / Sensex"),
+    ("bankoptions", "BANKEX / BANKNIFTY"),
     ("signals", "Signals"), ("autotrades", "Auto Trades"),
 ]
 PAGE_KEYS = [k for k, _ in PAGES]
@@ -131,6 +132,7 @@ PAGE_PREFIXES: dict[str, tuple[str, ...]] = {
     "intl": ("/api/international",),
     "ivcalc": ("/api/iv-calculator", "/api/nse-mcx"),
     "options": ("/api/options/",),
+    "bankoptions": ("/api/bank-options/",),
     "autotrades": ("/api/paper/", "/api/v1/webhook/trade"),
 }
 BOARD_PAGES = ("cross", "calendar", "signals")     # the pages fed by /ws/live

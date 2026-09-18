@@ -55,6 +55,29 @@ def build() -> tuple[dict[str, dict], int]:
         price_service.refresh()
     except Exception as e:  # noqa: BLE001
         log.warning("price_service.refresh() failed: %s", e)
+    # The bank board shares the existing sockets. Reserve established screens'
+    # capacity, then bank spots, pinned paper positions, then nearest strikes.
+    # Qualified bank keys avoid cross-exchange token collisions in quote_store.
+    try:
+        from app.services import bank_options_positions, bank_options_service
+        bank_options_service.set_subscribed({})
+        bank_options_service.refresh()
+        bank = bank_options_service.get_subscription_meta()
+        pinned = bank_options_positions.get_subscription_meta()
+        ordered = {sid: m for sid, m in bank.items() if m.get("kind") == "index"}
+        ordered.update(pinned)
+        for sid, m in bank.items():
+            ordered.setdefault(sid, m)
+        capacity = max(0, 3000 - len(subs))
+        selected = dict(list(ordered.items())[:capacity])
+        limited = len(selected) < len(ordered)
+        if limited:
+            log.warning("Bank options capacity: %d of %d contracts fit beside existing screens",
+                        len(selected), len(ordered))
+        subs.update(selected)
+        bank_options_service.set_subscribed(selected, capacity_limited=limited)
+    except Exception as e:  # a new board must not prevent the existing feed
+        log.warning("Bank options subscriptions unavailable: %s", e)
     return subs, n
 
 
