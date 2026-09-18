@@ -212,13 +212,13 @@ class _Conn:
         try:
             if self.groups:
                 self.ws.subscribe(f"arbi-{self.idx}", 3,
-                                  [{"exchangeType": ex, "tokens": toks} for ex, toks in self.groups.items()])
+                                  [{"exchangeType": ex, "tokens": list(toks)} for ex, toks in self.groups.items()])
             if self.index_tokens:
                 # Quote mode (2): indices have no depth, but this mode carries
                 # the previous close the Nifty / Sensex screen shows day-change
                 # against; LTP mode (1) does not.
                 self.ws.subscribe(f"arbi-idx-{self.idx}", 2,
-                                  [{"exchangeType": ex, "tokens": toks} for ex, toks in self.index_tokens.items()])
+                                  [{"exchangeType": ex, "tokens": list(toks)} for ex, toks in self.index_tokens.items()])
             log.info("socket %d open: %d tokens on %s", self.idx, self.n_tokens,
                      sorted(set(self.groups) | set(self.index_tokens)))
         except Exception as e:  # noqa: BLE001
@@ -307,6 +307,11 @@ class _Conn:
         self.stopping = False
         ws = SmartWebSocketV2(self.jwt, self.creds["ANGEL_API_KEY"], self.creds["ANGEL_CLIENT_CODE"],
                               self.feed_token, max_retry_attempt=0)
+        # The SDK declares this mutable dictionary on the CLASS. Without an
+        # instance copy, a split exchange's second socket extends the first
+        # socket's token list and both replay the combined set on reconnect.
+        ws.input_request_dict = {}
+        ws.RESUBSCRIBE_FLAG = False
         ws.on_open, ws.on_data, ws.on_error, ws.on_close = (
             self._on_open, self._on_data, self._on_error, self._on_close)
         # websocket-client hands close three arguments; the SDK's own handler

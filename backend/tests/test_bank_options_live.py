@@ -291,6 +291,42 @@ class BankOptionsRouteTests(unittest.TestCase):
 
 
 class BankOptionWireTests(unittest.TestCase):
+    def test_socket_subscriptions_do_not_share_sdk_class_cache_or_mutate_plans(self):
+        from app.services import angel_ws_feed as feed
+        class SDK:
+            # Reproduce the real SDK's shared cache and retained list references.
+            input_request_dict = {}
+            RESUBSCRIBE_FLAG = False
+            def __init__(self, *args, **kwargs):
+                pass
+            def subscribe(self, correlation, mode, groups):
+                cache = self.input_request_dict.setdefault(mode, {})
+                for group in groups:
+                    if group["exchangeType"] in cache:
+                        cache[group["exchangeType"]].extend(group["tokens"])
+                    else:
+                        cache[group["exchangeType"]] = group["tokens"]
+                self.RESUBSCRIBE_FLAG = True
+        auth = ("test", "test", {"ANGEL_API_KEY": "test", "ANGEL_CLIENT_CODE": "test"})
+        first = feed._Conn(0, {4: ["100", "101"]}, {}, auth, {})
+        second = feed._Conn(1, {4: ["102"]}, {}, auth, {})
+        with patch('SmartApi.smartWebSocketV2.SmartWebSocketV2', SDK), patch.object(feed.threading, 'Thread'):
+            first.start()
+            second.start()
+            first._on_open(None)
+            second._on_open(None)
+            self.assertIsNot(first.ws.input_request_dict, second.ws.input_request_dict)
+            self.assertEqual(first.ws.input_request_dict[3][4], ["100", "101"])
+            self.assertEqual(second.ws.input_request_dict[3][4], ["102"])
+            self.assertEqual((first.n_tokens, second.n_tokens), (2, 1))
+            first.ws.input_request_dict[3][4].append("SDK-internal")
+            self.assertEqual(first.n_tokens, 2)
+            first.start()  # replacement connection must start with an empty cache
+            self.assertEqual(first.ws.input_request_dict, {})
+            self.assertFalse(first.ws.RESUBSCRIBE_FLAG)
+            first._on_open(None)
+            self.assertEqual(first.ws.input_request_dict[3][4], ["100", "101"])
+
     def test_exchange_qualified_tokens_on_wire_and_in_quote_store(self):
         from app.services import angel_ws_feed as feed
         subs = {"NFO:123": {"exch": "NFO", "token": "123", "kind": "bank_option"},
