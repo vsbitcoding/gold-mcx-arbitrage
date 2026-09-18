@@ -408,7 +408,8 @@ def _manage(pos: Position, book: _Book, day: str, p: dict) -> bool:
             continue
         if pnl >= 0:
             return _close(pos, book, day, "expiry" if day >= leg.exp else "square off")
-        allowed = can_roll and p["roll_legs"] in ("both", exch)
+        allowed = (pos.rolls < p["max_rolls"]
+                   and p["roll_legs"] in ("both", exch))
         if not allowed or not _roll_leg(pos, leg, book, day):
             if day >= leg.exp:
                 return _close(pos, book, day, "expiry")
@@ -465,8 +466,9 @@ def run_expiry(ds: dict, nse_exp: str, mcx_exp: str, p: dict) -> dict:
                             pos.ref_future = fut
                             continue
                         if p["mode"] == "roll":
-                            if _close(pos, book, day, "adjusted"):
-                                open_pos.remove(pos); closed.append(pos)
+                            if not _close(pos, book, day, "adjusted"):
+                                continue
+                            open_pos.remove(pos); closed.append(pos)
                         else:
                             pos.ref_future = fut
                         newp = _open(pos.side, k, cell, day, fut, nse_exp, mcx_exp, reason="adjust", parent=f"{pos.strike:g}")

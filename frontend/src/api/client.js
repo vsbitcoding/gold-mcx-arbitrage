@@ -18,7 +18,7 @@ export function clearToken() {
 // server told us at login (and again on every load via /api/auth/me); this is
 // display-gating - the server wall answers 403 outside the list regardless.
 export function getRole() {
-  return localStorage.getItem("arbi_role") || "admin";
+  return localStorage.getItem("arbi_role") || "user";
 }
 // Page keys this login may open; "all" for an admin.
 export function getPages() {
@@ -36,67 +36,88 @@ export function storeSession(data) {
   if (Array.isArray(data.pages)) localStorage.setItem("arbi_pages", JSON.stringify(data.pages));
 }
 
-async function _doRequest(path, opts) {
-  const headers = opts.headers || {};
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return fetch(path, { ...opts, headers });
+const READ_TIMEOUT_MS = 10000;
+let signingOut = false;
+
+function expireSession(token) {
+  // A delayed response from a previous login must not sign out a new session.
+  if (getToken() !== token || signingOut) return;
+  signingOut = true;
+  clearToken();
+  window.location.reload();
+}
+
+function retryDelay(signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const abort = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, 300 + Math.random() * 200);
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }
 
 async function request(path, opts = {}) {
-  const method = (opts.method || "GET").toUpperCase();
-  // Idempotent reads (GET) get one transparent retry on transient failure.
-  // Writes (POST/PUT/DELETE) are NOT retried automatically — caller decides.
+  const { signal, timeoutMs = READ_TIMEOUT_MS, responseType, ...fetchOpts } = opts;
+  const method = (fetchOpts.method || "GET").toUpperCase();
+  const token = getToken();
+  const headers = new Headers(fetchOpts.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const controller = new AbortController();
+  const cancel = () => controller.abort(signal.reason);
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener("abort", cancel, { once: true });
+  let timedOut = false;
+  // One deadline covers the request body and any retry, not a new deadline per attempt.
+  const deadline = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const maxAttempts = method === "GET" ? 2 : 1;
-  let lastErr;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let res;
-    try {
-      res = await _doRequest(path, opts);
-    } catch (e) {
-      lastErr = e;
-      if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 250 + Math.random() * 250));
+  try {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      let res;
+      try {
+        res = await fetch(path, { ...fetchOpts, headers, signal: controller.signal });
+      } catch (error) {
+        if (controller.signal.aborted || attempt === maxAttempts - 1) throw error;
+        await retryDelay(controller.signal);
         continue;
       }
-      throw new Error(e?.message || "Network error");
+      if (res.status === 401) {
+        expireSession(token);
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+      if (res.status >= 500 && attempt < maxAttempts - 1) {
+        await res.body?.cancel();
+        await retryDelay(controller.signal);
+        continue;
+      }
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+        const detail = Array.isArray(error.detail)
+          ? error.detail.map((item) => `${(item.loc || []).slice(1).join(".")}: ${item.msg || "Invalid value"}`).join("; ")
+          : error.detail;
+        const failure = new Error(detail || `HTTP ${res.status}`);
+        failure.status = res.status;
+        throw failure;
+      }
+      if (res.status === 204) return null;
+      return await (responseType === "blob" ? res.blob() : res.json());
     }
-    if (res.status === 401) {
-      clearToken();
-      window.location.reload();
-      throw new Error("unauthorized");
-    }
-    // Retry only for transient 5xx
-    if (res.status >= 500 && res.status < 600 && attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 250 + Math.random() * 250));
-      continue;
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-      const detail = Array.isArray(err.detail)
-        ? err.detail.map((item) => `${(item.loc || []).slice(1).join(".")}: ${item.msg || "Invalid value"}`).join("; ")
-        : err.detail;
-      throw new Error(detail || `HTTP ${res.status}`);
-    }
-    return res.status === 204 ? null : res.json();
+  } catch (error) {
+    if (timedOut) throw new Error(method === "GET"
+      ? "The update timed out. Displayed values may be stale."
+      : "The request timed out. Refresh before retrying; the action may have completed.");
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+    signal?.removeEventListener("abort", cancel);
   }
-  throw lastErr || new Error("Request failed");
 }
 
-// Fetch a binary file (e.g. PDF) WITH the auth header, returned as a Blob.
-// (A plain <a href> can't send the Bearer token, so we fetch then objectURL it.)
+// PDFs may take longer to generate; they use the same authentication and retry rules.
 async function requestBlob(path) {
-  const res = await _doRequest(path, {});
-  if (res.status === 401) {
-    clearToken();
-    window.location.reload();
-    throw new Error("unauthorized");
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  return res.blob();
+  return request(path, { responseType: "blob", timeoutMs: 60000 });
 }
 
 export async function login(username, password) {
@@ -115,9 +136,9 @@ export async function login(username, password) {
 }
 
 export const api = {
-  livePairs: () => request("/api/pairs/live"),
+  livePairs: (signal) => request("/api/pairs/live", { signal }),
   // session + user management (admin only on the server)
-  me: () => request("/api/auth/me"),
+  me: (signal) => request("/api/auth/me", { signal }),
   users: () => request("/api/users"),
   userPages: () => request("/api/users/pages"),
   userSave: (body, id) => request(id ? `/api/users/${id}` : "/api/users", {
@@ -141,7 +162,7 @@ export const api = {
   history: (days = 7, pairName) => request(`/api/history?days=${days}${pairName ? `&pair_name=${encodeURIComponent(pairName)}` : ""}`),
   deleteHistory: (id) => request(`/api/history/${id}`, { method: "DELETE" }),
   health: () => request("/api/health"),
-  feedStatus: () => request("/api/feed/status"),
+  feedStatus: (signal) => request("/api/feed/status", { signal }),
   // Ladder CRUD
   createLadder: (body) => request("/api/ladders", {
     method: "POST",
@@ -155,9 +176,9 @@ export const api = {
   }),
   deleteLadder: (id) => request(`/api/ladders/${id}`, { method: "DELETE" }),
   // Calculator
-  calcQuotes: () => request("/api/calculator/quotes"),
+  calcQuotes: (signal) => request("/api/calculator/quotes", { signal }),
   // Options spread (Nifty / Sensex PE) — side: "below" (ATM+9) | "above" (ATM+15)
-  optionsSpread: (side) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : "")),
+  optionsSpread: (side, signal) => request("/api/options/spread" + (side ? `?side=${encodeURIComponent(side)}` : ""), { signal }),
   bankOptionsLive: (params = {}, signal) => {
     const q = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -186,23 +207,23 @@ export const api = {
   // Commodity BIG-vs-MINI option spread (gold | silver | crude | natgas)
   goldOptions: (commodity = "gold") => request("/api/gold-options/spread?commodity=" + encodeURIComponent(commodity)),
   // Base-metal calendar spreads (Metal tab)
-  metalsSpread: () => request("/api/metals/spread"),
+  metalsSpread: (signal) => request("/api/metals/spread", { signal }),
   // Other-commodity calendar spreads (Crude / NatGas / Electricity)
-  otherCommSpread: () => request("/api/othercomm/spread"),
+  otherCommSpread: (signal) => request("/api/othercomm/spread", { signal }),
   // Live Buyer/Seller price table (gold & silver active contracts)
-  priceTable: () => request("/api/price/table"),
+  priceTable: (signal) => request("/api/price/table", { signal }),
   // Live premium-calc inputs (XAU/USD Deriv + USD/INR TwelveData + MCX gold)
   premiumInputs: () => request("/api/premium-inputs"),
   international: () => request("/api/international"),
-  nseMcx: (commodity = "crude", month = 0) =>
-    request(`/api/nse-mcx?commodity=${encodeURIComponent(commodity)}&month=${month}`),
+  nseMcx: (commodity = "crude", month = 0, signal) =>
+    request(`/api/nse-mcx?commodity=${encodeURIComponent(commodity)}&month=${month}`, { signal }),
   elecHourly: (month = 0, days = 7) =>
     request(`/api/nse-mcx/elec-hourly?month=${month}&days=${days}`),
   nseMcxGraph: ({ commodity = "crude", strike = null, side = "ce", month = 0, days = 30 } = {}) =>
     request(`/api/nse-mcx/graph?commodity=${encodeURIComponent(commodity)}` +
             `&side=${side}&month=${month}&days=${days}` +
             (strike == null ? "" : `&strike=${strike}`)),
-  nseMcxBacktest: (params) => request("/api/nse-mcx/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
+  nseMcxBacktest: (params, signal) => request("/api/nse-mcx/backtest", { signal, timeoutMs: 120000, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
   marketHolidays: (year) => request(`/api/market-calendar${year ? `?year=${year}` : ""}`),
   marketHolidaySave: (body) => request("/api/market-calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   marketHolidayDelete: (id) => request(`/api/market-calendar/${id}`, { method: "DELETE" }),
@@ -213,7 +234,7 @@ export const api = {
   nseMcxPaperClose: (commodity, id) => request(`/api/nse-mcx/paper/close/${id}?commodity=${commodity}`, { method: "POST" }),
   nseMcxPaperCloseAll: (commodity) => request(`/api/nse-mcx/paper/close-all?commodity=${commodity}`, { method: "POST" }),
   nseMcxPaperClear: (commodity) => request(`/api/nse-mcx/paper/clear?commodity=${commodity}`, { method: "POST" }),
-  nseMcxDailyExpiries: (commodity = "crude") => request(`/api/nse-mcx/daily/expiries?commodity=${commodity}`),
+  nseMcxDailyExpiries: (commodity = "crude", signal) => request(`/api/nse-mcx/daily/expiries?commodity=${commodity}`, { signal }),
   nseMcxDaily: ({ commodity = "crude", expiry, mcxExpiry = null, start = null, end = null, type = null, strike = null } = {}) => {
     const q = new URLSearchParams({ commodity, expiry });
     if (mcxExpiry) q.set("mcx_expiry", mcxExpiry);
@@ -241,11 +262,11 @@ export const api = {
   },
   // Option calculator, both directions: pass `market` to solve for IV, `vol` to
   // price forwards. Underlying must be the future of the option's OWN month.
-  ivCalculator: (p = {}) => {
+  ivCalculator: (p = {}, signal) => {
     const q = new URLSearchParams();
     ["underlying", "strike", "days", "rate", "dividend", "vol", "market", "side"]
       .forEach((k) => { if (p[k] != null && p[k] !== "") q.set(k, p[k]); });
-    return request(`/api/iv-calculator?${q.toString()}`);
+    return request(`/api/iv-calculator?${q.toString()}`, { signal });
   },
   // Fire-once mean-reversion signals + accuracy track record
   signals: () => request("/api/signals"),

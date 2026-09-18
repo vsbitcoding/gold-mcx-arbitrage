@@ -278,19 +278,25 @@ def _stream_rows(commodity: str, expiry: str) -> tuple[list, float | None]:
     chain used to give - bid/ask/ltp/oi/volume per leg, no vendor IV (ours is
     computed by _reprice anyway). Returns (rows, newest_tick_epoch)."""
     from app.services import mcx_opt_stream
-    from app.services.market_data import clean_sides
+    from app.services.market_data import clean_sides, quote_age
     legs = mcx_opt_stream.legs_for(commodity, expiry)
     rows: dict[float, dict] = {}
     newest = 0.0
+    now = time.time()
     for (strike, side), sid in legs.items():
         q = quote_store.get(sid)
         if not (q.bid or q.ask or q.ltp):
             continue
-        newest = max(newest, q.timestamp or 0)
+        age = quote_age(q, now)
+        if age is not None:
+            newest = max(newest, q.timestamp or 0)
         bid, ask = clean_sides(q)
         leg = {"ltp": q.ltp or None, "bid": bid, "ask": ask, "iv": None,
                "delta": None, "theta": None, "gamma": None, "vega": None,
-               "oi": q.oi or None, "volume": q.volume or None, "prev_oi": None}
+               "oi": q.oi or None, "volume": q.volume or None, "prev_oi": None,
+               "timestamp": q.timestamp or None, "restored": q.restored,
+               "age": round(age, 1) if age is not None else None,
+               "fresh": age is not None and age <= mcx_opt_stream.FRESH_SECONDS}
         row = rows.setdefault(float(strike), {"strike": float(strike), "ce": None, "pe": None})
         row["ce" if side == "CE" else "pe"] = leg
     out = [rows[s] for s in sorted(rows) if rows[s]["ce"] or rows[s]["pe"]]
@@ -418,6 +424,8 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
     # month 1 shows the NEXT future beside the next chain; the front one would
     # be a different contract wearing the right chain's label.
     nxt = month == 1 and st.get("next_name")
+    from app.services.market_data import quote_age
+    future_age = quote_age(quote_store.get(str(st.get("next_id" if nxt else "underlying_id") or "")))
     return {
         "expiry": expiry,
         "expiries": st.get("expiries") or [],
@@ -431,6 +439,7 @@ def get_full_chain(commodity: str = "crude", expiry: str | None = None,
         "future_price": st["next_price"] if nxt else st["future_price"],
         "future_bid": st["next_bid"] if nxt else st["future_bid"],
         "future_ask": st["next_ask"] if nxt else st["future_ask"],
+        "future_age": round(future_age, 1) if future_age is not None else None,
         "symbol": st["next_name"] if nxt else st["underlying_name"],
         "rows": rows,
         "age": round(time.time() - ts, 1) if ts else None,

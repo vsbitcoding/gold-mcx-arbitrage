@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client.js";
+import { usePolling } from "../api/usePolling.js";
 import { fmtNum } from "../utils/format.js";
 
 const LS_KEY = "arbi_calc_v1";
@@ -42,22 +43,24 @@ function MetalCard({
   mcxLive,
   mcxExpiry,
   mcxSymbol,
+  fresh,
   cfg,
   onCfgChange,
 }) {
-  const etfPrice = cfg.overrideEtfPrice && cfg.manualEtfPrice !== ""
-    ? Number(cfg.manualEtfPrice)
-    : etfLive ?? null;
+  const etfPrice = cfg.overrideEtfPrice
+    ? (cfg.manualEtfPrice !== "" && Number.isFinite(Number(cfg.manualEtfPrice)) ? Number(cfg.manualEtfPrice) : null)
+    : fresh ? etfLive ?? null : null;
 
   const mult = Number(cfg.multiplier) || 0;
   const manual = Number(cfg.manual) || 0;
-  const div = Number(cfg.divisor) || 1;
+  const div = cfg.divisor === "" ? null : Number(cfg.divisor);
+  const validDivisor = Number.isFinite(div) && div > 0;
 
   const value1 = etfPrice !== null ? etfPrice * mult : null;
   const value2 = value1 !== null ? value1 + manual : null;
-  const finalVal = value2 !== null && div !== 0 ? value2 / div : null;
+  const finalVal = value2 !== null && validDivisor ? value2 / div : null;
   // diff = Calculator − MCX (per client spec). Positive = synthetic above MCX.
-  const diff = finalVal !== null && mcxLive !== null && mcxLive !== undefined
+  const diff = fresh && finalVal !== null && mcxLive !== null && mcxLive !== undefined
     ? finalVal - mcxLive
     : null;
 
@@ -97,10 +100,10 @@ function MetalCard({
               autoFocus
             />
           ) : (
-            <div className={`calc-live ${etfLive === null || etfLive === undefined ? "stale" : ""}`}>
+            <div className={`calc-live ${!fresh || etfLive === null || etfLive === undefined ? "stale" : ""}`}>
               {etfLive === null || etfLive === undefined
                 ? "waiting for live tick…"
-                : <>₹ {fmtNum(etfLive, 2)} <span className="live-dot" title="Live"></span></>}
+                : <>₹ {fmtNum(etfLive, 2)} {fresh ? <span className="live-dot" title="Live" /> : <small> · last received</small>}</>}
             </div>
           )}
         </div>
@@ -134,6 +137,8 @@ function MetalCard({
           <input
             type="number"
             step="0.01"
+            min="0.000001"
+            aria-invalid={!validDivisor}
             className="calc-input"
             value={cfg.divisor}
             onChange={(e) => patch("divisor", e.target.value)}
@@ -144,6 +149,7 @@ function MetalCard({
       <div className="calc-formula">
         <code>(price × {fmtNum(mult, 0)} + {fmtNum(manual, 2)}) ÷ {fmtNum(div, 2)}</code>
       </div>
+      {!validDivisor && <div className="calc-hint neg" role="alert">Enter a finite divisor greater than zero.</div>}
 
       <div className="calc-results">
         <div className="calc-result-row">
@@ -188,7 +194,9 @@ function MetalCard({
 }
 
 export default function Calculator() {
-  const [data, setData] = useState({ gold: null, silver: null });
+  const quotes = usePolling(api.calcQuotes, { key: "calculator", interval: 1500 });
+  const data = quotes.data || {};
+  const fresh = !quotes.error && !quotes.pending && !quotes.paused;
   const [cfg, setCfg] = useState(() => {
     const stored = loadConfig() || {};
     return {
@@ -199,19 +207,6 @@ export default function Calculator() {
 
   useEffect(() => { saveConfig(cfg); }, [cfg]);
 
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const r = await api.calcQuotes();
-        if (alive) setData(r);
-      } catch {}
-    }
-    load();
-    const t = setInterval(load, 1500);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-
   return (
     <div className="calc-page">
       <div className="calc-page-head">
@@ -221,6 +216,7 @@ export default function Calculator() {
           your settings auto-save in this browser.
         </p>
       </div>
+      {quotes.error && <div className="settings-banner danger" role="alert">Live prices are unavailable. {quotes.error}</div>}
 
       <div className="calc-grid">
         <MetalCard
@@ -232,6 +228,7 @@ export default function Calculator() {
           mcxExpiry={data.gold?.mcx_full?.expiry ?? null}
           mcxSymbol={data.gold?.mcx_full?.trading_symbol ?? null}
           cfg={cfg.gold}
+          fresh={fresh}
           onCfgChange={(g) => setCfg((c) => ({ ...c, gold: g }))}
         />
         <MetalCard
@@ -243,6 +240,7 @@ export default function Calculator() {
           mcxExpiry={data.silver?.mcx_full?.expiry ?? null}
           mcxSymbol={data.silver?.mcx_full?.trading_symbol ?? null}
           cfg={cfg.silver}
+          fresh={fresh}
           onCfgChange={(s) => setCfg((c) => ({ ...c, silver: s }))}
         />
       </div>

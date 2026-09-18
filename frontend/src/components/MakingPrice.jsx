@@ -30,7 +30,7 @@ function nearContract(priceData, short) {
   return g?.contracts?.[0] || null; // contracts are near-first
 }
 
-export default function MakingPrice({ priceData }) {
+export default function MakingPrice({ priceData, fresh = true }) {
   const [cfg, setCfg] = useState(() => {
     const s = load() || {};
     return { factor: s.factor ?? DEFAULTS.factor, charges: { ...DEFAULTS.charges, ...(s.charges || {}) } };
@@ -79,7 +79,7 @@ export default function MakingPrice({ priceData }) {
                   <div className="mp-row">
                     <span className="mp-label">{p.baseLabel} Bid <span className="mp-mult">× {cfg.factor}</span></span>
                     <span className={`mp-live ${bid == null ? "stale" : ""}`}>
-                      {bid == null ? "waiting…" : <>{fmtNum(bid, 2)} <span className="live-dot" title="Live" /></>}
+                      {bid == null ? "waiting…" : <>{fmtNum(bid, 2)} {fresh ? <span className="live-dot" title="Live" /> : <span className="mp-mult">stale</span>}</>}
                     </span>
                   </div>
                 )}

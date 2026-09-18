@@ -9,9 +9,11 @@ the hot feed thread and collapsing ~6 inline writes/sec into 1 tx/30s.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from threading import Lock
 
 log = logging.getLogger("market_data")
@@ -26,6 +28,9 @@ class Quote:
     # From Angel's snap-quote packet. Read by the crude IV chain.
     volume: float = 0.0
     oi: float = 0.0
+    # Cached prices may be displayed after restart, but cannot price a trade
+    # until this process has received an actual update for the contract.
+    restored: bool = False
 
 
 # Previous-day close per security_id, from the feed's quote packets.
@@ -40,7 +45,7 @@ PERSIST_INTERVAL_SECONDS = 30
 class QuoteStore:
     def __init__(self) -> None:
         self._quotes: dict[str, Quote] = {}
-        self._dirty: dict[str, tuple[float, float, float]] = {}  # sid -> (bid, ask, ltp) pending write
+        self._dirty: dict[str, tuple[float, float, float, float]] = {}
         self._lock = Lock()
         self._writer_started = False
 
@@ -53,8 +58,9 @@ class QuoteStore:
                 bid=bid, ask=ask, ltp=ltp, timestamp=ts,
                 volume=volume if volume is not None else (prev.volume if prev else 0.0),
                 oi=oi if oi is not None else (prev.oi if prev else 0.0))
-            if bid or ask or ltp:
-                self._dirty[sid] = (bid, ask, ltp)  # newest value wins
+            # Empty books must also replace their saved predecessor. Otherwise
+            # a restart resurrects the last nonempty bid/ask.
+            self._dirty[sid] = (bid, ask, ltp, ts)  # newest value wins
         self._ensure_writer()
 
     # ── batched persistence ──────────────────────────────────────────────
@@ -92,14 +98,18 @@ class QuoteStore:
                 row.instrument: row
                 for row in db.query(LastQuote).filter(LastQuote.instrument.in_(sids)).all()
             }
-            for sid, (bid, ask, ltp) in pending.items():
+            for sid, (bid, ask, ltp, ts) in pending.items():
+                # Store the quote's time, not the later batch-flush time.
+                updated_at = datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)
                 row = existing.get(sid)
                 if row:
                     row.bid = bid
                     row.ask = ask
                     row.ltp = ltp
+                    row.updated_at = updated_at
                 else:
-                    db.add(LastQuote(instrument=sid, bid=bid, ask=ask, ltp=ltp))
+                    db.add(LastQuote(instrument=sid, bid=bid, ask=ask, ltp=ltp,
+                                     updated_at=updated_at))
             db.commit()
         except Exception:
             db.rollback()
@@ -130,9 +140,13 @@ class QuoteStore:
                 rows = db.query(LastQuote).all()
                 with self._lock:
                     for r in rows:
+                        saved = r.updated_at
+                        stamp = (saved.replace(tzinfo=timezone.utc) if saved and saved.tzinfo is None
+                                 else saved)
                         self._quotes[r.instrument] = Quote(
                             bid=r.bid or 0, ask=r.ask or 0, ltp=r.ltp or 0,
-                            timestamp=time.time(),
+                            timestamp=stamp.timestamp() if stamp else 0.0,
+                            restored=True,
                         )
                 return len(rows)
             finally:
@@ -145,6 +159,15 @@ class QuoteStore:
 quote_store = QuoteStore()
 
 
+def quote_age(q: Quote, now: float | None = None) -> float | None:
+    """Age of an observed quote; restored/unknown clocks are not live quotes."""
+    now = time.time() if now is None else now
+    ts = q.timestamp
+    if q.restored or not ts or not math.isfinite(ts) or ts > now + 5:
+        return None
+    return max(0.0, now - ts)
+
+
 def clean_sides(q) -> tuple:
     """(buyer, seller) fit to show, or None where no real one exists.
 
@@ -155,8 +178,8 @@ def clean_sides(q) -> tuple:
     an exchange, and there is no telling which side is the lie, so a crossed
     pair blanks BOTH sides. Zeros were already dashes.
     """
-    bid = q.bid or None
-    ask = q.ask or None
+    bid = q.bid if q.bid and math.isfinite(q.bid) and q.bid > 0 else None
+    ask = q.ask if q.ask and math.isfinite(q.ask) and q.ask > 0 else None
     if bid and ask and bid > ask:
         return None, None
     return bid, ask

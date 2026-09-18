@@ -145,18 +145,34 @@ export default function NseMcxBacktest({ product, cfg }) {
   // not write the old product's settings under the new product's key first.
   const loadedFor = useRef(product);
   useEffect(() => { if (loadedFor.current !== product) return; try { localStorage.setItem(keyFor(product), JSON.stringify(p)); } catch {} }, [p, product]);
-  useEffect(() => { loadedFor.current = product; setP(loadParams(product)); setRes(null); api.nseMcxDailyExpiries(product).then((r) => setExps(r.expiries || [])).catch(() => {}); }, [product]);
+  useEffect(() => {
+    loadedFor.current = product;
+    runRef.current?.controller.abort(); runRef.current = null; setBusy(false);
+    setP(loadParams(product)); setRes(null); setExps([]);
+    const controller = new AbortController();
+    api.nseMcxDailyExpiries(product, controller.signal).then((r) => { if (!controller.signal.aborted) setExps(r.expiries || []); }).catch(() => {});
+    return () => controller.abort();
+  }, [product]);
   const set = (k) => (e) => setP((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
+  const runRef = useRef(null);      // the in-flight run: { controller, product }
   async function run() {
+    runRef.current?.controller.abort();
+    const controller = new AbortController();
+    const mine = { controller, product };
+    runRef.current = mine;
     setBusy(true); setErr(null);
     try {
       const body = { ...p, commodity: product, end: p.end || null, expiry: p.expiry || null, max_rolls: p.max_rolls === "" ? 0 : p.max_rolls };
-      const r = await api.nseMcxBacktest(body);
+      const r = await api.nseMcxBacktest(body, controller.signal);
+      // A run started under Crude must never land under Natural Gas
+      // (review 18-Sep, finding 17): the result is keyed to its product.
+      if (runRef.current !== mine || r?.params?.commodity !== product) return;
       setRes(r); setPage(1);
-    } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    } catch (e) { if (runRef.current === mine && !controller.signal.aborted) setErr(e.message); }
+    finally { if (runRef.current === mine) { setBusy(false); runRef.current = null; } }
   }
+  useEffect(() => () => runRef.current?.controller.abort(), []);
 
   const trades = useMemo(() => {
     const t = (res?.trades || []).slice();
@@ -174,7 +190,7 @@ export default function NseMcxBacktest({ product, cfg }) {
     const lines = [head.join(",")];
     trades.forEach((t) => lines.push([t.entry_date, t.nse_expiry, t.mcx_expiry, t.side, t.strike, t.buy_exch, t.buy_px, t.sell_exch, t.sell_px, t.diff, t.entry_future ?? "", t.reason, t.exit_date ?? "", t.exit_reason ?? "", t.buy_exit ?? "", t.sell_exit ?? "", t.rolls, `"${(t.roll_log || []).map((r) => `${r.exch} ${r.date}: ${r.from} out ${r.out} / ${r.to} in ${r.in}`).join("; ")}"`, t.rolls ? t.realised : "", t.exit_nse_expiry, t.exit_mcx_expiry, t.pnl_points ?? "", t.pnl_rs ?? "", t.days ?? ""].join(",")));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backtest-${product}-${p.mode}.csv`; a.click();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backtest-${res?.params?.commodity || product}-${res?.params?.mode || p.mode}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
@@ -226,6 +242,7 @@ export default function NseMcxBacktest({ product, cfg }) {
       {err && <div className="settings-banner danger">⚠ {err}</div>}
       {!res && !busy && <div className="oh-note">Set the rules above and press <b>Run backtest</b>. It replays every day since April 2024 on closing prices: buy the option where it is cheaper, sell it where it is dearer, square both before the first expiry when in profit, or shift a losing trade to the next expiry.</div>}
       {detail && <TradeDetail t={detail} pointValue={+p.point_value || 100} onClose={() => setDetail(null)} />}
+      {res && res.params?.commodity !== product && null}
       {res && s.trades === 0 && (
         <div className="oh-note">
           <b>No trade fired.</b> Entry needs the option traded on both exchanges that day, and NSE traded {product === "natgas" ? "natural gas" : "crude"} options on{" "}

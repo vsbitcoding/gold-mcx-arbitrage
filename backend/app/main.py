@@ -3,7 +3,7 @@ import threading
 import logging
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import HTTPException, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -80,40 +80,49 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 @app.middleware("http")
-async def _confine_traders(request, call_next):
-    """A 'trader' Bearer token reaches only the Auto Trades surface.
+async def _api_wall(request, call_next):
+    """Every /api call needs a valid session, except the few that are public
+    by design (login, health, the key-authenticated /api/v1 client routes and
+    the TradingView webhook). Review 18-Sep, finding 1: routes that carried no
+    auth dependency of their own answered 200 to no token at all.
 
-    No token, or a token that does not decode, passes straight through - the
-    route's own auth rejects those exactly as before, and the public key-based
-    v1 routes never carry a Bearer at all. Only a VALID token whose user is a
-    trader gets confined, so the admin path is byte-for-byte what it was.
+    The session is checked here once and handed to the route via
+    request.state, so a route's own get_current_user does not decode twice.
+    Page permissions (Manage Users) are enforced on the same pass.
     """
     path = request.url.path
-    if path.startswith("/api"):
+    if path.startswith("/api") and not _is_public_api(path):
+        from fastapi.responses import JSONResponse
+        from app import security as sec
         auth = request.headers.get("authorization", "")
         # The Auto Trades reads also take the token as ?token= (plain-URL
         # access, 20-Aug); that envelope must meet the same wall.
         tok = auth[7:] if auth.lower().startswith("bearer ") else request.query_params.get("token", "")
-        if tok:
-            from app import security as sec
-            import jwt as _jwt
-            try:
-                payload = _jwt.decode(tok, settings.APP_SECRET_KEY,
-                                      algorithms=[sec.ALGORITHM])
-                username = payload.get("sub") or ""
-            except _jwt.PyJWTError:
-                username = ""
-            if username and not sec.may(username, path):
-                from fastapi.responses import JSONResponse
-                perm = sec.perms_of(username)
-                if not perm["active"]:
-                    return JSONResponse(status_code=401, content={
-                        "detail": "This login has been disabled."})
-                return JSONResponse(status_code=403, content={
-                    "detail": "This login is limited to the Auto Trades page."
-                    if perm["role"] == "trader" else
-                    "This login has no access to this page."})
+        if not tok:
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"},
+                                headers={"WWW-Authenticate": "Bearer"})
+        try:
+            user = sec.authenticate(tok)
+        except HTTPException as e:
+            return JSONResponse(status_code=e.status_code, content={"detail": e.detail},
+                                headers=e.headers or {})
+        if not sec.may(user, path):
+            perm = sec.perms_of(user)
+            if not perm["active"]:
+                return JSONResponse(status_code=401, content={"detail": "This login has been disabled."})
+            return JSONResponse(status_code=403, content={
+                "detail": "This login is not allowed on this page."})
+        request.state.auth_token = tok
+        request.state.auth_user = user
     return await call_next(request)
+
+
+_PUBLIC_API_EXACT = ("/api/health", "/api/auth/login")
+_PUBLIC_API_PREFIXES = ("/api/v1/",)          # API-key clients and the trade webhook check their own key
+
+
+def _is_public_api(path: str) -> bool:
+    return path in _PUBLIC_API_EXACT or any(path.startswith(p) for p in _PUBLIC_API_PREFIXES)
 
 
 @app.on_event("startup")

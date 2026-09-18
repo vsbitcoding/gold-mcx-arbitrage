@@ -19,6 +19,8 @@ Honest caveats the screen has to carry:
     leg with neither is reported as no market.
 """
 from datetime import date, datetime
+import math
+import time
 
 from fastapi import APIRouter, Depends, Query
 
@@ -79,12 +81,35 @@ def _age_of(*ages) -> float | None:
     return max(seen) if seen else None
 
 
-def _leg(leg: dict | None) -> dict:
-    b, a = (leg or {}).get("bid"), (leg or {}).get("ask")
-    mid = _mid(leg)
+def _leg(leg: dict | None, source_age: float | None = None,
+         now: float | None = None) -> dict:
+    leg = leg or {}
+    b, a = leg.get("bid"), leg.get("ask")
+    b = b if b and math.isfinite(b) and b > 0 else None
+    a = a if a and math.isfinite(a) and a > 0 else None
+    if b and a and b > a:
+        b = a = None
+    now = time.time() if now is None else now
+    stamp = leg.get("timestamp")
+    # Streamed legs must keep their own clock, including when a cached chain
+    # is the fallback. REST snapshots use their source chain's retrieval age.
+    if "timestamp" in leg:
+        age = max(0.0, now - stamp) if (stamp and math.isfinite(stamp) and stamp <= now + 5) else None
+    elif "age" in leg:
+        age = leg["age"]
+    else:
+        age = source_age
+    fresh = (not leg.get("restored") and age is not None and math.isfinite(age)
+             and 0 <= age <= _FRESH_SECONDS)
+    if source_age is None or not math.isfinite(source_age) or source_age > _FRESH_SECONDS:
+        fresh = False
+    mid = round((b + a) / 2, 2) if fresh and b and a else None
     return {
         "bid": b, "ask": a, "mid": mid,
-        "oi": (leg or {}).get("oi"),
+        "oi": leg.get("oi"),
+        "age": round(age, 1) if age is not None and math.isfinite(age) else None,
+        "fresh": bool(fresh), "restored": bool(leg.get("restored")),
+        "timestamp": stamp,
         "traded": bool(b or a),
         "wide": bool(mid and (a - b) / mid > _WIDE_SPREAD),
     }
@@ -138,7 +163,7 @@ def _add_iv(leg: dict, strike: float, T: float | None, fwd: float | None,
     through flagged as fine.
     """
     bid, ask = leg.get("bid"), leg.get("ask")
-    if not (T and fwd and strike and bid and ask):
+    if not (leg.get("fresh") and T and fwd and strike and bid and ask):
         leg["iv"] = leg["iv_bid"] = leg["iv_ask"] = None
         return
     leg["iv"] = iv_calc.implied_vol(leg.get("mid") or (bid + ask) / 2,
@@ -161,7 +186,8 @@ def _diff(nse: dict, mcx: dict, fresh: bool = True) -> dict:
     return _num_diff(nse["mid"], mcx["mid"], nse["wide"] or mcx["wide"], fresh)
 
 
-def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
+def payload(commodity: str = "crude", window: int = 10, month: int = 0,
+            *, include_iv: bool = True) -> dict:
     key = commodity if commodity in COMMODITIES else "crude"
     month = 1 if month else 0
     a = angel_feed.get_data(key, month)
@@ -195,6 +221,7 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     n_stale = n_age is None or n_age > _FRESH_SECONDS
     m_stale = m_age is None or m_age > _FRESH_SECONDS
     fresh = not (n_stale or m_stale)
+    now = time.time()
 
     # Narrow by POSITION, not by price. Crude strikes step 50 and gas steps 5,
     # so any "within N x step" arithmetic silently returns one row for gas.
@@ -211,9 +238,10 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
             # NOT `m` - that name holds the MCX chain for the rest of this
             # function, and shadowing it blanked the contract symbol, both
             # expiries and the feed status for an hour on 13-Aug.
-            n_leg, m_leg = _leg(r.get(side)), _leg(mr.get(side))
+            n_leg = _leg(r.get(side), n_age, now)
+            m_leg = _leg(mr.get(side), m_age, now)
             out[side] = {"nse": n_leg, "mcx": m_leg,
-                         "diff": _diff(n_leg, m_leg, fresh)}
+                         "diff": _diff(n_leg, m_leg, fresh and n_leg["fresh"] and m_leg["fresh"])}
         rows.append(out)
 
     # Implied volatility, computed here rather than taken from a vendor - whose
@@ -227,22 +255,30 @@ def payload(commodity: str = "crude", window: int = 10, month: int = 0) -> dict:
     nse_T, mcx_T = _years(a.get("opt_expiry")), _years(m.get("expiry"))
     nse_fwd, nse_n, nse_sp = _forward(rows, "nse")
     mcx_fwd, mcx_n, mcx_sp = _forward(rows, "mcx")
-    for r in rows:
-        for side, call in (("ce", True), ("pe", False)):
-            _add_iv(r[side]["nse"], r["strike"], nse_T, nse_fwd, call)
-            _add_iv(r[side]["mcx"], r["strike"], mcx_T, mcx_fwd, call)
+    if include_iv:
+        for r in rows:
+            for side, call in (("ce", True), ("pe", False)):
+                _add_iv(r[side]["nse"], r["strike"], nse_T, nse_fwd, call)
+                _add_iv(r[side]["mcx"], r["strike"], mcx_T, mcx_fwd, call)
+
+    n_future_age = a.get("age")
+    m_future_age = m.get("future_age", m_age)
+    n_future_fresh = n_future_age is not None and 0 <= n_future_age <= _FRESH_SECONDS
+    m_future_fresh = m_future_age is not None and 0 <= m_future_age <= _FRESH_SECONDS
 
     return {
         "commodity": key,
         "month": month,
         "label": (crude_iv_service.COMMODITIES.get(key) or {}).get("label", "").replace("MCX ", ""),
         "future": {
-            "nse": {**(a.get("future") or {}), "mid": nfut},
+            "nse": {**(a.get("future") or {}), "mid": nfut,
+                    "age": n_future_age, "fresh": n_future_fresh},
             # the FUTURE's own expiry, taken from its symbol - m["expiry"] is the
             # option chain's date and showing it here was simply wrong
             "mcx": {"symbol": m.get("symbol"), "expiry": _fut_expiry(m.get("symbol")),
-                    "mid": mfut, "bid": m.get("future_bid"), "ask": m.get("future_ask")},
-            "diff": _num_diff(nfut, mfut, fresh=fresh),
+                    "mid": mfut, "bid": m.get("future_bid"), "ask": m.get("future_ask"),
+                    "age": m_future_age, "fresh": m_future_fresh},
+            "diff": _num_diff(nfut, mfut, fresh=n_future_fresh and m_future_fresh),
             "same_expiry": _fut_expiry(m.get("symbol")) == (a.get("future") or {}).get("expiry"),
         },
         "fresh": fresh,

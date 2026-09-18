@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 
 from app.database import SessionLocal
-from app.models import BankOptionPosition
+from app.models import BankOptionPosition, User
 
 
 _lock = threading.RLock()
@@ -173,6 +173,17 @@ def _check_duplicate(row: BankOptionPosition, request: dict) -> None:
         raise ValueError("This request ID has already been used for a different position.")
 
 
+def _owner_key(username: str, db) -> str:
+    uid = getattr(username, "auth_uid", None)
+    if not uid:
+        # Internal callers/tests may use a name; never persist it as identity.
+        row = db.query(User.auth_uid).filter(User.username == str(username)).first()
+        uid = row[0] if row else None
+    if not uid:
+        raise ValueError("An existing user is required for paper positions.")
+    return "uid:" + uid
+
+
 def create_position(username: str, bankex_security_id: str, banknifty_security_id: str,
                     side: str, bankex_lots: int, banknifty_lots: int, request_id: str) -> dict:
     """Open a paper pair once, pinned to validated contracts and actual lot sizes."""
@@ -184,7 +195,8 @@ def create_position(username: str, bankex_security_id: str, banknifty_security_i
         "side": side, "bankex_lots": bankex_lots, "banknifty_lots": banknifty_lots,
     }
     with _lock, SessionLocal() as db:
-        existing = db.query(BankOptionPosition).filter_by(username=username, request_id=request_id).first()
+        owner = _owner_key(username, db)
+        existing = db.query(BankOptionPosition).filter_by(owner_uid=owner, request_id=request_id).first()
         if existing:
             _check_duplicate(existing, request)
             _expire_if_needed(db, existing, _now())
@@ -235,7 +247,7 @@ def create_position(username: str, bankex_security_id: str, banknifty_security_i
         if not live.market_is_open():
             raise ValueError("The market session ended before the paper entry.")
         data["entry_credit_rupees"] = _money(credit)
-        row = BankOptionPosition(username=username, request_id=request_id, side=side,
+        row = BankOptionPosition(owner_uid=owner, owner_name=str(username), request_id=request_id, side=side,
                                  created_at=now.replace(tzinfo=None), status="open", data=json.dumps(data))
         db.add(row)
         try:
@@ -243,7 +255,7 @@ def create_position(username: str, bankex_security_id: str, banknifty_security_i
         except IntegrityError:
             # Also safe if two server workers race on the same request ID.
             db.rollback()
-            row = db.query(BankOptionPosition).filter_by(username=username, request_id=request_id).first()
+            row = db.query(BankOptionPosition).filter_by(owner_uid=owner, request_id=request_id).first()
             if row is None:
                 raise
             _check_duplicate(row, request)
@@ -253,7 +265,8 @@ def create_position(username: str, bankex_security_id: str, banknifty_security_i
 
 def list_positions(username: str) -> dict:
     with _lock, SessionLocal() as db:
-        rows = db.query(BankOptionPosition).filter_by(username=username).order_by(
+        owner = _owner_key(username, db)
+        rows = db.query(BankOptionPosition).filter_by(owner_uid=owner).order_by(
             BankOptionPosition.created_at.desc(), BankOptionPosition.id.desc()).all()
         now = _now()
         positions = []
@@ -276,7 +289,8 @@ def list_positions(username: str) -> dict:
 def close_position(username: str, position_id: int) -> dict:
     """Book a manual paper close once, with the current opposite-side quotes."""
     with _lock, SessionLocal() as db:
-        row = db.query(BankOptionPosition).filter_by(id=position_id, username=username).first()
+        owner = _owner_key(username, db)
+        row = db.query(BankOptionPosition).filter_by(id=position_id, owner_uid=owner).first()
         if row is None:
             raise LookupError("Paper position not found.")
         _expire_if_needed(db, row, _now())
@@ -297,7 +311,7 @@ def close_position(username: str, position_id: int) -> dict:
             data[index.lower()]["exit_price"] = mark["prices"][index]
         data["reason"] = None
         changed = db.query(BankOptionPosition).filter_by(
-            id=row.id, username=username, status="open",
+            id=row.id, owner_uid=owner, status="open",
         ).update({"status": "closed", "closed_at": now.replace(tzinfo=None),
                   "realised_pnl_rupees": mark["pnl"], "data": json.dumps(data)}, synchronize_session=False)
         db.commit()

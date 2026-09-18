@@ -21,7 +21,7 @@ os.environ["PREMIUM_FEED_ENABLED"] = "false"
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
-from app.models import BankOptionPosition  # noqa: E402
+from app.models import BankOptionPosition, User  # noqa: E402
 from app.services import bank_options_positions as positions  # noqa: E402
 
 
@@ -32,7 +32,13 @@ class BankOptionsPositionsTests(unittest.TestCase):
         self.engine = create_engine(f"sqlite:///{self.temp.name}/test.db", connect_args={"check_same_thread": False})
         self.addCleanup(self.engine.dispose)
         BankOptionPosition.__table__.create(self.engine)
+        # Positions belong to a permanent user id, not a name (review 18-Sep):
+        # the ledger looks the owner up in the users table.
+        User.__table__.create(self.engine)
         self.Session = sessionmaker(bind=self.engine)
+        with self.Session() as db:
+            db.add_all([User(username=name, password_hash="x", role="admin") for name in ("alice", "bob")])
+            db.commit()
         self.patch_session = patch.object(positions, "SessionLocal", self.Session)
         self.patch_session.start()
         self.addCleanup(self.patch_session.stop)

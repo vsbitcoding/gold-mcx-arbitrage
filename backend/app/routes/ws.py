@@ -6,12 +6,10 @@ as ticks arrive. Client should also handle ping/pong (FastAPI handles it).
 """
 import logging
 
-import jwt
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 
-from app.config import settings
 from app.database import SessionLocal
-from app.security import ALGORITHM
+from app.security import authenticate, may_board
 from app.services.broadcaster import broadcaster
 from app.services.snapshot import build_live_payload
 
@@ -19,11 +17,12 @@ log = logging.getLogger("ws")
 router = APIRouter()
 
 
-def _verify(token: str) -> str | None:
+def _verify(token: str):
+    """The same session check as every REST call: a UUID-backed token whose
+    login is still active and whose password has not been reset since."""
     try:
-        payload = jwt.decode(token, settings.APP_SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
-    except jwt.PyJWTError:
+        return authenticate(token)
+    except HTTPException:
         return None
 
 
@@ -32,15 +31,16 @@ async def ws_live(websocket: WebSocket, token: str = Query(...)):
     user = _verify(token)
     # The socket streams the whole arbitrage board - only a login that may
     # see one of the board pages (Cross / Calendar / Signals) gets it.
-    if user:
-        from app.security import may_board
-        if not may_board(user):
-            user = None
+    if user and not may_board(user):
+        user = None
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    await broadcaster.connect(websocket)
+    # The broadcaster keeps the identity: a login disabled, renamed away, or
+    # whose password was reset is dropped on the next push, not at the next
+    # reconnect (review 18-Sep, finding 12).
+    await broadcaster.connect(websocket, user)
     try:
         # Initial snapshot
         db = SessionLocal()

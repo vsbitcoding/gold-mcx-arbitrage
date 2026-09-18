@@ -296,11 +296,14 @@ class BankOptionsLiveTests(unittest.TestCase):
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
-        from app.models import BankOptionPosition
+        from app.models import BankOptionPosition, User
         from app.services import bank_options_positions as ledger
         engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
         self.addCleanup(engine.dispose)
         BankOptionPosition.__table__.create(engine)
+        User.__table__.create(engine)
+        with sessionmaker(bind=engine)() as db:
+            db.add_all([User(username=n, password_hash="x", role="admin") for n in ("alice", "bob")]); db.commit()
         app = FastAPI()
         app.include_router(bank_options.router)
         app.dependency_overrides[get_current_user] = lambda: "alice"
@@ -334,11 +337,14 @@ class BankOptionsLiveTests(unittest.TestCase):
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import StaticPool
-        from app.models import BankOptionPosition
+        from app.models import BankOptionPosition, User
         from app.services import bank_options_positions as ledger
         engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
         self.addCleanup(engine.dispose)
         BankOptionPosition.__table__.create(engine)
+        User.__table__.create(engine)
+        with sessionmaker(bind=engine)() as db:
+            db.add_all([User(username=n, password_hash="x", role="admin") for n in ("alice", "bob")]); db.commit()
         with patch.object(ledger, "SessionLocal", sessionmaker(bind=engine)), \
              patch.object(ledger, "_now", return_value=self.now):
             for offset in (100, 4000):

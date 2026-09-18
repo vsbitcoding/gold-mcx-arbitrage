@@ -65,6 +65,8 @@ def _clean(body: UserIn, *, creating: bool) -> tuple[str | None, str | None, str
         raise HTTPException(400, "Password is required.")
     if pw is not None and len(pw) < 6:
         raise HTTPException(400, "Password: at least 6 characters.")
+    if pw is not None and len(pw.encode("utf-8")) > 72:
+        raise HTTPException(400, "Password: at most 72 UTF-8 bytes.")
     role = (body.role or "user").strip().lower()
     if role not in ROLES:
         raise HTTPException(400, f"Role must be one of {', '.join(ROLES)}.")
@@ -108,6 +110,7 @@ def create_user(body: UserIn, admin: str = Depends(require_admin), db: Session =
     db.add(u)
     db.commit()
     db.refresh(u)
+    forget(u.username, u.auth_uid)
     return _out(u)
 
 
@@ -124,18 +127,23 @@ def update_user(user_id: int, body: UserIn, admin: str = Depends(require_admin),
         raise HTTPException(400, "This is the last active admin; make another admin first.")
     # Existing logins keep their capitals ("Dharmesh"): a name that only differs
     # in case is the same name, not a rename.
+    old_name = u.username
+    uid = u.auth_uid
     if name and name != u.username and name.lower() != u.username.lower():
         if db.query(User.id).filter(User.username == name).first():
             raise HTTPException(409, f"'{name}' already exists.")
-        forget(u.username)
         u.username = name
     if pw:
         u.password_hash = hash_password(pw)
+    if pw or (u.is_active and not body.active):
+        # SQL expression increments atomically even if two resets race.
+        u.session_version = User.session_version + 1
     u.role = role
     u.pages = json.dumps(pages) if role == "user" else None
     u.is_active = 1 if body.active else 0
     db.commit()
-    forget(u.username)
+    forget(old_name, uid)
+    forget(u.username, uid)
     db.refresh(u)
     return _out(u)
 
@@ -150,7 +158,8 @@ def delete_user(user_id: int, admin: str = Depends(require_admin), db: Session =
     if u.role == "admin" and _active_admins(db, u.id) == 0:
         raise HTTPException(400, "This is the last active admin; make another admin first.")
     name = u.username
+    uid = u.auth_uid
     db.delete(u)
     db.commit()
-    forget(name)
+    forget(name, uid)
     return {"ok": True, "deleted": name}

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -270,7 +271,9 @@ class Book:
         self.strikes: list = []
         for month in (0, 1):
             try:
-                d = payload(commodity, window=WINDOW, month=month)
+                # Marks and orders use prices only; IV inversion is expensive
+                # and changes none of the paper engine's decisions.
+                d = payload(commodity, window=WINDOW, month=month, include_iv=False)
             except Exception as e:  # noqa: BLE001
                 log.debug("paper book %s month %s: %s", commodity, month, e)
                 continue
@@ -287,7 +290,11 @@ class Book:
                     self.quotes[("MCX", mcx_exp, float(r["strike"]), side.upper())] = cell.get("mcx") or {}
             if month == 0:
                 f = d.get("future") or {}
-                self.fut = (f.get("mcx") or {}).get("mid") or (f.get("nse") or {}).get("mid")
+                for exchange in ("mcx", "nse"):
+                    leg = f.get(exchange) or {}
+                    if self.two_sided(leg):
+                        self.fut = (leg["bid"] + leg["ask"]) / 2
+                        break
                 self.strikes = sorted({float(r["strike"]) for r in opts.get("rows") or []})
                 if self.fut and self.strikes:
                     self.atm = min(self.strikes, key=lambda k: abs(k - self.fut))
@@ -300,11 +307,17 @@ class Book:
 
     @staticmethod
     def two_sided(q: dict) -> bool:
-        return bool(q.get("bid") and q.get("ask")) and not q.get("wide")
+        bid, ask = q.get("bid"), q.get("ask")
+        return (q.get("fresh") is True and not q.get("restored")
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                        and math.isfinite(v) and v > 0 for v in (bid, ask))
+                and bid <= ask and not q.get("wide"))
 
     @staticmethod
     def leg_px(q: dict, direction: str) -> float | None:
         """The client's price rule: a bought leg at its bid, a sold leg at its ask."""
+        if not Book.two_sided(q):
+            return None
         v = q.get("bid") if direction == "buy" else q.get("ask")
         return float(v) if v else None
 
@@ -391,9 +404,12 @@ def _open(commodity: str, p: dict, book: Book, side: str, k: float, pr, reason="
 def _close(t: Trade, book: Book, reason: str, prices: dict | None = None) -> bool:
     m = _mark(t, book)
     if m is None and prices is None:
-        if t.mark is None or not t.mark_prices:
+        # Only an expired contract can use the recorded final mark for the
+        # paper settlement. A manual/strategy close requires fresh quotes.
+        if reason != "expiry" or t.mark is None or not t.mark_prices:
             return False
         pnl, prices = t.mark, t.mark_prices            # last known mark (a leg with no quote any more)
+        reason = "expiry (last recorded mark)"
     elif m is not None:
         pnl, prices = m
     else:
@@ -471,7 +487,8 @@ def _manage(t: Trade, book: Book, p: dict, today: str) -> bool:
             continue
         if m[0] >= 0:
             return _close(t, book, "expiry" if today >= leg.exp else "square off")
-        allowed = can_roll and p["roll_legs"] in ("both", exch)
+        allowed = (t.rolls < p["max_rolls"]
+                   and p["roll_legs"] in ("both", exch))
         if not allowed or not _roll_leg(t, exch, book):
             if today >= leg.exp:
                 return _close(t, book, "expiry")
@@ -531,7 +548,7 @@ def _tick(commodity: str):
     # 3. move adjustments (roll / add) on the entry lots
     if p["mode"] in ("roll", "add") and book.fut:
         for t in list(open_t):
-            if t.reason != "signal" or t.rolls or t.ref_future is None:
+            if t.reason == "add lot" or t.rolls or t.ref_future is None:
                 continue
             move = book.fut - t.ref_future
             hurt = (t.side == "CE" and move <= -p["move_points"]) or (t.side == "PE" and move >= p["move_points"])
@@ -544,8 +561,9 @@ def _tick(commodity: str):
             if k == t.strike:
                 t.ref_future = book.fut; _save(t); continue
             if p["mode"] == "roll":
-                if _close(t, book, "adjusted"):
-                    open_t.remove(t)
+                if not _close(t, book, "adjusted"):
+                    continue
+                open_t.remove(t)
             else:
                 t.ref_future = book.fut; _save(t)
             newp = _open(commodity, p, book, t.side, k, pr, reason="adjust", parent=t.id)
@@ -636,7 +654,11 @@ def state(commodity: str) -> dict:
         db.close()
     pnl_closed = sum(t["pnl_points"] or 0 for t in closed)
     pnl_open = sum(t["mark"] or 0 for t in opens)
-    pv = st["params"]["point_value"]
+    # Each lot freezes its point value at entry; editing tomorrow's rules
+    # must not reprice yesterday's trades or disagree with the detail rows.
+    open_rs = sum((t["mark"] or 0) * t["point_value"] for t in opens)
+    closed_rs = sum((t["pnl_points"] or 0) * t.get("point_value", DEFAULTS[commodity]["point_value"])
+                    for t in closed)
     wins = sum(1 for t in closed if (t["pnl_points"] or 0) > 0)
     return {
         "commodity": commodity, "enabled": st["enabled"], "params": st["params"], "market_open": is_market_open(),
@@ -644,9 +666,9 @@ def state(commodity: str) -> dict:
         "open": opens, "closed": closed,
         "summary": {"open_lots": len(opens), "closed": len(closed), "wins": wins,
                     "win_rate": round(wins / len(closed) * 100, 1) if closed else None,
-                    "open_points": round(pnl_open, 2), "open_rs": round(pnl_open * pv, 0),
-                    "closed_points": round(pnl_closed, 2), "closed_rs": round(pnl_closed * pv, 0),
-                    "total_points": round(pnl_open + pnl_closed, 2), "total_rs": round((pnl_open + pnl_closed) * pv, 0)},
+                    "open_points": round(pnl_open, 2), "open_rs": round(open_rs, 0),
+                    "closed_points": round(pnl_closed, 2), "closed_rs": round(closed_rs, 0),
+                    "total_points": round(pnl_open + pnl_closed, 2), "total_rs": round(open_rs + closed_rs, 0)},
         "events": [e for e in _events if e["commodity"] == commodity][-40:],
         "poll_seconds": POLL_SECONDS,
         "preview": preview(commodity) if is_market_open() else None,

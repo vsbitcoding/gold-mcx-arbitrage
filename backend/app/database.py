@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -59,6 +60,8 @@ _REQUIRED_COLUMNS = {
     # Existing installs predate roles; every user already in the table is the
     # admin, so the backfill default must be 'admin', not the model's default.
     "users": [
+        ("auth_uid", "VARCHAR(32)"),
+        ("session_version", "INTEGER NOT NULL DEFAULT 1"),
         ("role", "VARCHAR(16) DEFAULT 'admin'"),
         ("pages", "TEXT"),
         ("is_active", "INTEGER DEFAULT 1"),
@@ -72,6 +75,8 @@ _REQUIRED_COLUMNS = {
     "paper_signals": [
         ("account", "VARCHAR(64)"),
     ],
+    "paper_accounts": [("is_active", "INTEGER NOT NULL DEFAULT 1")],
+    "bank_option_positions": [("owner_name", "VARCHAR(64)")],
 }
 
 
@@ -86,6 +91,32 @@ def run_simple_migrations() -> None:
                 if name not in existing:
                     log.warning("Auto-migrate: ALTER TABLE %s ADD COLUMN %s %s", table, name, sql_type)
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+
+        if insp.has_table("users"):
+            # Only missing identities are assigned, so repeats and renames are safe.
+            for user_id, in conn.execute(text("SELECT id FROM users WHERE auth_uid IS NULL OR auth_uid = ''")):
+                conn.execute(text("UPDATE users SET auth_uid = :uid WHERE id = :id"),
+                             {"uid": uuid4().hex, "id": user_id})
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_auth_uid ON users(auth_uid)"))
+            conn.execute(text("UPDATE users SET session_version = 1 WHERE session_version IS NULL"))
+
+        # One-time owner conversion, in the same transaction as its marker.
+        # Preserve IDs, fills, request IDs, history and the existing unique key.
+        conn.execute(text("CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(80) PRIMARY KEY)"))
+        owner_migration = "bank_positions_immutable_owner_v1"
+        done = conn.execute(text("SELECT name FROM schema_migrations WHERE name = :name"),
+                            {"name": owner_migration}).first()
+        if not done and insp.has_table("users") and insp.has_table("bank_option_positions"):
+            owners = dict(conn.execute(text("SELECT username, auth_uid FROM users")).all())
+            for owner, in conn.execute(text("SELECT DISTINCT username FROM bank_option_positions")):
+                # Fresh-schema rows may already have been written with UUID owners.
+                if owner.startswith(("uid:", "orphan:")):
+                    continue
+                uid = owners.get(owner)
+                key = "uid:" + uid if uid else "orphan:" + uuid4().hex
+                conn.execute(text("UPDATE bank_option_positions SET username = :key, owner_name = :owner WHERE username = :owner"),
+                             {"key": key, "owner": owner})
+            conn.execute(text("INSERT INTO schema_migrations(name) VALUES (:name)"), {"name": owner_migration})
 
         # Cleanup: NULL ladder_rule_id on positions/history that either
         # (a) reference a ladder that no longer exists, OR

@@ -66,19 +66,23 @@ export default function IvCalculator() {
   // fetch on a commodity change, no polling - this page is a calculator, not a
   // ticker, and a number moving under the cursor mid-typing is worse than stale.
   useEffect(() => {
-    let alive = true;
-    api.nseMcx(product, 0)
-      .then((r) => { if (alive) setBoard(r); })
-      .catch(() => { if (alive) setBoard(null); });
-    return () => { alive = false; };
+    // Clear first: the previous product's board must never feed a prefill
+    // while the new one loads (review 18-Sep, finding 18).
+    setBoard(null);
+    const controller = new AbortController();
+    api.nseMcx(product, 0, controller.signal)
+      .then((r) => { if (!controller.signal.aborted && r?.commodity === product) setBoard(r); })
+      .catch(() => { if (!controller.signal.aborted) setBoard(null); });
+    return () => controller.abort();
   }, [product]);
 
   const cfg = PRODUCTS.find((p) => p.key === product) || PRODUCTS[0];
-  const basis = board?.iv_basis;
+  const boardReady = board?.commodity === product;
+  const basis = boardReady ? board?.iv_basis : null;
 
   function prefill(exchange) {
     const b = basis?.[exchange];
-    if (!b?.forward) return;
+    if (!boardReady || !b?.forward) return;
     // The forward the chain's own prices imply, NOT the future on the board.
     // That future is the front month while the options are the month after, and
     // using it is exactly the mistake that made a vendor's IV wrong.
@@ -184,7 +188,7 @@ export default function IvCalculator() {
                   title={basis?.[ex]?.forward
                     ? `forward ${basis[ex].forward} from ${basis[ex].strikes} strikes, ${basis[ex].days} days`
                     : "no forward available yet"}
-                  onClick={() => prefill(ex)}>{ex.toUpperCase()} ATM</button>
+                  disabled={!boardReady || !basis?.[ex]?.forward} title={boardReady ? "" : "Loading this commodity's board…"} onClick={() => prefill(ex)}>{ex.toUpperCase()} ATM</button>
               ))}
             </div>
           </div>

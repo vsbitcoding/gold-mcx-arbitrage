@@ -28,17 +28,27 @@ export default function OptionsSpread() {
   }, [view]);
 
   useEffect(() => {
-    if (view !== "live") return; // History view: static data, no polling
-    let alive = true;
+    if (view !== "live") return undefined; // History view: static data, no polling
+    // A side switch clears the board at once: the headings flip to the exit
+    // side immediately, so the entry side's prices must not sit under them
+    // while the new request is in flight (review 18-Sep, finding 16).
+    setData(null); setErr(null);
+    const controller = new AbortController();
+    let alive = true, timer = null, inflight = false;
     async function load() {
+      if (!alive || inflight || document.hidden) return;
+      inflight = true;
       try {
-        const r = await api.optionsSpread(side);
-        if (alive) { setData(r); setErr(null); }
-      } catch (e) { if (alive) setErr(e.message); }
+        const r = await api.optionsSpread(side, controller.signal);
+        if (alive) { setData({ ...r, side }); setErr(null); }
+      } catch (e) { if (alive && !controller.signal.aborted) setErr(e.message); }
+      finally { inflight = false; }
     }
     load();
-    const t = setInterval(load, 2000);
-    return () => { alive = false; clearInterval(t); };
+    timer = setInterval(load, 2000);
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; clearInterval(timer); controller.abort(); document.removeEventListener("visibilitychange", onVis); };
   }, [side, view]);
 
   return (
@@ -72,7 +82,7 @@ export default function OptionsSpread() {
       ) : (
         <>
           {err && <div className="settings-banner danger">⚠ {err}</div>}
-          <OptionsBoard data={data} side={side} live />
+          <OptionsBoard data={data && data.side === side ? data : null} side={side} live />
         </>
       )}
 

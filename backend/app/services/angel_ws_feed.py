@@ -459,7 +459,7 @@ def _run_feed_thread() -> None:
                         # Angel answers a fourth socket with 429 "Connection
                         # Limit Exceeded"; retrying that every second would only
                         # earn a ban, so a socket that never opened waits too.
-                        wait = min(5 * (2 ** max(0, c.attempt - 1)), 60)
+                        wait = min(5 * (2 ** min(4, max(0, c.attempt - 1))), 60)
                         if now - c.last_attempt >= wait:
                             log.warning("socket %d down - reconnecting (attempt %d, next wait %ds)",
                                         c.idx, c.attempt + 1, min(wait * 2, 60))
@@ -473,7 +473,9 @@ def _run_feed_thread() -> None:
                 # A socket that Angel keeps refusing (handshake 401/429) is
                 # usually a session that died server-side: rebuild everything
                 # on a fresh login rather than retrying the dead one all night.
-                refused = [c for c in _conns if not c.connected and c.opened_at == 0 and c.attempt >= 3]
+                # _on_open resets attempt, so >=3 means consecutive failed
+                # connects even if this socket was healthy earlier today.
+                refused = [c for c in _conns if not c.connected and c.attempt >= 3]
                 if refused and now - _last_rebuild_epoch[0] > REBUILD_GRACE_SECONDS:
                     _force_login[0] = True
                     request_resubscribe_force(f"socket {refused[0].idx} refused {refused[0].attempt}x - fresh login")

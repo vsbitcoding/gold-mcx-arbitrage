@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Login from "./components/Login.jsx";
 import Header from "./components/Header.jsx";
 import LiveSpreadTable from "./components/LiveSpreadTable.jsx";
@@ -21,6 +21,7 @@ import UsersPage from "./components/UsersPage.jsx";
 import HolidaysPage from "./components/HolidaysPage.jsx";
 import { api, getToken, clearToken, getRole, getPages, storeSession } from "./api/client.js";
 import { createLiveSocket } from "./api/livesocket.js";
+import { usePolling } from "./api/usePolling.js";
 
 const SPREAD_TABS = ["signals", "cross", "calendar", "metals", "price", "othercomm"];
 const VALID_PAGES = [...SPREAD_TABS, "calculator", "making", "premium", "options", "goldopt", "bankoptions", "stock", "mcxnymex", "nsemcx", "ivcalc", "intl", "autotrades"];
@@ -69,7 +70,8 @@ function Dashboard() {
   // trader login then displayed too and reasonably read as a security hole.
   const [user] = useState(() => localStorage.getItem("arbi_user") || "User");
   const [page, setPage] = useState(getStoredPage());
-  const fallbackRef = useRef(null);
+  const socketSnapshot = useRef(0);
+  const boardActive = hasBoardAccess() && ["cross", "calendar", "signals"].includes(page);
 
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
@@ -107,134 +109,64 @@ function Dashboard() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // The header pill tracks the browser-to-server rates socket, which a trader
-  // deliberately never opens (the server refuses it for that role) - so for a
-  // trader it stayed "CONNECTING" for ever. For that login the pill follows the
-  // MARKET feed instead: the thing the paper trades actually price off.
+  const feedPoll = usePolling(api.feedStatus, {
+    key: "feed-status", interval: 10000, onData: setFeedStatus,
+  });
   useEffect(() => {
-    if (hasBoardAccess() || !feedStatus) return;
-    // `mode` is the feed's own state machine ("live", "starting", ...) - checked
-    // against the real payload; the first guess (`ws_connected`) is not in it,
-    // and a key that is never there would have pinned the pill on LIVE for ever,
-    // dead feed included.
-    setWsState(feedStatus.mode === "live" ? "live" : "connecting");
-  }, [feedStatus]);
+    if (!boardActive) setWsState(feedStatus?.mode === "live" ? "live" : "connecting");
+  }, [feedStatus, boardActive]);
 
-  // Slow-cadence fetch for feed status (the only thing WS doesn't push).
-  const refreshSlow = useCallback(async () => {
-    try {
-      setFeedStatus(await api.feedStatus().catch(() => null));
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  // REST fallback for live pairs when WS is not connected
-  const refreshPairsFallback = useCallback(async () => {
-    try {
-      const p = await api.livePairs();
-      setPairs(p);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
+  // Open the rates stream only while a rates board is visible. REST is a
+  // single-flight fallback; a socket snapshot invalidates every older read.
   useEffect(() => {
-    refreshSlow();
-    // "trader" here = any login without the board pages (trader role, or a
-    // user whose ticked pages do not include Cross / Calendar / Signals).
-    const trader = !hasBoardAccess();
-    if (!trader) refreshPairsFallback(); // initial pairs load (also covers if WS slow to connect)
-
-    // Slow REST cadence: feed status every 10s. Paused while the tab is hidden.
-    let slowTimer = setInterval(refreshSlow, 10000);
-
-    function onVisibility() {
-      if (document.hidden) {
-        clearInterval(slowTimer); slowTimer = null;
-      } else {
-        // Came back into view → refresh immediately so status isn't stale.
-        refreshSlow();
-        if (!slowTimer) slowTimer = setInterval(refreshSlow, 10000);
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-
-    // A trader login has no board - the server answers 403 for it now, so the
-    // pair socket would only manufacture errors. The status timer above still
-    // runs (the LIVE pill is on the trader's allowed list) and still needs the
-    // same teardown.
-    if (trader) {
-      return () => {
-        if (slowTimer) clearInterval(slowTimer);
-        document.removeEventListener("visibilitychange", onVisibility);
-      };
-    }
-
-    const sock = createLiveSocket({
-      onSnapshot: (data) => setPairs(data),
-      onState: (s) => setWsState(s),
+    if (!boardActive) return undefined;
+    let active = true;
+    const socket = createLiveSocket({
+      onSnapshot: (data) => {
+        if (!active) return;
+        socketSnapshot.current += 1;
+        setPairs(data);
+      },
+      onState: (state) => { if (active) setWsState(state); },
     });
+    return () => { active = false; socketSnapshot.current += 1; socket.close(); };
+  }, [boardActive]);
+  usePolling(async (signal) => {
+    const version = socketSnapshot.current;
+    const data = await api.livePairs(signal);
+    return { version, data };
+  }, {
+    key: "pairs", enabled: boardActive && wsState !== "live", interval: 3000,
+    onData: ({ version, data }) => {
+      if (version === socketSnapshot.current) setPairs(data);
+    },
+  });
 
-    function stopFallback() {
-      if (fallbackRef.current) {
-        clearInterval(fallbackRef.current);
-        fallbackRef.current = null;
-      }
-    }
+  // Only the visible watch board needs fresh prices. Previously every allowed
+  // watch page was fetched every two seconds, even while using a calculator.
+  const watchPage = page === "making" ? "price" : page;
+  const watchAllowed = allowedPages().includes(page) && ["metals", "othercomm", "price"].includes(watchPage);
+  const watch = usePolling((signal) => ({
+    metals: api.metalsSpread, othercomm: api.otherCommSpread, price: api.priceTable,
+  })[watchPage](signal), {
+    key: watchPage, enabled: watchAllowed, interval: 2000,
+    onData: (data) => {
+      if (watchPage === "metals") setMetalData(data);
+      else if (watchPage === "othercomm") setOtherCommData(data);
+      else setPriceData(data);
+    },
+  });
 
-    return () => {
-      clearInterval(slowTimer);
-      document.removeEventListener("visibilitychange", onVisibility);
-      stopFallback();
-      sock.close();
-    };
-  }, [refreshSlow, refreshPairsFallback]);
-
-  // Watch-tab data (Metal / Other Commodity / Price) — polled here so the nav
-  // badges show counts and the tabs render instantly. Paused when hidden.
-  useEffect(() => {
-    let alive = true, timer = null;
-    async function load() {
-      try {
-        // only the watch tabs this login may open - the others would 403
-        const [m, o, p] = await Promise.all([
-          can("metals") ? api.metalsSpread().catch(() => null) : null,
-          can("othercomm") ? api.otherCommSpread().catch(() => null) : null,
-          (can("price") || can("making")) ? api.priceTable().catch(() => null) : null,
-        ]);
-        if (!alive) return;
-        if (m) setMetalData(m);
-        if (o) setOtherCommData(o);
-        if (p) setPriceData(p);
-      } catch { /* keep last */ }
-    }
-    const allowed = allowedPages();
-    const can = (k) => allowed.includes(k);
-    if (!can("metals") && !can("othercomm") && !can("price") && !can("making")) return undefined;
-    function start() { if (!timer) timer = setInterval(load, 2000); }
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
-    function onVis() { if (document.hidden) stop(); else { load(); start(); } }
-    load(); start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => { alive = false; stop(); document.removeEventListener("visibilitychange", onVis); };
-  }, []);
-
-  // Engage REST fallback only if WS keeps failing
-  useEffect(() => {
-    if (wsState === "live") {
-      if (fallbackRef.current) {
-        clearInterval(fallbackRef.current);
-        fallbackRef.current = null;
-      }
-    } else if (wsState === "reconnecting") {
-      if (!fallbackRef.current) {
-        fallbackRef.current = setInterval(() => {
-          api.livePairs().then(setPairs).catch(() => {});
-        }, 3000);
-      }
-    }
-  }, [wsState]);
+  // Pick up grants/revocations in an open session without hammering the user
+  // table. Hidden tabs stop polling and revalidate immediately on return.
+  usePolling(api.me, {
+    key: "session", interval: 30000,
+    onData: (session) => {
+      const before = JSON.stringify([getRole(), getPages(), localStorage.getItem("arbi_user")]);
+      storeSession(session);
+      if (JSON.stringify([getRole(), getPages(), localStorage.getItem("arbi_user")]) !== before) window.location.reload();
+    },
+  });
 
   async function logout() {
     const ok = await confirm({
@@ -254,16 +186,6 @@ function Dashboard() {
   function toggleDensity() {
     setDensity((d) => (d === "compact" ? "comfortable" : "compact"));
   }
-
-  // Re-read this login's pages on every load: the admin may have edited them.
-  // A change updates storage and reloads once, so the menu and the wall agree.
-  useEffect(() => {
-    api.me().then((m) => {
-      const before = JSON.stringify([getRole(), getPages()]);
-      storeSession(m);
-      if (JSON.stringify([getRole(), getPages()]) !== before) window.location.reload();
-    }).catch(() => {});
-  }, []);
 
   const counts = {
     signals: pairs.filter((r) => r.signal).length,
@@ -285,13 +207,14 @@ function Dashboard() {
         onToggleTheme={toggleTheme}
         density={density}
         onToggleDensity={toggleDensity}
-        feedStatus={feedStatus}
+        feedStatus={feedPoll.error || feedPoll.pending ? null : feedStatus}
         wsState={wsState}
         page={page}
         onNavigate={setPage}
         counts={counts}
       />
       <div className="container">
+        {watchAllowed && watch.error && <div className="settings-banner danger" role="alert">Displayed prices may be stale. {watch.error}</div>}
         {SPREAD_TABS.includes(page) && (
           <LiveSpreadTable
             rows={pairs}
@@ -302,7 +225,7 @@ function Dashboard() {
           />
         )}
         {page === "calculator" && <Calculator />}
-        {page === "making" && <MakingPrice priceData={priceData} />}
+        {page === "making" && <MakingPrice priceData={priceData} fresh={!watch.error && !watch.pending && !watch.paused} />}
         {page === "premium" && <PremiumInputs />}
         {page === "mcxnymex" && <McxNymex />}
         {/* Same screen, US side restated in rupees at the USD/INR future. A

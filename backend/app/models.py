@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import (Boolean, Column, DateTime, Float, Integer, LargeBinary,
                         String, Text, UniqueConstraint)
@@ -87,6 +88,9 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False)
+    # UUID identity survives renames and cannot be recycled after deletion.
+    auth_uid = Column(String(32), nullable=False, unique=True, default=lambda: uuid4().hex)
+    session_version = Column(Integer, nullable=False, default=1)
     password_hash = Column(String(256), nullable=False)
     # 'admin' sees the whole dashboard and manages users; 'trader' sees only
     # the Auto Trades page (the webhook client); 'user' sees the pages listed
@@ -167,6 +171,7 @@ class PaperAccount(Base):
     __tablename__ = "paper_accounts"
     id = Column(Integer, primary_key=True)
     name = Column(String(64), unique=True, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
     angel_client_id = Column(String(64), nullable=True)
     angel_mpin = Column(String(64), nullable=True)
     angel_totp = Column(String(128), nullable=True)
@@ -604,7 +609,10 @@ class BankOptionPosition(Base):
     __tablename__ = "bank_option_positions"
 
     id = Column(Integer, primary_key=True)
-    username = Column(String(64), nullable=False, index=True)
+    # Keep the physical column/unique constraint for an additive, in-place
+    # migration. Values are now uid:<auth_uid>, never mutable usernames.
+    owner_uid = Column("username", String(64), nullable=False, index=True)
+    owner_name = Column(String(64), nullable=True)  # historical display name only
     request_id = Column(String(80), nullable=False)
     status = Column(String(12), nullable=False, default="open", index=True)
     side = Column(String(2), nullable=False)

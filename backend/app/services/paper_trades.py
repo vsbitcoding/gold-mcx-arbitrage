@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 from datetime import datetime
@@ -453,7 +454,8 @@ def accounts_list(mask: bool = True) -> list[dict]:
     db = SessionLocal()
     try:
         out = []
-        for a in db.query(PaperAccount).order_by(PaperAccount.name).all():
+        for a in (db.query(PaperAccount).filter(PaperAccount.is_active.is_(True))
+                  .order_by(PaperAccount.name).all()):
             try:
                 syms = json.loads(a.symbols_json or "[]")
             except ValueError:
@@ -503,7 +505,7 @@ def account_save(data: dict, account_id: int | None = None) -> dict:
         if dup:
             return {"ok": False, "reason": f"account '{name}' already exists"}
         row = db.get(PaperAccount, account_id) if account_id else None
-        if account_id and not row:
+        if account_id and (not row or not row.is_active):
             return {"ok": False, "reason": "account not found"}
         if not row:
             row = PaperAccount(name=name)
@@ -524,6 +526,12 @@ def account_save(data: dict, account_id: int | None = None) -> dict:
 
 
 def account_delete(account_id: int) -> dict:
+    """Archive an unused account while preserving its historical identity."""
+    with _lock:
+        return _archive_account(account_id)
+
+
+def _archive_account(account_id: int) -> dict:
     db = SessionLocal()
     try:
         row = db.get(PaperAccount, account_id)
@@ -535,7 +543,9 @@ def account_delete(account_id: int) -> dict:
         if open_n:
             return {"ok": False,
                     "reason": f"{row.name} has {open_n} open trade(s) - close them first"}
-        db.delete(row)
+        # Keep the primary key and name: deleting the row lets SQLite reuse its
+        # ID and would assign its closed trades to an unrelated new account.
+        row.is_active = False
         db.commit()
         return {"ok": True}
     except Exception as e:  # noqa: BLE001
@@ -546,7 +556,19 @@ def account_delete(account_id: int) -> dict:
 
 
 def _accounts_for(symbol: str) -> list[dict]:
-    return [a for a in accounts_list() if symbol in a["symbols"]]
+    # The entry path only needs routing metadata, never stored broker fields.
+    with SessionLocal() as db:
+        rows = db.query(PaperAccount.id, PaperAccount.name, PaperAccount.symbols_json).filter(
+            PaperAccount.is_active.is_(True)).all()
+    targets = []
+    for account in rows:
+        try:
+            symbols = json.loads(account.symbols_json or "[]")
+        except ValueError:
+            continue
+        if symbol in symbols:
+            targets.append({"id": account.id, "name": account.name})
+    return targets
 
 
 # --------------------------------------------------------------------------- #
@@ -555,6 +577,8 @@ def _accounts_for(symbol: str) -> list[dict]:
 def _ltp(rec: dict) -> tuple[float | None, float | None]:
     """(ltp, age_seconds) from the socket's in-memory store."""
     q = quote_store.get(rec["security_id"])
+    if getattr(q, "restored", False):
+        return None, None
     ltp = q.ltp or q.bid or q.ask or None
     age = (time.time() - q.timestamp) if q.timestamp else None
     return (float(ltp) if ltp else None), age
@@ -609,11 +633,14 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
     side = {"buy": "buy", "long": "buy", "sell": "sell", "short": "sell"}.get(side_raw)
     symbol_raw = payload.get("symbol")
     symbol = normalise_symbol(symbol_raw)
+    raw_lots = next((payload[key] for key in ("lot", "lots", "lot_size")
+                     if key in payload and payload[key] not in (None, "")), 1)
     try:
-        lots = float(payload.get("lot") or payload.get("lots")
-                     or payload.get("lot_size") or 1) or 1
-    except (TypeError, ValueError):
-        lots = 1.0
+        lots = float(raw_lots)
+        if isinstance(raw_lots, bool) or not math.isfinite(lots) or lots <= 0:
+            lots = None
+    except (TypeError, ValueError, OverflowError):
+        lots = None
     timeframe = (str(payload.get("timeframe") or payload.get("tf") or "")
                  .strip().lower() or None)
     # temp_price retired (client, 20-Aug): alerts may still send it - it is
@@ -651,6 +678,8 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
         return _log("rejected", f"type must be buy or sell, got {side_raw!r}")
     if not symbol:
         return _log("rejected", "symbol missing")
+    if lots is None:
+        return _log("rejected", "lots must be a finite positive number")
     # The Stop button outranks everything: the signal is still LOGGED - missed
     # entries must stay visible - but nothing fires until Start.
     if not is_enabled():
@@ -661,6 +690,10 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
         return _log("rejected", "MCX closed")
 
     with _lock:
+        # Stop may have completed after the quick check above while this
+        # webhook was waiting. Entry and Stop must observe one ordered state.
+        if not is_enabled():
+            return _log("rejected", "system stopped - press Start on the dashboard to resume")
         rec, is_new, err = ensure_symbol(symbol)
         if err:
             return _log("rejected", err)
@@ -674,6 +707,11 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
             return _log("rejected", "no live price - feed has nothing for this contract")
         if age is not None and age > _FRESH_SECONDS:
             return _log("rejected", f"price is {int(age)}s old - feed stale, refusing to trade on it")
+        quantity = lots * (rec.get("lot_units") or 1)
+        if (not math.isfinite(quantity) or quantity <= 0
+                or not math.isfinite(ltp) or ltp <= 0
+                or not math.isfinite(ltp * quantity)):
+            return _log("rejected", "lots and contract price exceed the supported numeric range")
 
         # The webhook fans out to every account whose list carries the symbol
         # (client, 24-Aug), one LTP read shared by all so every ledger books the
@@ -743,7 +781,7 @@ def process_signal(payload: dict, raw_body: str, via: str | None = None) -> dict
 def _account_names() -> dict[int, str]:
     db = SessionLocal()
     try:
-        return {a.id: a.name for a in db.query(PaperAccount).all()}
+        return dict(db.query(PaperAccount.id, PaperAccount.name).all())
     finally:
         db.close()
 

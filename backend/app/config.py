@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
-    APP_SECRET_KEY: str = "change-me"
+    APP_SECRET_KEY: str = ""
     TRADING_MODE: str = "paper"
 
     # Public API keys (comma-separated). Each key authorises a /api/v1/* client.
@@ -93,6 +93,13 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    def validate_signing_key(self) -> None:
+        """Fail before serving requests; never include the configured value."""
+        key = self.APP_SECRET_KEY.strip()
+        if (len(key.encode("utf-8")) < 32 or key.lower().startswith("change-me")
+                or key.lower() in {"replace-this-with-long-random-secret", "your-secret-key"}):
+            raise RuntimeError("APP_SECRET_KEY must be an explicitly configured random secret of at least 32 bytes; placeholders are not accepted.")
 
     @property
     def public_api_keys(self) -> set[str]:

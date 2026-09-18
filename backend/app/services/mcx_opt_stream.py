@@ -19,11 +19,12 @@ Design rules, same as every other feed here:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 
 from app.services.goldopt_service import _parse_all, _resolve_futures
 from app.services.instrument_resolver import _download_csv
-from app.services.market_data import clean_sides, quote_store
+from app.services.market_data import clean_sides, quote_age, quote_store
 
 log = logging.getLogger("mcx_opt_stream")
 
@@ -41,6 +42,7 @@ _WINDOW = 15
 # How many expiries forward to carry. The screen wants the MCX expiry nearest
 # NSE's for two months, and those are not always MCX's own first two.
 _EXPIRIES = 3
+FRESH_SECONDS = 120
 
 # commodity -> {"expiries": [date], "by_exp": {iso: {(strike, side): sid}}}
 _state: dict[str, dict] = {}
@@ -134,12 +136,17 @@ def get_chain(commodity: str, expiry: str | None) -> list[dict]:
         return []
 
     rows: dict[float, dict] = {}
+    now = time.time()
     for (strike, side), sid in legs.items():
         q = quote_store.get(sid)
+        age_seconds = quote_age(q, now)
         row = rows.setdefault(strike, {"strike": strike, "ce": None, "pe": None})
         row["ce" if side == "CE" else "pe"] = {
             **dict(zip(("bid", "ask"), clean_sides(q))),
             "ltp": q.ltp or None, "oi": None,
+            "timestamp": q.timestamp or None, "restored": q.restored,
+            "age": round(age_seconds, 1) if age_seconds is not None else None,
+            "fresh": age_seconds is not None and age_seconds <= FRESH_SECONDS,
         }
     return [rows[s] for s in sorted(rows)]
 
@@ -154,6 +161,7 @@ def age(commodity: str, expiry: str | None) -> float | None:
     legs = (st.get("by_exp") or {}).get(expiry or "")
     if not legs:
         return None
-    import time
-    newest = max((quote_store.get(sid).timestamp for sid in legs.values()), default=0)
-    return round(time.time() - newest, 1) if newest else None
+    now = time.time()
+    ages = [value for sid in legs.values()
+            if (value := quote_age(quote_store.get(sid), now)) is not None]
+    return round(min(ages), 1) if ages else None

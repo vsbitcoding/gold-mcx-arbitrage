@@ -30,6 +30,8 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func
+
 from app.config import MULTIPLIERS
 from app.database import SessionLocal
 from app.models import Signal
@@ -53,6 +55,7 @@ LIQ_K = 1.0                       # skip firing if the spread's bid/ask width > 
 GAP_MAX_FRAC = 0.25               # skip firing if buy/sell gap > 25% of the expected reversion (mid not tradeable)
 TICK_SECONDS = 3
 MIN_BUCKET_N = 5                  # min samples to trust a z-bucket's probability
+PROBABILITY_KIND = "target_touch_without_stop"
 Z_BUCKETS = [(1.5, 2.0), (2.0, 2.5), (2.5, 99.0)]
 
 # Strategy search grid for "short + accurate + frequent". Each combo:
@@ -109,7 +112,12 @@ def _clean(vals: list) -> list:
 # ───────────────────────── probability model ─────────────────────────
 def _backtest(vals: list) -> list[tuple]:
     """Walk-forward (no lookahead). Returns [(abs_z, hit_bool, days)] for every
-    ±ENTRY_K σ event, hit = reverted to the rolling mean within MAXHOLD_BARS."""
+    ±ENTRY_K σ event, hit = reverted to the rolling mean within MAXHOLD_BARS.
+
+    This legacy probability measures target touch even after crossing a stop;
+    it is not a live trade win rate. get_accuracy uses actual resolved outcomes,
+    and the API labels this separate model with PROBABILITY_KIND.
+    """
     res = []
     i = WINDOW
     n = len(vals)
@@ -671,6 +679,7 @@ def _disp(name, s, a, cur, z):
         "direction": a["direction"], "entry": entry, "target": target,
         "stop": a.get("stop"), "rr": f"1:{STOP_MULT:g}",
         "probability": a.get("probability"), "expected_days": a.get("expected_days"),
+        "probability_kind": PROBABILITY_KIND,
         "current": cur if cur is not None else entry, "z": z,
         "z_at_entry": a.get("z_at_entry"),
         "fired_at": datetime.fromtimestamp(a["started"]).strftime("%d %b %Y, %I:%M %p"),
@@ -717,6 +726,7 @@ def get_history(limit: int = 100) -> list[dict]:
             "id": r.id, "label": r.label, "expiry_label": r.expiry_label, "direction": r.direction,
             "entry": r.entry_spread, "target": r.target_spread, "stop": r.stop_spread, "exit": r.exit_spread,
             "probability": r.probability, "z_at_entry": r.z_at_entry,
+            "probability_kind": PROBABILITY_KIND,
             "outcome": "right" if r.status == "hit" else ("timeout" if r.status == "expired" else "wrong"),
             "days_held": r.days_held,
             "fired_at": r.fired_at.isoformat() if r.fired_at else None,
@@ -729,22 +739,26 @@ def get_history(limit: int = 100) -> list[dict]:
 def get_accuracy() -> dict:
     db = SessionLocal()
     try:
-        resolved = db.query(Signal).filter(Signal.status != "open").all()
-        hits = sum(1 for r in resolved if r.status == "hit")
-        stopped = sum(1 for r in resolved if r.status == "stopped")
-        timeout = sum(1 for r in resolved if r.status == "expired")
+        # Count in SQL instead of hydrating the entire growing signal history
+        # for every dashboard poll.
+        resolved = (db.query(Signal.label, Signal.status, func.count(Signal.id))
+                    .filter(Signal.status != "open")
+                    .group_by(Signal.label, Signal.status).all())
+        hits = sum(n for _, status, n in resolved if status == "hit")
+        stopped = sum(n for _, status, n in resolved if status == "stopped")
+        timeout = sum(n for _, status, n in resolved if status == "expired")
         decisive = hits + stopped                      # target-or-stop trades (1:1 win-rate)
         by = defaultdict(lambda: [0, 0])               # label -> [decisive, hits]
-        for r in resolved:
-            if r.status in ("hit", "stopped"):
-                by[r.label][0] += 1
-                if r.status == "hit":
-                    by[r.label][1] += 1
+        for label, status, n in resolved:
+            if status in ("hit", "stopped"):
+                by[label][0] += n
+                if status == "hit":
+                    by[label][1] += n
         by_pair = [{"label": k, "total": v[0], "right": v[1],
                     "accuracy_pct": round(v[1] / v[0] * 100, 1) if v[0] else None}
-                   for k, v in sorted(by.items())]
+                   for k, v in sorted(by.items(), key=lambda item: item[0] or "")]
         return {
-            "total": len(resolved), "right": hits, "wrong": stopped, "timeout": timeout,
+            "total": sum(n for _, _, n in resolved), "right": hits, "wrong": stopped, "timeout": timeout,
             "accuracy_pct": round(hits / decisive * 100, 1) if decisive else None,
             "open": len(_active), "by_pair": by_pair,
         }
@@ -755,6 +769,7 @@ def get_accuracy() -> dict:
 def status() -> dict:
     return {"models": _state["models"], "last_refresh": _state["last_refresh"],
             "timeframe": "4H", "stock_filter": True,
+            "probability_kind": PROBABILITY_KIND,
             "last_band_refresh": _state.get("last_band_refresh"),
             "open": len(_active), "window": WINDOW, "entry_sigma": ENTRY_K,
             "maxhold_days": round(MAXHOLD_BARS / 3.6),

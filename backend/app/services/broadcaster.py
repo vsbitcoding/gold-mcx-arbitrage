@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Set
+from typing import Dict
 
 from fastapi import WebSocket
 
@@ -22,7 +22,7 @@ _min_interval = 1.0 / MAX_BROADCAST_HZ
 
 class Broadcaster:
     def __init__(self) -> None:
-        self._clients: Set[WebSocket] = set()
+        self._clients: Dict[WebSocket, object] = {}      # socket -> authenticated user (or None)
         self._lock = asyncio.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_push_ts: float = 0.0
@@ -33,15 +33,15 @@ class Broadcaster:
         """Called from main thread on startup so background threads can submit."""
         self._loop = loop
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(self, ws: WebSocket, user=None) -> None:
         await ws.accept()
         async with self._lock:
-            self._clients.add(ws)
+            self._clients[ws] = user
         log.info("WS client connected (total=%d)", len(self._clients))
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
-            self._clients.discard(ws)
+            self._clients.pop(ws, None)
         log.info("WS client disconnected (total=%d)", len(self._clients))
 
     async def _broadcast_now(self, payload: dict) -> None:
@@ -50,8 +50,19 @@ class Broadcaster:
         msg = json.dumps(payload, default=str)
         dead: list[WebSocket] = []
         async with self._lock:
-            clients = list(self._clients)
-        for ws in clients:
+            clients = list(self._clients.items())
+        from app.security import session_valid
+        for ws, user in clients:
+            # A revoked login (disabled, password reset, expired token) is
+            # closed here rather than served until it reconnects. The check
+            # reads the 60 s permission cache, so it costs nothing per tick.
+            if user is not None and not session_valid(user, board=True):
+                dead.append(ws)
+                try:
+                    await ws.close(code=4401)
+                except Exception:  # noqa: BLE001
+                    pass
+                continue
             try:
                 await ws.send_text(msg)
             except Exception:
@@ -59,7 +70,7 @@ class Broadcaster:
         if dead:
             async with self._lock:
                 for ws in dead:
-                    self._clients.discard(ws)
+                    self._clients.pop(ws, None)
 
     def push_threadsafe(self, payload: dict) -> None:
         """Called from the feed thread (sync). Schedules broadcast on the loop."""
