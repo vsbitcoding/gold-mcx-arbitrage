@@ -1,4 +1,5 @@
-.bo-page { color: var(--text-primary); --bo-row-height: clamp(28px, calc((100dvh - 342px) / 15), 48px); }
+/* 15 strike rows should fit under the sticky header (topbar + two tab rows, ~128px) and the page's own chrome. */
+.bo-page { color: var(--text-primary); --bo-row-height: clamp(28px, calc((100dvh - 420px) / 15), 48px); }
 .bo-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; min-height: 40px; }
 .bo-title-block { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
 .bo-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.45px; line-height: 1.3; }

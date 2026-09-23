@@ -87,18 +87,21 @@ function Dashboard() {
     localStorage.setItem("arbi_page", page);
   }, [page]);
 
-  // Global keyboard shortcuts: '/' focus search, ← → flip tabs (dashboard only)
+  // Search stays close at hand; arrow navigation only applies inside the menu.
   useEffect(() => {
     function onKey(e) {
       if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT" || e.target.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], .confirm-overlay, dialog[open]')) return;
       if (e.key === "/") {
-        const el = document.querySelector('.search-container input');
+        const el = document.querySelector('#main-content input[type="search"], .search-container input');
         if (el) { e.preventDefault(); el.focus(); }
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && e.target.closest('.nav-tabs')) {
         const tabs = Array.from(document.querySelectorAll(".nav-tabs .nav-tab"));
-        const activeIdx = tabs.findIndex((t) => t.classList.contains("active"));
+        const activeIdx = tabs.indexOf(e.target.closest('.nav-tab'));
         if (activeIdx === -1) return;
+        e.preventDefault();
         const nextIdx = e.key === "ArrowRight" ? (activeIdx + 1) % tabs.length : (activeIdx - 1 + tabs.length) % tabs.length;
+        tabs[nextIdx]?.focus();
         tabs[nextIdx]?.click();
       } else if (e.key.toLowerCase() === "d" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault();
@@ -198,6 +201,7 @@ function Dashboard() {
 
   return (
     <div className={`app${page === "bankoptions" ? " bo-workspace" : ""}`}>
+      <a className="skip-to-content" href="#main-content">Skip to content</a>
       <Header
         role={getRole()}
         pages={getPages()}
@@ -213,7 +217,7 @@ function Dashboard() {
         onNavigate={setPage}
         counts={counts}
       />
-      <div className="container">
+      <main className="container" id="main-content" tabIndex={-1} aria-label="Workspace content">
         {watchAllowed && watch.error && <div className="settings-banner danger" role="alert">Displayed prices may be stale. {watch.error}</div>}
         {SPREAD_TABS.includes(page) && (
           <LiveSpreadTable
@@ -240,7 +244,7 @@ function Dashboard() {
         {page === "goldopt" && <GoldOptions />}
         {page === "bankoptions" && <BankOptions />}
         {page === "stock" && <BullionStock />}
-      </div>
+      </main>
     </div>
   );
 }

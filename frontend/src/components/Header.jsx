@@ -1,283 +1,200 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import BrandMark from "./BrandMark.jsx";
+import "./Header.css";
 
+// Keep every market page directly visible, in the established menu order.
 const NAV_ITEMS = [
-  // Names and order are the client's (his two notes, 03-Sep-2026). Every page
-  // is on the bar; the strip wraps onto more rows when the window is narrow
-  // (client, 23-Sep-2026: no "More" menu).
-  { key: "cross", label: "Cross Pair" },
-  { key: "calendar", label: "Calendar Spread" },
-  { key: "metals", label: "Metal Spread" },
-  { key: "othercomm", label: "Other Commodity Spread" },
-  { key: "price", label: "Metal Price" },
-  { key: "calculator", label: "ETF vs MCX" },
-  { key: "premium", label: "Premium" },
-  { key: "goldopt", label: "Commodity Option" },
-  { key: "nsemcx", label: "NSE vs MCX" },
-  { key: "mcxnymex", label: "MCX vs NYMEX" },
-  { key: "making", label: "Making Price" },
-  { key: "stock", label: "Bullion Stock" },
-  { key: "intl", label: "COMEX + NYMEX" },
-  { key: "ivcalc", label: "IV Calculator" },
-  { key: "options", label: "Nifty / Sensex" },
-  { key: "bankoptions", label: "BANKEX / BANKNIFTY" },
-  { key: "signals", label: "⚡ Signals" },
-  { key: "autotrades", label: "Auto Trades" },
+  { key: "cross", label: "Cross Pair", group: "Spreads", hint: "Compare spreads between gold and silver contracts" },
+  { key: "calendar", label: "Calendar Spread", group: "Spreads", hint: "Compare the same instrument across expiry months" },
+  { key: "metals", label: "Metal Spread", group: "Spreads", hint: "Base-metal calendar spreads" },
+  { key: "othercomm", label: "Other Commodity Spread", group: "Spreads", hint: "Watch spreads across other commodities" },
+  { key: "price", label: "Metal Price", group: "Markets", hint: "View current metal prices" },
+  { key: "calculator", label: "ETF vs MCX", group: "Tools", hint: "Compare ETF and MCX fair values" },
+  { key: "premium", label: "Premium", group: "Tools", hint: "Manage bullion premiums" },
+  { key: "goldopt", label: "Commodity Option", group: "Options", hint: "Gold and commodity options" },
+  { key: "nsemcx", label: "NSE vs MCX", group: "Markets", hint: "Compare NSE and MCX contracts" },
+  { key: "mcxnymex", label: "MCX vs NYMEX", group: "Markets", hint: "Compare domestic and international crude prices" },
+  { key: "making", label: "Making Price", group: "Tools", hint: "Calculate bullion making prices" },
+  { key: "stock", label: "Bullion Stock", group: "Markets", hint: "Track bullion stock and availability" },
+  { key: "intl", label: "COMEX + NYMEX", group: "Markets", hint: "International futures and market prices" },
+  { key: "ivcalc", label: "IV Calculator", group: "Tools", hint: "Calculate implied volatility" },
+  { key: "options", label: "Nifty / Sensex", group: "Options", hint: "Compare Nifty and Sensex options" },
+  { key: "bankoptions", label: "BANKEX / BANKNIFTY", group: "Options", hint: "Bank index options and paper positions" },
+  { key: "signals", label: "Signals", group: "Spreads", hint: "Review active spread signals" },
+  { key: "autotrades", label: "Auto Trades", group: "Trading", hint: "Monitor automated trades and activity" },
+];
+const ADMIN_ITEMS = [
+  { key: "users", label: "Manage Users", group: "Management", hint: "Create logins and manage page access" },
+  { key: "holidays", label: "Market Holidays", group: "Management", hint: "Manage exchange holidays and market hours" },
 ];
 
-// Clean monochrome line icons (match the app's drawer look).
-function NavIcon({ name }) {
-  const c = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
-    strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
-  switch (name) {
-    case "signals": return <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>;
-    case "cross": return <svg {...c}><path d="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12" /></svg>;
-    case "calendar": return <svg {...c}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>;
-    case "metals": return <svg {...c}><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5M3 17l9 5 9-5" /></svg>;
-    case "price": return <svg {...c}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></svg>;
-    case "othercomm": return <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z" /></svg>;
-    case "calculator": return <svg {...c}><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" /></svg>;
-    case "bankoptions":
-    case "options": return <svg {...c}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
-    case "stock": return <svg {...c}><path d="M3 21h18" /><rect x="5" y="11" width="4" height="7" /><rect x="15" y="11" width="4" height="7" /><path d="M7 11V7l5-4 5 4v4" /></svg>;
-    case "goldopt": return <svg {...c}><circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" /></svg>;
-    case "making": return <svg {...c}><path d="M20.6 13.4 12 22l-9-9V4h9z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>;
-    case "premium": return <svg {...c}><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></svg>;
-    case "autotrades": return <svg {...c}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>;
-    default: return null;
-  }
+function Icon({ name, size = 18 }) {
+  const paths = {
+    search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></>,
+    cross: <path d="m16 3 4 4-4 4M20 7H5m3 14-4-4 4-4M4 17h15" />,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+    metals: <path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" />,
+    price: <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M6 12h.01M18 12h.01" /></>,
+    othercomm: <path d="M12 3C9 7 5 10 5 14a7 7 0 0 0 14 0c0-4-4-7-7-11Z" />,
+    calculator: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 11h1m6 0h1m-8 4h1m6 0h1m-8 3h1m6 0h1" /></>,
+    options: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+    stock: <><path d="m3 7 9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10" /></>,
+    making: <><path d="m20 14-7 7L3 11V3h8l9 10v1Z" /><circle cx="7.5" cy="7.5" r="1" /></>,
+    premium: <path d="m3 17 6-6 4 4 8-10m-6 0h6v6" />,
+    autotrades: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    signals: <path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z" />,
+    globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
+    users: <><circle cx="9" cy="8" r="3" /><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-17a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v3" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></>,
+    moon: <path d="M20 14a8.5 8.5 0 0 1-10-10 9 9 0 1 0 10 10Z" />,
+    density: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M3 15h18" /></>,
+    close: <path d="m6 6 12 12M6 18 18 6" />,
+    menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    chevron: <path d="m8 10 4 4 4-4" />,
+    arrow: <path d="M4 12h16m-6-6 6 6-6 6" />,
+    logout: <><path d="M9 4H4v16h5m5-12 4 4-4 4M8 12h12" /></>,
+  };
+  const aliases = { goldopt: "options", bankoptions: "options", holidays: "calendar", ivcalc: "calculator", nsemcx: "cross", mcxnymex: "cross", intl: "globe" };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[aliases[name] || name] || paths.globe}</svg>;
 }
 
-export default function Header({
-  user,
-  onLogout,
-  theme,
-  onToggleTheme,
-  density,
-  onToggleDensity,
-  feedStatus,
-  wsState,
-  page,
-  onNavigate,
-  counts = {},
-  role = "admin",
-  pages = "all",
-}) {
-  // Only the pages this login was given are in the menu at all - hidden, not
-  // merely de-emphasised (and the server refuses the rest anyway).
-  const NAV = pages === "all"
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((i) => pages.includes(i.key));
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [userMenu, setUserMenu] = useState(false);
-  const userMenuRef = useRef(null);
-
-  // Close drawer on Escape; lock page scroll while open.
+function useDialogFocus(ref, open, close) {
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
-    if (!menuOpen) return;
-    function onKey(e) { if (e.key === "Escape") setMenuOpen(false); }
-    document.addEventListener("keydown", onKey);
+    if (!open) return;
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
-  }, [menuOpen]);
-
-  // User dropdown: close on outside-click / Escape.
-  useEffect(() => {
-    if (!userMenu) return;
-    function onDoc(e) { if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenu(false); }
-    function onKey(e) { if (e.key === "Escape") setUserMenu(false); }
-    document.addEventListener("mousedown", onDoc);
+    const focusable = () => Array.from(ref.current?.querySelectorAll('button:not(:disabled), input, [tabindex="0"]') || []);
+    (ref.current?.querySelector("[data-autofocus]") || focusable()[0])?.focus();
+    function onKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); closeRef.current(); }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [userMenu]);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [open, ref]);
+}
 
-  // Combined health: worst of (browser↔server WS) and (server↔market feed)
-  const feedMode = feedStatus?.mode;
-  const tickAge = feedStatus?.last_tick_age_seconds;
-  const tokenSecs = feedStatus?.token_expires_in_seconds;
-  const marketOpen = feedStatus?.market_open;
-  const market = feedStatus?.market;
+function feedHealth(feed, wsState) {
+  if (!feed) return { label: "Connecting", tone: "warn", detail: "Checking the market-data connection." };
+  if (feed.mode === "simulated") return { label: "Demo data", tone: "neutral", detail: "Prices are simulated." };
+  if (feed.mode !== "live") return { label: "Feed unavailable", tone: "danger", detail: "Market data is unavailable. Displayed prices may be stale." };
+  if (feed.market_open === false) return { label: feed.market?.state === "holiday" ? "Market holiday" : "Market closed", tone: "neutral", detail: feed.market?.reason || "Showing the latest available prices." };
+  if (feed.last_tick_age_seconds == null || feed.last_tick_age_seconds > 30) return { label: "Waiting for prices", tone: "warn", detail: "Fresh market prices have not arrived. Displayed values may be stale." };
+  if (wsState !== "live") return { label: "Reconnecting", tone: "warn", detail: "Reconnecting the live stream. Prices refresh periodically in the meantime." };
+  return { label: "Live market", tone: "live", detail: "Market data is connected and updating." };
+}
 
-  let label = "LIVE";
-  let cls = "health-live";
-  let extra = "";
+export default function Header({ user, onLogout, theme, onToggleTheme, density, onToggleDensity, feedStatus, wsState, page, onNavigate, counts = {}, role = "user", pages = [] }) {
+  const nav = pages === "all" ? NAV_ITEMS : NAV_ITEMS.filter((item) => pages.includes(item.key));
+  const destinations = [...nav, ...(role === "admin" ? ADMIN_ITEMS : [])];
+  const current = destinations.find((item) => item.key === page);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [popover, setPopover] = useState(null);
+  const drawerRef = useRef(null);
+  const searchRef = useRef(null);
+  const toolsRef = useRef(null);
+  const accountTrigger = useRef(null);
+  const feedTrigger = useRef(null);
+  useDialogFocus(drawerRef, drawerOpen, () => setDrawerOpen(false));
+  useDialogFocus(searchRef, searchOpen, () => setSearchOpen(false));
 
-  if (wsState !== "live") {
-    label = wsState === "connecting" ? "CONNECTING" : "POLLING";
-    cls = wsState === "connecting" ? "health-warn" : "health-poll";
-  } else if (!feedStatus) {
-    label = "LOADING";
-    cls = "health-warn";
-  } else if (feedMode === "simulated") {
-    label = "DEMO";
-    cls = "health-poll";
-  } else if (feedMode !== "live") {
-    label = "FEED DOWN";
-    cls = "health-down";
-  } else if (!marketOpen) {
-    label = market?.state === "holiday" ? "HOLIDAY" : "MARKET CLOSED";
-    cls = "health-poll";
-    extra = market?.state === "holiday" && market?.next_open ? `till ${market.next_open.slice(11, 16)}` : "";
-  } else if (tickAge !== null && tickAge > 30) {
-    label = "STALE";
-    cls = "health-warn";
-    extra = `${tickAge}s`;
-  } else {
-    const h = Math.floor((tokenSecs || 0) / 3600);
-    const m = Math.floor(((tokenSecs || 0) % 3600) / 60);
-    extra = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        // An open form or confirmation keeps its keyboard focus.
+        if (document.querySelector('[role="dialog"], [role="alertdialog"], .confirm-overlay, dialog[open]') && !searchRef.current) return;
+        e.preventDefault(); setPopover(null); setDrawerOpen(false); setSearchOpen((value) => !value); setQuery("");
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!popover) return;
+    function outside(e) { if (!toolsRef.current?.contains(e.target)) setPopover(null); }
+    function escape(e) {
+      if (e.key === "Escape") {
+        setPopover(null);
+        (popover === "account" ? accountTrigger : feedTrigger).current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [popover]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 901px)");
+    const close = () => { if (media.matches) setDrawerOpen(false); };
+    media.addEventListener("change", close);
+    return () => media.removeEventListener("change", close);
+  }, []);
+
+  function go(key) {
+    onNavigate(key); setDrawerOpen(false); setSearchOpen(false); setPopover(null); setQuery("");
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
+  function openSearch() { setPopover(null); setQuery(""); setSearchOpen(true); }
+  const health = feedHealth(feedStatus, wsState);
+  const searchWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = destinations.filter((item) => searchWords.every((word) => `${item.label} ${item.group} ${item.hint}`.toLowerCase().includes(word)));
+  const roleLabel = { admin: "Administrator", user: "Member", trader: "Trader" }[role] || role;
+  const tickAge = feedStatus?.last_tick_age_seconds;
 
-  const tooltip = feedStatus
-    ? [
-        `Browser ↔ Server: ${wsState}`,
-        `Server ↔ Angel One: ${feedMode || "—"}`,
-        `Market: ${marketOpen ? "OPEN" : (market?.label || "CLOSED")}${market?.reason ? ` (${market.reason})` : ""}`,
-        `Client: ${feedStatus.client_name || "—"}`,
-        `Token expires in: ${tokenSecs ? Math.floor(tokenSecs/3600)+"h "+Math.floor((tokenSecs%3600)/60)+"m" : "—"}`,
-        `Last tick: ${tickAge === null ? "never" : tickAge + "s ago"}`,
-      ].join("\n")
-    : "Connecting...";
-
-  const go = (key) => { onNavigate(key); setMenuOpen(false); };
+  const navButton = (item, mobile = false) => (
+    <button key={item.key} type="button" data-key={item.key} className={`${mobile ? "workspace-drawer-link" : "nav-tab"}${page === item.key ? " active" : ""}`}
+      onClick={() => go(item.key)} aria-current={page === item.key ? "page" : undefined} title={item.hint}>
+      <Icon name={item.key} size={16} /><span>{item.label}</span>
+      {item.key === "signals" && counts.signals > 0 && <span className="workspace-signal-count">{counts.signals}</span>}
+    </button>
+  );
 
   return (
-    <div className="header">
-      <div className="header-left">
-        <button className="nav-hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">☰</button>
-        <div className="brand">
-          <BrandMark className="brand-logo" size={28} />
-          <span className="brand-name">Gurukrupa</span>
-          <span className="brand-sub">Bullion</span>
-        </div>
-        <nav className="nav-tabs">
-          {NAV.map((it) => (
-            <button
-              key={it.key}
-              data-key={it.key}
-              className={`nav-tab ${page === it.key ? "active" : ""}${it.key === "signals" ? " nav-tab-signals" : ""}`}
-              onClick={() => onNavigate(it.key)}
-            >
-              {it.label}
-              {counts[it.key] != null && <span className="nav-count">{counts[it.key]}</span>}
-            </button>
-          ))}
-        </nav>
-      </div>
-      <div className="header-right">
-        <span className={`health-pill ${cls}`} title={tooltip}>
-          <span className="health-dot" />
-          <span className="health-label">{label}</span>
-          {extra && <span className="health-meta">{extra}</span>}
-        </span>
-        <div className="user-menu hide-mobile" ref={userMenuRef}>
-          <button
-            className="user-trigger user-gear"
-            onClick={() => setUserMenu((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={userMenu}
-            title="Settings"
-          >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-          {userMenu && (
-            <div className="user-panel" role="menu">
-              <div className="user-panel-head">
-                <span className="user-avatar lg">{(user || "U").charAt(0).toUpperCase()}</span>
-                <div className="user-panel-id">
-                  <div className="user-panel-name">{user || "User"}</div>
-                  <div className="user-panel-sub">Signed in</div>
-                </div>
-              </div>
-              <button className="user-item" role="menuitem" onClick={onToggleTheme}>
-                <span className="user-item-ic">{theme === "dark" ? "☀" : "☾"}</span>
-                <span className="user-item-lbl">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-              </button>
-              {role === "admin" && (
-                <button className={`user-item ${page === "users" ? "on" : ""}`} role="menuitem"
-                  onClick={() => { setUserMenu(false); onNavigate("users"); }}>
-                  <span className="user-item-ic">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                  </span>
-                  <span className="user-item-lbl">Manage Users</span>
-                </button>
-              )}
-              {role === "admin" && (
-                <button className={`user-item ${page === "holidays" ? "on" : ""}`} role="menuitem"
-                  onClick={() => { setUserMenu(false); onNavigate("holidays"); }}>
-                  <span className="user-item-ic">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
-                    </svg>
-                  </span>
-                  <span className="user-item-lbl">Market Holidays</span>
-                </button>
-              )}
-              <button className="user-item danger" role="menuitem" onClick={() => { setUserMenu(false); onLogout(); }}>
-                <span className="user-item-ic">⎋</span>
-                <span className="user-item-lbl">Logout</span>
-              </button>
+    <>
+      <header className="header workspace-header">
+        <div className="workspace-topbar">
+          <div className="workspace-identity">
+            <button type="button" className="workspace-icon-button workspace-menu-button" onClick={() => { setPopover(null); setDrawerOpen(true); }} aria-label="Open navigation" aria-expanded={drawerOpen}><Icon name="menu" /></button>
+            <div className="workspace-brand"><BrandMark size={36} /><div><strong>Gurukrupa <span>Bullion</span></strong><small>Trading workspace</small></div></div>
+          </div>
+          <button type="button" className="workspace-search-trigger" onClick={openSearch} aria-label="Find a page" aria-haspopup="dialog"><Icon name="search" /><span>Find a page…</span><kbd>Ctrl K</kbd></button>
+          <div className="workspace-tools" ref={toolsRef}>
+            <div className="workspace-popover-anchor">
+              <button type="button" ref={feedTrigger} className={`workspace-health ${health.tone}`} onClick={() => setPopover(popover === "feed" ? null : "feed")} aria-expanded={popover === "feed"} aria-controls="feed-details" aria-label={`Market status: ${health.label}`}><span className="workspace-health-dot" /><span>{health.label}</span><Icon name="chevron" size={13} /></button>
+              {popover === "feed" && <div id="feed-details" className="workspace-popover workspace-feed-details"><strong>Market connection</strong><p>{health.detail}</p><dl><div><dt>Data source</dt><dd>{feedStatus?.mode === "simulated" ? "Demo" : feedStatus?.mode === "live" ? "Live feed" : "Unavailable"}</dd></div><div><dt>Market</dt><dd>{feedStatus?.market?.label || (feedStatus?.market_open === true ? "Open" : feedStatus?.market_open === false ? "Closed" : "Checking…")}</dd></div><div><dt>Last price received</dt><dd>{tickAge == null ? "Not available" : `${Math.max(0, Math.round(tickAge))}s ago`}</dd></div></dl><button type="button" className="workspace-text-button" onClick={() => { setPopover(null); feedTrigger.current?.focus(); }}>Close details</button></div>}
             </div>
-          )}
+            <span className="workspace-tools-divider" />
+            <button type="button" className="workspace-icon-button workspace-desktop-tool" onClick={onToggleDensity} aria-label={density === "compact" ? "Use comfortable layout" : "Use compact layout"} aria-pressed={density === "compact"} title={density === "compact" ? "Switch to comfortable layout" : "Switch to compact layout"}><Icon name="density" /></button>
+            <button type="button" className="workspace-icon-button workspace-desktop-tool" onClick={onToggleTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} title={theme === "dark" ? "Light mode" : "Dark mode"}><Icon name={theme === "dark" ? "sun" : "moon"} /></button>
+            {role === "admin" && <button type="button" className={`workspace-manage-button${page === "users" ? " active" : ""}`} onClick={() => go("users")}><Icon name="users" size={16} />Manage users</button>}
+            <div className="workspace-popover-anchor">
+              <button type="button" className="workspace-account-trigger" ref={accountTrigger} onClick={() => setPopover(popover === "account" ? null : "account")} aria-label={`Account settings for ${user}`} aria-expanded={popover === "account"} aria-controls="account-settings"><span className="workspace-avatar">{(user || "U").charAt(0).toUpperCase()}</span><span className="workspace-account-name">{user}</span><Icon name="chevron" size={13} /></button>
+              {popover === "account" && <div id="account-settings" className="workspace-popover workspace-account-panel"><div className="workspace-account-info"><strong>{user}</strong><span>{roleLabel}</span></div><button type="button" onClick={onToggleTheme}><Icon name={theme === "dark" ? "sun" : "moon"} />{theme === "dark" ? "Light appearance" : "Dark appearance"}</button><button type="button" onClick={onToggleDensity}><Icon name="density" />{density === "compact" ? "Comfortable layout" : "Compact layout"}</button>{role === "admin" && <div className="workspace-account-section">{ADMIN_ITEMS.map((item) => <button key={item.key} type="button" onClick={() => go(item.key)}><Icon name={item.key} />{item.label}</button>)}</div>}<div className="workspace-account-section"><button type="button" className="workspace-signout" onClick={() => { setPopover(null); onLogout(); }}><Icon name="logout" />Sign out</button></div></div>}
+            </div>
+          </div>
         </div>
-      </div>
+        <nav className="nav-tabs workspace-nav" aria-label="Main navigation">{nav.map((item) => navButton(item))}</nav>
+        <div className="workspace-mobile-location"><span>{current?.group || "Workspace"}</span><Icon name="arrow" size={12} /><strong>{current?.label || "Dashboard"}</strong><button type="button" onClick={() => setDrawerOpen(true)}>All pages<Icon name="chevron" size={13} /></button></div>
+      </header>
 
-      {/* Mobile slide-in navigation drawer */}
-      {menuOpen && (
-        <>
-          <div className="nav-drawer-overlay" onClick={() => setMenuOpen(false)} />
-          <nav className="nav-drawer">
-            <div className="nav-drawer-head">
-              <div className="nav-drawer-brand">
-                <BrandMark size={32} />
-                <div>
-                  <div className="ndb-title">Gurukrupa <span className="ndb-b">Bullion</span></div>
-                  <div className="ndb-sub">Spread Monitor</div>
-                </div>
-              </div>
-              <button className="nav-drawer-x" onClick={() => setMenuOpen(false)} aria-label="Close">×</button>
-            </div>
-            <div className="nav-drawer-list">
-              {NAV.map((it) => (
-                <button
-                  key={it.key}
-                  className={`nav-drawer-item ${page === it.key ? "active" : ""}`}
-                  onClick={() => go(it.key)}
-                >
-                  <span className="nav-drawer-ic"><NavIcon name={it.key} /></span>
-                  <span className="nav-drawer-lbl">{it.label.replace(/^⚡\s*/, "")}</span>
-                  {counts[it.key] != null && <span className="nav-drawer-count">{counts[it.key]}</span>}
-                </button>
-              ))}
-            </div>
-            {role === "admin" && (
-              <div className="nav-drawer-list nav-drawer-extra">
-                <button className={`nav-drawer-item ${page === "users" ? "active" : ""}`} onClick={() => go("users")}>
-                  <span className="nav-drawer-ic">👥</span>
-                  <span className="nav-drawer-lbl">Manage Users</span>
-                </button>
-                <button className={`nav-drawer-item ${page === "holidays" ? "active" : ""}`} onClick={() => go("holidays")}>
-                  <span className="nav-drawer-ic">📅</span>
-                  <span className="nav-drawer-lbl">Market Holidays</span>
-                </button>
-              </div>
-            )}
-            <div className="nav-drawer-foot">
-              <span className="username-chip">{user || "User"}</span>
-              <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
-                {theme === "dark" ? "☀" : "☾"}
-              </button>
-              <button className="btn btn-secondary" onClick={() => { setMenuOpen(false); onLogout(); }}>Logout</button>
-            </div>
-          </nav>
-        </>
-      )}
-    </div>
+      {drawerOpen && createPortal(<div className="workspace-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDrawerOpen(false); }}><div className="workspace-drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="workspace-drawer-title"><div className="workspace-drawer-head"><div><strong id="workspace-drawer-title">Your workspace</strong><span>Markets, tools & management</span></div><button type="button" className="workspace-icon-button" onClick={() => setDrawerOpen(false)} aria-label="Close navigation"><Icon name="close" /></button></div><nav className="workspace-drawer-nav" aria-label="Mobile navigation">{[...new Set(destinations.map((item) => item.group))].map((group) => <section key={group}><h2>{group}</h2>{destinations.filter((item) => item.group === group).map((item) => navButton(item, true))}</section>)}</nav><div className="workspace-drawer-footer"><span className="workspace-avatar">{(user || "U").charAt(0).toUpperCase()}</span><div><strong>{user}</strong><small>{roleLabel}</small></div><button type="button" className="workspace-icon-button" onClick={() => { setDrawerOpen(false); onLogout(); }} aria-label="Sign out"><Icon name="logout" /></button></div></div></div>, document.body)}
+
+      {searchOpen && createPortal(<div className="workspace-overlay workspace-search-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSearchOpen(false); }}><div className="workspace-command" role="dialog" aria-modal="true" aria-labelledby="workspace-search-title" ref={searchRef}><div className="workspace-command-heading"><h2 id="workspace-search-title">Find a page</h2><button type="button" className="workspace-icon-button" onClick={() => setSearchOpen(false)} aria-label="Close page search"><Icon name="close" /></button></div><div className="workspace-command-input"><Icon name="search" size={20} /><input data-autofocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search markets, tools or settings…" aria-label="Search pages" autoComplete="off" onKeyDown={(e) => { if (e.key === "Enter" && matches.length) { e.preventDefault(); go(matches[0].key); } if (e.key === "ArrowDown") { e.preventDefault(); searchRef.current?.querySelector(".workspace-command-result")?.focus(); } }} /><kbd>Esc</kbd></div><div className="workspace-command-results" onKeyDown={(e) => { if (!["ArrowDown", "ArrowUp"].includes(e.key)) return; const buttons = Array.from(e.currentTarget.querySelectorAll("button")); const index = buttons.indexOf(document.activeElement); if (index < 0) return; e.preventDefault(); const next = index + (e.key === "ArrowDown" ? 1 : -1); if (next < 0) searchRef.current?.querySelector("input")?.focus(); else buttons[next % buttons.length]?.focus(); }}><div className="workspace-command-caption" role="status">{query ? `${matches.length} ${matches.length === 1 ? "page" : "pages"} found` : "Go directly to a page"}</div>{matches.map((item) => <button type="button" key={item.key} className={`workspace-command-result${page === item.key ? " current" : ""}`} onClick={() => go(item.key)}><span className="workspace-result-icon"><Icon name={item.key} /></span><span className="workspace-result-copy"><strong>{item.label}</strong><small>{item.hint}</small></span><span className="workspace-result-group">{item.group}</span><Icon name="arrow" size={15} /></button>)}{matches.length === 0 && <div className="workspace-command-empty"><strong>No pages found</strong><p>Try a market name, “users” or “calculator”.</p><button type="button" className="workspace-text-button" onClick={() => { setQuery(""); searchRef.current?.querySelector("input")?.focus(); }}>Clear search</button></div>}</div><div className="workspace-command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> to browse</span><span><kbd>Enter</kbd> to open</span></div></div></div>, document.body)}
+    </>
   );
 }
