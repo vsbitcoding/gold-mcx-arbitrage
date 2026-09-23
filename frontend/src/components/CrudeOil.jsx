@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import CrudeIvBacktest from "./CrudeIvBacktest.jsx";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
 
@@ -262,7 +263,7 @@ export default function CrudeOil({ currency = "usd" }) {
     catch { return 0; }
   });
   const [view, setView] = useState(() => {
-    try { return localStorage.getItem(`arbi_crude_view_${currency}`) === "history" ? "history" : "live"; }
+    try { const v = localStorage.getItem(`arbi_crude_view_${currency}`); return ["history", "backtest"].includes(v) ? v : "live"; }
     catch { return "live"; }
   });
   const [d, setD] = useState(null);
@@ -339,7 +340,7 @@ export default function CrudeOil({ currency = "usd" }) {
         ))}
       </div>
       <div className="oh-group cru-switch" role="tablist" aria-label="View">
-        {[["live", "Live"], ["history", "History"]].map(([k, l]) => (
+        {[["live", "Live"], ["history", "History"], ["backtest", "Backtest"]].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={view === k}
             className={`oh-chip ${view === k ? "on" : ""}`}
             onClick={() => setView(k)}>{l}</button>
@@ -433,7 +434,9 @@ export default function CrudeOil({ currency = "usd" }) {
         </div>
       </div>
 
-      {view === "history" ? (
+      {view === "backtest" ? (
+        <CrudeIvBacktest product={product} month={month} />
+      ) : view === "history" ? (
         <HistoryBoards h={hist} loading={loadingHist} cfg={cfg} inr={inr} mcxDec={mcx.decimals} />
       ) : (
       <div className="cru-split">

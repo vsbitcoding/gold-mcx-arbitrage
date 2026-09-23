@@ -255,6 +255,7 @@ export const api = {
             + `&currency=${currency}&month=${month}`),
   // Half-hourly stored boards. Static once written - fetch on a control change,
   // never poll.
+  crudeIvBacktest: (params, signal) => request("/api/crude-iv/backtest", { signal, timeoutMs: 120000, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params || {}) }),
   crudeIvHistory: ({ commodity = "crude", month = 0, slot = "all", days = 3, date } = {}) => {
     const q = new URLSearchParams({ commodity, month, slot, days });
     if (date) q.set("date", date);

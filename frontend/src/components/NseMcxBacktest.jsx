@@ -40,7 +40,7 @@ function Field({ label, hint, children }) {
   return <label className="bt-f"><span title={hint}>{label}</span>{children}</label>;
 }
 
-function EquityChart({ curve, byDay = false }) {
+export function EquityChart({ curve, byDay = false }) {
   const box = useRef(null);
   const [W, setW] = useState(900);
   useEffect(() => {

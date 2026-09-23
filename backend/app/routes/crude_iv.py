@@ -181,3 +181,12 @@ def crude_iv_history_view(
     """
     return crude_iv_history.get_history(commodity=commodity, month=month,
                                         slot=slot, days=days, date=date)
+
+
+@router.post("/crude-iv/backtest")
+def crude_iv_backtest(body: dict):
+    """The MCX-vs-NYMEX volatility trade replayed on the stored half-hourly
+    boards (client's note, 23-Sep-2026). Body = any of crude_iv_backtest.DEFAULTS;
+    missing keys take the defaults. Authenticated by the API wall."""
+    from app.services import crude_iv_backtest
+    return crude_iv_backtest.run(body or {})
