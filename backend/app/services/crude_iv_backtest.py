@@ -83,6 +83,7 @@ class Trade:
     exit_diff: float | None = None
     pnl_points: float | None = None
     mark: float | None = None
+    last_mark_ts: str | None = None     # the last board that priced both legs
 
 
 _cache: dict = {}
@@ -272,7 +273,7 @@ def run(params: dict | None) -> dict:
                 # the board moved to the next contract: settle at the last mark we have
                 t.exit_ts, t.exit_reason = b["ts"], "contract rolled"
                 t.pnl_points = t.mark
-                t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": "contract rolled, last mark"})
+                t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": f"contract rolled, last mark ({t.last_mark_ts})"})
                 open_t.remove(t); closed.append(t)
                 continue
             mk = _mark(b, t, p)
@@ -280,12 +281,12 @@ def run(params: dict | None) -> dict:
                 # no two-way price on a leg this board; the square-off day still ends the trade at its last mark
                 if sq_date and b["date"] >= sq_date:
                     t.exit_ts, t.exit_reason, t.pnl_points = b["ts"], "square off", t.mark
-                    t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": "square off, last mark (no quote)"})
+                    t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": f"square off at the last mark ({t.last_mark_ts}), no quote on this board"})
                     open_t.remove(t); closed.append(t)
                 continue
             pnl, _se, _be, m_iv, u_iv = mk
             gap = round(m_iv - u_iv, 2) if (m_iv and u_iv) else None
-            t.mark = pnl
+            t.mark, t.last_mark_ts = pnl, b["ts"]
             t.path.append({"ts": b["ts"], "mcx_iv": m_iv, "us_iv": u_iv, "diff": gap, "pnl": pnl, "note": None})
             reason = None
             if gap is not None and abs(gap) <= p["exit_diff"]:
@@ -337,7 +338,7 @@ def run(params: dict | None) -> dict:
                           sell_exch=sell_exch, buy_exch=buy_exch, sell_px=round(sell_px, 2), buy_px=round(buy_px, 2),
                           sell_px_native=round(sell_native, 2), buy_px_native=round(buy_native, 2),
                           mcx_iv=m[2], us_iv=u[2], diff=gap, atm_offset=k - b["atm"],
-                          mcx_expiry=b["mcx_expiry"], us_expiry=b["us_expiry"], mark=0.0)
+                          mcx_expiry=b["mcx_expiry"], us_expiry=b["us_expiry"], mark=0.0, last_mark_ts=b["ts"])
                 t.path.append({"ts": b["ts"], "mcx_iv": m[2], "us_iv": u[2], "diff": gap, "pnl": 0.0, "note": "entry"})
                 open_t.append(t)
     for t in open_t:                                    # still open at the end of the data

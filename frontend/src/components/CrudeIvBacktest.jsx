@@ -195,7 +195,7 @@ export default function CrudeIvBacktest({ product, month }) {
                       <td>{t.sell_exch} @ {num(t.sell_px)}<small className="bt-sub">{t.sell_exch === "NYMEX" ? `$${num(t.sell_px_native)} · IV ${num(t.us_iv, 1)}` : `IV ${num(t.mcx_iv, 1)}`}</small></td>
                       <td>{t.buy_exch} @ {num(t.buy_px)}<small className="bt-sub">{t.buy_exch === "NYMEX" ? `$${num(t.buy_px_native)} · IV ${num(t.us_iv, 1)}` : `IV ${num(t.mcx_iv, 1)}`}</small></td>
                       <td>{signed(t.diff, 2)}</td>
-                      <td>{dmyt(t.exit_ts)}<small className="bt-sub">{EXIT_LABEL[t.exit_reason] || t.exit_reason}</small></td>
+                      <td>{dmyt(t.exit_ts)}<small className="bt-sub">{EXIT_LABEL[t.exit_reason] || t.exit_reason}{t.sell_exit == null && t.last_mark_ts && t.last_mark_ts !== t.exit_ts ? ` · at last mark ${dmyt(t.last_mark_ts)}` : ""}</small></td>
                       <td>{t.exit_diff == null ? "—" : signed(t.exit_diff, 2)}</td>
                       <td>{num(t.sell_exit)} / {num(t.buy_exit)}</td>
                       <td className={cls(t.pnl_points)}>{signed(t.pnl_points)}</td>
