@@ -40,7 +40,7 @@ function Field({ label, hint, children }) {
   return <label className="bt-f"><span title={hint}>{label}</span>{children}</label>;
 }
 
-export function EquityChart({ curve, byDay = false }) {
+export function EquityChart({ curve, byDay = false, byTime = false }) {
   const box = useRef(null);
   const [W, setW] = useState(900);
   useEffect(() => {
@@ -65,12 +65,12 @@ export function EquityChart({ curve, byDay = false }) {
     const xt = []; let last = "";
     if (byDay) {
       const step = Math.max(1, Math.ceil(curve.length / Math.max(4, Math.floor((W - padL - padR) / 80))));
-      curve.forEach((c, i) => { if (i % step === 0 || i === curve.length - 1) xt.push({ x: x(i), label: `${c.date.slice(8, 10)} ${MONTHS[+c.date.slice(5, 7) - 1]}` }); });
+      curve.forEach((c, i) => { if (i % step === 0 || i === curve.length - 1) xt.push({ x: x(i), label: `${c.date.slice(8, 10)} ${MONTHS[+c.date.slice(5, 7) - 1]}${byTime && c.date.length >= 16 ? ` ${c.date.slice(11, 16)}` : ""}` }); });
     } else {
       curve.forEach((c, i) => { const m = (c.date || "").slice(0, 7); if (m && m !== last) { last = m; xt.push({ x: x(i), label: `${MONTHS[+c.date.slice(5, 7) - 1]} ${c.date.slice(2, 4)}` }); } });
     }
     return { x, y, path, area, ticks, xt: byDay ? xt : xt.filter((_, i) => i % Math.ceil(xt.length / 14) === 0), zero: y(0) };
-  }, [curve, W, byDay]);
+  }, [curve, W, byDay, byTime]);
   if (!geo) return null;
   return (
     <div className="bt-chart" ref={box}>

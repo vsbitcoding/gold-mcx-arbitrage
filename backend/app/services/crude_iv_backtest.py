@@ -246,6 +246,12 @@ def _clean(params: dict | None) -> dict:
     p["sides"] = p["sides"] if p["sides"] in ("both", "CE", "PE") else "both"
     p["price_rule"] = p["price_rule"] if p["price_rule"] in ("client", "mid", "market") else "mid"
     p["exclude_wide"] = bool(p["exclude_wide"])
+    if p["entry_diff"] <= 0:
+        raise ValueError("Entry IV gap must be above zero.")
+    if p["exit_diff"] >= p["entry_diff"]:
+        raise ValueError("Exit IV gap must be smaller than the entry IV gap, or a trade would open and close on the same board.")
+    if p["lot_size"] <= 0:
+        raise ValueError("Lot size must be above zero.")
     return p
 
 
@@ -364,6 +370,8 @@ def run(params: dict | None) -> dict:
         curve.append({"date": t["exit_ts"], "cum_points": round(cum, 2), "cum_rs": round(cum * p["lot_size"], 0)})
     from collections import Counter
     reasons = Counter(t["exit_reason"] for t in trades)
+    unpriced = sum(1 for t in trades if t["sell_exit"] is None and t["exit_reason"] not in ("data end",))
+    still_open = sum(1 for t in trades if t["exit_reason"] == "data end")
     return {
         "params": p,
         "coverage": {"boards": len(boards), "first": boards[0]["ts"] if boards else None, "last": boards[-1]["ts"] if boards else None,
@@ -379,6 +387,8 @@ def run(params: dict | None) -> dict:
             "max_drawdown_points": round(dd, 2), "max_drawdown_rs": round(dd * p["lot_size"], 0),
             "avg_hours": round(sum(t["hours"] or 0 for t in trades) / len(trades), 1) if trades else None,
             "exits": dict(reasons),
+            "unpriced_exits": unpriced,          # closed at an older board's mark: the strike had left the stored window
+            "still_open": still_open,
         },
         "trades": trades, "equity": curve,
     }

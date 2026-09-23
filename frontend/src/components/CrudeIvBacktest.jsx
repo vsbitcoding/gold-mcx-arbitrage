@@ -52,7 +52,7 @@ function TradePath({ t, lot, onClose }) {
             <div className="bsc-stat"><span>IV at exit</span><b>{t.exit_diff == null ? "—" : signed(t.exit_diff, 2)}</b><small>gap MCX − NYMEX</small></div>
             <div className="bsc-stat"><span>Held</span><b>{num(t.hours, 1)} h</b><small>{(t.path || []).length} boards</small></div>
           </div>
-          {curve.length > 1 && <EquityChart curve={curve} byDay />}
+          {curve.length > 1 && <EquityChart curve={curve} byDay byTime />}
           <div className="bt-tablewrap bt-daily">
             <table className="nmd-table bt-table">
               <thead><tr><th>Board</th><th>MCX IV</th><th>NYMEX IV</th><th>Gap</th><th>P&L pts</th><th>P&L ₹</th><th>Note</th></tr></thead>
@@ -90,7 +90,9 @@ export default function CrudeIvBacktest({ product, month }) {
   useEffect(() => () => runRef.current?.controller.abort(), []);
   const set = (k) => (e) => setP((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
+  const invalid = (+p.exit_diff >= +p.entry_diff) ? "Exit IV gap must be smaller than the entry IV gap." : (+p.entry_diff <= 0) ? "Entry IV gap must be above zero." : (+p.lot_size <= 0) ? "Lot size must be above zero." : null;
   async function run() {
+    if (invalid) { setErr(invalid); return; }
     runRef.current?.controller.abort();
     const controller = new AbortController();
     const mine = { controller, product, month };
@@ -152,12 +154,12 @@ export default function CrudeIvBacktest({ product, month }) {
           </div>
           <div className="bt-actions">
             <button type="button" className="oh-chip" onClick={() => setP(product === "natgas" ? { ...DEFAULTS, ...NG } : { ...DEFAULTS })}>Defaults</button>
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={run}>{busy ? "Running…" : "Run backtest"}</button>
+            <button type="button" className="btn btn-primary" disabled={busy || !!invalid} title={invalid || ""} onClick={run}>{busy ? "Running…" : "Run backtest"}</button>
           </div>
         </div>
       </div>
 
-      {err && <div className="settings-banner danger">⚠ {err}</div>}
+      {(err || invalid) && <div className="settings-banner danger">⚠ {err || invalid}</div>}
       {!res && !busy && <div className="oh-note">Set the rules and press <b>Run backtest</b>. It replays every stored half-hourly board (since 19 Aug 2026, growing daily): on each MCX strike of the 100-point ladder, when the MCX and NYMEX implied volatilities differ by the entry gap, the higher-IV option is sold and the other bought at the matching strike; USD/INR and both strikes stay fixed until the gap closes, the square-off day, or the stop.</div>}
       {res && s.trades === 0 && <div className="oh-note"><b>No trade fired.</b> {cov.boards} boards from {dmyt(cov.first)} to {dmyt(cov.last)} never showed an IV gap of {p.entry_diff} points on a dealable strike. Lower the entry gap or allow wide quotes.</div>}
       {detail && <TradePath t={detail} lot={lot} onClose={() => setDetail(null)} />}
@@ -166,14 +168,14 @@ export default function CrudeIvBacktest({ product, month }) {
           <div className="bt-tiles">
             <div className="bt-tile"><span>Net P&L</span><b className={cls(s.pnl_rs)}>{rs(s.pnl_rs)}</b><small>{signed(s.pnl_points)} pts · ₹{lot} a point</small></div>
             <div className="bt-tile"><span>Trades</span><b>{s.trades}</b><small>{s.wins} won · {s.losses} lost{s.flat ? ` · ${s.flat} flat` : ""}</small></div>
-            <div className="bt-tile"><span>Win rate</span><b>{s.win_rate == null ? "—" : `${s.win_rate}%`}</b><small>{Object.entries(s.exits || {}).map(([k, v]) => `${v} ${EXIT_LABEL[k] || k}`).join(" · ") || "—"}</small></div>
+            <div className="bt-tile"><span>Win rate</span><b>{s.win_rate == null ? "—" : `${s.win_rate}%`}</b><small>{Object.entries(s.exits || {}).map(([k, v]) => `${v} ${EXIT_LABEL[k] || k}`).join(" · ") || "—"}{s.unpriced_exits ? ` · ${s.unpriced_exits} priced at an older board` : ""}</small></div>
             <div className="bt-tile"><span>Average trade</span><b className={cls(s.avg_points)}>{signed(s.avg_points)} pts</b><small>win {signed(s.avg_win)} · loss {signed(s.avg_loss)}</small></div>
             <div className="bt-tile"><span>Best / worst</span><b>{signed(s.best)} / {signed(s.worst)}</b><small>points</small></div>
             <div className="bt-tile"><span>Max drawdown</span><b className="neg">{rs(s.max_drawdown_rs)}</b><small>{signed(s.max_drawdown_points)} pts</small></div>
             <div className="bt-tile"><span>Data</span><b>{cov.days} days</b><small>{cov.boards} boards · {dmy(cov.first?.slice(0, 10))} to {dmy(cov.last?.slice(0, 10))} · avg hold {num(s.avg_hours, 1)} h</small></div>
           </div>
           {res.equity?.length > 1 && (
-            <div className="bt-card"><div className="bs-card-h">Cumulative P&L (₹), trade by trade</div><EquityChart curve={res.equity} byDay /></div>
+            <div className="bt-card"><div className="bs-card-h">Cumulative P&L (₹), trade by trade</div><EquityChart curve={res.equity} byDay byTime /></div>
           )}
           <div className="bt-card">
             <div className="bs-card-h bt-head">Trades <span className="bs-muted">click a column to sort · click a trade for its board by board IV gap and P&L</span>
