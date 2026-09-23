@@ -7,7 +7,6 @@ import SignalsPanel from "./SignalsPanel.jsx";
 import { useToast } from "./Toast.jsx";
 import { api } from "../api/client.js";
 import { fmtNum } from "../utils/format.js";
-import "./SpreadBoard.css";
 
 // Daily history of one pair's spread - ONE value per day from each leg's
 // closing price (client, 02-Sep: "increase-decrease karta single value aapi
@@ -30,38 +29,6 @@ function SpreadHistory({ kind, onClose, preset }) {
   const [err, setErr] = useState(null);
   const [hover, setHover] = useState(null);
   const reqSeq = useRef(0);
-  const dialogRef = useRef(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previousFocus = document.activeElement;
-    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
-    function onKey(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        closeRef.current();
-      } else if (event.key === "Tab") {
-        const dialog = dialogRef.current;
-        const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || [])
-          .filter((element) => element.getClientRects().length > 0);
-        const first = controls[0], last = controls[controls.length - 1];
-        if (!first) { event.preventDefault(); dialog?.focus(); }
-        else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
-          event.preventDefault(); last.focus();
-        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) {
-          event.preventDefault(); first.focus();
-        }
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -217,7 +184,7 @@ function SpreadHistory({ kind, onClose, preset }) {
 
   return (
     <div className="pt-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pt-modal sh-modal" role="dialog" aria-modal="true" aria-label="Spread history" tabIndex={-1} ref={dialogRef}>
+      <div className="pt-modal sh-modal" role="dialog" aria-label="Spread history">
         <div className="pt-modal-head">
           <div>
             <b>Spread history · {isCal ? "Calendar" : "Cross pair"}</b>
@@ -407,17 +374,6 @@ function SpreadHistory({ kind, onClose, preset }) {
   );
 }
 
-function BoardIcon({ name, ...props }) {
-  const paths = {
-    search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></>,
-    history: <><path d="M3 11a9 9 0 1 1 2.7 7M3 4v7h7" /><path d="M12 7v5l3 2" /></>,
-    groups: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
-    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2" /></>,
-    signal: <><path d="M3 12h4l3-8 4 16 3-8h4" /></>,
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>;
-}
-
 export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, priceData }) {
   const toast = useToast();
   const [histOpen, setHistOpen] = useState(false);
@@ -443,8 +399,6 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
   const sigSeen = useRef(null);
   const seeded = useRef(false);
   const [page, setPage] = useState(1);
-  const [query, setQuery] = useState("");
-  const [metalFilter, setMetalFilter] = useState("all");
 
   const crossRows = useMemo(() => rows.filter((r) => r.type === "cross"), [rows]);
   const calendarRows = useMemo(() => rows.filter((r) => r.type === "calendar"), [rows]);
@@ -483,28 +437,14 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
     return Array.from(map.values());
   }, [tabRows]);
 
-  const filteredGroups = useMemo(() => {
-    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return groupedRows.filter((group) => {
-      const isSilver = String(group.label).toUpperCase().includes("SILVER");
-      if (metalFilter === "gold" && isSilver) return false;
-      if (metalFilter === "silver" && !isSilver) return false;
-      const searchable = [group.label, ...group.rows.flatMap((row) => [row.big, row.small])].join(" ").toLowerCase();
-      return terms.every((term) => searchable.includes(term));
-    });
-  }, [groupedRows, query, metalFilter]);
-  const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAIR_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAIR_PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * PAIR_PAGE_SIZE;
-  const sliceGroups = filteredGroups.slice(start, start + PAIR_PAGE_SIZE);
-  const loading = rows.length === 0;
-  const hasFilters = Boolean(query.trim()) || metalFilter !== "all";
-  const clearFilters = () => { setQuery(""); setMetalFilter("all"); setPage(1); };
-  const boardSignalCount = tabRows.filter((row) => row.signal).length;
-  useEffect(() => { setPage(1); }, [tab, query, metalFilter]);
+  const sliceGroups = groupedRows.slice(start, start + PAIR_PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [tab]);
 
   return (
-    <div className={`sessions-container${isSpread ? " spread-board" : ""}`}>
+    <div className="sessions-container">
       {tab === "signals" && <SignalsPanel signals={signalRows} />}
       {tab === "metals" && <MetalSpread data={metalData} embedded />}
       {tab === "price" && <PriceTable data={priceData} embedded />}
@@ -513,45 +453,11 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
       )}
 
       {isSpread && (
-        <>
-          <div className="sb-heading">
-            <div>
-              <span className="sb-eyebrow">Spread monitor</span>
-              <h1>{tab === "cross" ? "Cross spreads" : "Calendar spreads"}</h1>
-              <p>{tab === "cross" ? "Compare price differences across gold and silver instruments." : "Compare contract months for the same gold or silver instrument."}</p>
-            </div>
-            <button type="button" className="sb-history"
-              onClick={() => { setHistPreset(null); setHistOpen(true); }}>
-              <BoardIcon name="history" /> Spread history
-            </button>
-          </div>
-          <dl className="sb-summary" aria-label={`${tab === "cross" ? "Cross" : "Calendar"} spread totals`}>
-            <div className="sb-stat"><span className="sb-stat-icon"><BoardIcon name="groups" /></span><div><dt>{tab === "cross" ? "Pair groups" : "Instrument groups"}</dt><dd>{loading ? "—" : groupedRows.length}</dd></div></div>
-            <div className="sb-stat"><span className="sb-stat-icon"><BoardIcon name="calendar" /></span><div><dt>{tab === "cross" ? "Expiry contracts" : "Expiry pairs"}</dt><dd>{loading ? "—" : tabRows.length}</dd></div></div>
-            <div className="sb-stat"><span className="sb-stat-icon sb-stat-signal"><BoardIcon name="signal" /></span><div><dt>Active signals</dt><dd>{loading ? "—" : boardSignalCount}<span>on this board</span></dd></div></div>
-          </dl>
-          <div className="sb-toolbar">
-            <div className="sb-filters" role="group" aria-label="Filter by metal">
-              {[["all", "All metals"], ["gold", "Gold"], ["silver", "Silver"]].map(([value, label]) => (
-                <button type="button" key={value} aria-pressed={metalFilter === value}
-                  className={metalFilter === value ? "active" : ""} onClick={() => setMetalFilter(value)}>
-                  {value !== "all" && <span className={`sb-metal-dot sb-metal-${value}`} aria-hidden="true" />}{label}
-                </button>
-              ))}
-            </div>
-            <div className="sb-search">
-              <BoardIcon name="search" />
-              <label className="sb-sr-only" htmlFor="spread-search">Search pairs or instruments</label>
-              <input id="spread-search" type="search" value={query} placeholder="Search pairs or instruments…"
-                onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
-            </div>
-            {hasFilters && <button type="button" className="sb-clear" onClick={clearFilters}>Clear filters</button>}
-          </div>
-          <div className="sb-results-bar">
-            <span role="status">{loading ? "Waiting for market data" : `${filteredGroups.length} of ${groupedRows.length} groups${hasFilters ? " match your filters" : " available"}`}</span>
-            <span className="sb-legend"><span aria-hidden="true">★</span> Front month <span className="sb-legend-divider">·</span> Chart button opens contract history</span>
-          </div>
-        </>
+        <div className="sh-btnrow">
+          <button type="button" className="oh-chip"
+            title="Day-by-day spread from MCX closing prices, 2021 to yesterday"
+            onClick={() => { setHistPreset(null); setHistOpen(true); }}>Spread History</button>
+        </div>
       )}
       {histOpen && (
         <SpreadHistory kind={tab} preset={histPreset}
@@ -559,24 +465,22 @@ export default function LiveSpreadTable({ rows, tab, metalData, otherCommData, p
       )}
 
       {isSpread && (
-        loading ? (
-          <div className="sb-empty" role="status"><span className="sb-loading-mark" aria-hidden="true" /><h2>Waiting for spread data</h2><p>Contracts will appear here when the market feed is available.</p></div>
-        ) : filteredGroups.length === 0 ? (
-          <div className="sb-empty"><BoardIcon name="search" /><h2>{hasFilters ? "No matching spreads" : "No contracts available"}</h2><p>{hasFilters ? "Try another instrument name or view all metals." : "Spread contracts will appear here as market data becomes available."}</p>{hasFilters && <button type="button" className="sb-history" onClick={clearFilters}>Clear filters</button>}</div>
+        rows.length === 0 ? (
+          <div className="empty-state" style={{ padding: "24px 16px" }}>Loading…</div>
         ) : (
           <>
             <SpreadCards groups={sliceGroups} onHistory={openRowHistory} />
-            {filteredGroups.length > PAIR_PAGE_SIZE && (
-              <nav className="pagination-controls sb-pagination" aria-label="Spread groups pagination">
-                <div>Showing {start + 1}–{Math.min(start + PAIR_PAGE_SIZE, filteredGroups.length)} of {filteredGroups.length} groups</div>
+            {groupedRows.length > PAIR_PAGE_SIZE && (
+              <div className="pagination-controls">
+                <div>Showing {start + 1}-{Math.min(start + PAIR_PAGE_SIZE, groupedRows.length)} of {groupedRows.length} groups</div>
                 <div className="pager">
-                  <button type="button" aria-label="First page" onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
-                  <button type="button" aria-label="Previous page" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage === 1}>‹</button>
-                  <span className="sb-page-number" aria-current="page">Page {safePage} of {totalPages}</span>
-                  <button type="button" aria-label="Next page" onClick={() => setPage(Math.min(totalPages, safePage + 1))} disabled={safePage === totalPages}>›</button>
-                  <button type="button" aria-label="Last page" onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
+                  <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                  <button className="active">{safePage}</button>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                  <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
                 </div>
-              </nav>
+              </div>
             )}
           </>
         )

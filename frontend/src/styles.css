@@ -1,14 +1,14 @@
 /* ===== FX DASH THEME — adapted for Arbi ===== */
 :root {
-  --bg-primary: #f5f5f2;
+  --bg-primary: #f1f3f4;
   --bg-surface: #fff;
-  --bg-surface-alt: #f8f8f5;
-  --bg-hover: #f5f5ef;
-  --text-primary: #252923;
-  --text-secondary: #51564e;
-  --text-muted: #71766d;
-  --border: #e1e3da;
-  --border-light: #eef0e9;
+  --bg-surface-alt: #f8f9fa;
+  --bg-hover: #f8f9fa;
+  --text-primary: #202124;
+  --text-secondary: #3c4043;
+  --text-muted: #80868b;
+  --border: #dadce0;
+  --border-light: #f1f3f4;
   --accent: #c9a24e;          /* brand gold — fills, tabs, buttons */
   /* Second graph series. Gold vs blue is the colourblind-safe pair: validated
      against the brand gold at deltaE 33.5 protan / 37.6 normal on white, far
@@ -42,15 +42,15 @@
 
 body.dark {
   --brand-gold: #e1c06e;   /* brighter gold so the mark pops on dark */
-  --bg-primary: #15191d;
-  --bg-surface: #1e2328;
-  --bg-surface-alt: #242a30;
-  --bg-hover: #2b3239;
+  --bg-primary: #1a1a2e;
+  --bg-surface: #16213e;
+  --bg-surface-alt: #1a2540;
+  --bg-hover: #1e2d4a;
   --text-primary: #f1f5f9;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
-  --border: #394149;
-  --border-light: #2c333a;
+  --border: #2d3748;
+  --border-light: #2a3a50;
   --accent: #d9b45c;          /* brighter gold on dark */
   /* Lighter step for the navy ground: a deep blue technically clears 3:1 but
      sits in the same hue family as #16213e and reads muddy. deltaE 27.3 protan
@@ -67,7 +67,7 @@ body.dark {
   --yellow: #f6c342;
   --yellow-ink: #f6c342;      /* bright yellow already reads on dark */
   --yellow-bg: #3a3018;
-  --input-bg: #242a30;
+  --input-bg: #1a2540;
   --modal-overlay: rgba(0, 0, 0, 0.6);
 
   --cg-identity-bg: rgba(148,163,184,0.20);  --cg-identity-tint: rgba(148,163,184,0.06);  --cg-identity-text: #cbd5e1;
@@ -80,15 +80,8 @@ body.dark {
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { scrollbar-width: thin; scrollbar-color: var(--border) var(--bg-primary); }
-html::-webkit-scrollbar, body::-webkit-scrollbar { width: 8px; height: 8px; }
-html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
-
-:where(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
-button:disabled { cursor: not-allowed; }
-.skip-to-content { position: fixed; z-index: 500; top: 10px; left: 16px; padding: 12px 18px; border-radius: 8px; background: var(--text-primary); color: var(--bg-surface); transform: translateY(-160%); }
-.skip-to-content:focus { transform: translateY(0); }
-#main-content:focus { outline: none; }
+html, body { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -104,7 +97,7 @@ body {
 .container {
   width: 100%;
   margin: 0 auto;
-  padding: 0 28px 28px;
+  padding: 0 16px 24px;
 }
 
 /* ===== HEADER ===== */
