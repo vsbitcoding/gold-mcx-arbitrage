@@ -54,6 +54,11 @@ _WEEKDAY_NAME = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _lock = threading.Lock()
 _status = {"running": False, "msg": "", "days": 0, "rows": 0, "errors": 0, "at": None}
 _no_file: set[tuple[str, str]] = set()          # (index, date) the exchange has no file for - a holiday
+# A miss inside this many days is not remembered: BSE answered the 17-Sep-2026
+# file with nothing on 23-Sep morning and served it an hour later, so a recent
+# date is asked for again by the next 07:15 refresh instead of being written
+# off for the life of the process.
+_SETTLED_AFTER_DAYS = 10
 _cache: dict = {}
 _CACHE_TTL = 60.0
 
@@ -183,8 +188,8 @@ def backfill(since: date = SINCE, until: date | None = None, pause: float = _PAU
                     continue
                 streak = 0
                 if not rows:
-                    if d < today:                 # today's file appears in the evening; ask again tomorrow
-                        _no_file.add((ix, ds))
+                    if d < today - timedelta(days=_SETTLED_AFTER_DAYS):
+                        _no_file.add((ix, ds))    # an old miss is a holiday; a recent one is asked for again
                 else:
                     try:
                         store(rows, ix, ds)
