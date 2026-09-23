@@ -4,8 +4,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.security import get_current_user
-from app.services import bank_options_positions, bank_options_service
+from app.security import get_current_user, require_admin
+from app.services import bank_daily_history, bank_options_history, bank_options_positions, bank_options_service
 
 router = APIRouter(prefix="/api/bank-options", tags=["bank-options"])
 
@@ -60,3 +60,35 @@ def close_position(position_id: int, user: str = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/history")
+def history(
+    source: Literal["snapshot", "daily"] = "snapshot",
+    slot: Literal["both", "10:00", "15:30"] = "both",
+    weekday: str | None = None,
+    days: Annotated[int, Query(ge=1, le=120)] = 7,
+    date: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}-\d{2}$")] = None,
+    user: str = Depends(get_current_user),
+):
+    """Stored boards, newest first, in the Live view's shape.
+
+    source=snapshot: the 10:00 / 15:30 IST captures (client, 23-Sep-2026).
+    source=daily: one board per trading day built from the BSE and NSE
+    bhavcopy closes since January 2024. weekday=mon..fri narrows to that
+    weekday; days = how many boards (days) back; date = just that day.
+    """
+    if source == "daily":
+        return bank_daily_history.get_history(weekday=bank_options_history.parse_weekday(weekday), days=days, date_=date)
+    return bank_options_history.get_history(slot=slot, weekday=weekday, days=days, date=date)
+
+
+@router.get("/history/status")
+def history_status(user: str = Depends(get_current_user)):
+    return {"daily": bank_daily_history.status()}
+
+
+@router.post("/history/backfill")
+def history_backfill(user: str = Depends(require_admin)):
+    """Fetch every missing bhavcopy day since January 2024 in the background (admin)."""
+    return {"started": bank_daily_history.start_backfill(), "status": bank_daily_history.status()}

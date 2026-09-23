@@ -168,6 +168,10 @@ class CrudeIvBacktestTests(unittest.TestCase):
         self.assertEqual([t["mcx_strike"] for t in mcx_high], [8500.0])
         self.assertEqual(self.run_bt(sides="PE")["trades"], [])
         self.assertEqual([t["mcx_strike"] for t in self.run_bt(otm_max=50)["trades"]], [8500.0])
+        # liquid strikes (client, 23-Sep): 500-multiples only keeps 8500, drops the 8600 trade
+        self.assertEqual([t["mcx_strike"] for t in self.run_bt(strike_step=500)["trades"]], [8500.0])
+        self.assertEqual(self.run_bt(strike_step=1000)["trades"], [])
+        self.assertEqual([t["mcx_strike"] for t in self.run_bt(strike_step=0)["trades"]], [8500.0, 8600.0])
 
     def test_stop_loss_and_validation(self):
         # client rule from the NYMEX-high trade's view: nothing moves, so no stop; a 1-point stop on the 8500 trade
@@ -176,6 +180,8 @@ class CrudeIvBacktestTests(unittest.TestCase):
             self.run_bt(exit_diff=5, entry_diff=5)
         with self.assertRaisesRegex(ValueError, "above zero"):
             self.run_bt(lot_size=0)
+        with self.assertRaisesRegex(ValueError, "negative"):
+            self.run_bt(strike_step=-100)
         self.assertEqual(self.run_bt(lot_size=1250)["trades"][0]["pnl_rs"], 24375)   # 19.5 x 1250
 
 

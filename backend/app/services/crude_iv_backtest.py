@@ -53,7 +53,8 @@ DEFAULTS = {
     "direction": "both",            # both | mcx_high (sell MCX, buy NYMEX) | us_high
     "sides": "both",                # both | CE | PE
     "otm_min": 0.0, "otm_max": 0.0, # MCX points from ATM (0 = no limit on that side)
-    "strike_step": 100.0,           # MCX ladder
+    "strike_step": 0.0,             # MCX strikes to trade: 0 = every listed strike; 500 = 7500, 8000,
+                                    # 8500 ... the "liquid strikes" (client, 23-Sep-2026)
     "exit_days": 5,                 # square off this many calendar days before the first expiry
     "stop_loss": 0.0,               # points per barrel, 0 = off
     "price_rule": "mid",            # mid | client (buy at bid, sell at ask) | market (buy at ask, sell at bid)
@@ -195,6 +196,12 @@ def _mcx_open(snap_date: str, slot: str) -> bool:
         return True
 
 
+def _on_ladder(strike: float, step: float) -> bool:
+    """True when the strike is a whole multiple of `step` (7500 on 500; 212.5 on 2.5)."""
+    q = strike / step
+    return abs(q - round(q)) < 1e-6
+
+
 def _match_us_strike(mcx_strike: float, usdinr: float, us_chain: dict) -> float | None:
     """The NYMEX strike nearest to the MCX strike restated in dollars - only if
     one is listed within half a rung; a strike beyond the stored chain's edge
@@ -324,6 +331,8 @@ def _clean(params: dict | None) -> dict:
     p["sides"] = p["sides"] if p["sides"] in ("both", "CE", "PE") else "both"
     p["price_rule"] = p["price_rule"] if p["price_rule"] in ("client", "mid", "market") else "mid"
     p["exclude_wide"] = bool(p["exclude_wide"])
+    if p["strike_step"] < 0:
+        raise ValueError("Strike step cannot be negative; 0 means every listed strike.")
     if p["entry_diff"] <= 0:
         raise ValueError("Entry IV gap must be above zero.")
     if p["exit_diff"] >= p["entry_diff"]:
@@ -393,7 +402,7 @@ def run(params: dict | None) -> dict:
         if not b["atm"]:
             continue
         for k in sorted(b["mcx"]):
-            if k % p["strike_step"] != 0:
+            if p["strike_step"] and not _on_ladder(k, p["strike_step"]):
                 continue
             dist = abs(k - b["atm"])
             if (p["otm_min"] and dist < p["otm_min"]) or (p["otm_max"] and dist > p["otm_max"]):

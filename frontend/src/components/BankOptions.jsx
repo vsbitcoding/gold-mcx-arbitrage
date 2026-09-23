@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api/client.js";
 import { useConfirm } from "./ConfirmDialog.jsx";
 import { useToast } from "./Toast.jsx";
+import BankOptionsHistory from "./BankOptionsHistory.jsx";
 import "./BankOptions.css";
 
 const INDICES = ["BANKEX", "BANKNIFTY"];
@@ -242,7 +243,7 @@ export default function BankOptions() {
   const positionRows = (positions.data?.positions || []).filter((position) => positionFilter === "all" || String(position.status).toLowerCase() === positionFilter);
   const summary = positions.data?.summary;
   const canAdd = !invalid && !live.error && !live.refreshing && board?.status?.ready;
-  const error = view === "live" ? live.error : positions.error;
+  const error = view === "live" ? live.error : view === "positions" ? positions.error : null;
   const valueLabel = settings.metric === "divided" ? `Difference ÷ ${number(settings.divisor, Number(settings.divisor) % 1 ? 2 : 0)}` : settings.metric === "rupees" ? "Net premium (₹)" : "Difference (pts)";
   const formula = settings.metric === "divided" ? `(Sell Bid − Buy Ask) ÷ ${settings.divisor || "divisor"}` : settings.metric === "rupees" ? "(Sell Bid × sell lot size × sell lots) − (Buy Ask × buy lot size × buy lots)" : "Sell Bid − Buy Ask";
 
@@ -252,9 +253,12 @@ export default function BankOptions() {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     event.stopPropagation();
-    const next = event.key === "Home" ? "live" : event.key === "End" ? "positions" : view === "live" ? "positions" : "live";
+    const order = ["live", "history", "positions"];
+    const at = Math.max(0, order.indexOf(view));
+    const next = event.key === "Home" ? order[0] : event.key === "End" ? order[order.length - 1]
+      : order[(at + (event.key === "ArrowRight" ? 1 : order.length - 1)) % order.length];
     setView(next);
-    document.getElementById(next === "live" ? "bo-live-tab" : "bo-position-tab")?.focus();
+    document.getElementById(next === "live" ? "bo-live-tab" : next === "history" ? "bo-history-tab" : "bo-position-tab")?.focus();
   }
 
   async function addPosition(row) {
@@ -321,6 +325,7 @@ export default function BankOptions() {
           {view === "live" && <span className={`bo-status ${board?.market_open && board?.status?.ready && !live.error && !live.refreshing ? "is-live" : ""}`}><span className="bo-status-dot" />{live.error ? "Connection issue" : !board || live.refreshing ? "Loading quotes" : !board.market_open ? "Market closed" : board.status?.ready ? "Live quotes" : "Awaiting quotes"}</span>}
           <div className="bo-tabs" role="tablist" aria-label="Bank options view" onKeyDown={onViewKey}>
             <button type="button" id="bo-live-tab" role="tab" tabIndex={view === "live" ? 0 : -1} aria-selected={view === "live"} aria-controls="bo-live-panel" className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button>
+            <button type="button" id="bo-history-tab" role="tab" tabIndex={view === "history" ? 0 : -1} aria-selected={view === "history"} aria-controls="bo-history-panel" className={view === "history" ? "active" : ""} onClick={() => setView("history")}>History</button>
             <button type="button" id="bo-position-tab" role="tab" tabIndex={view === "positions" ? 0 : -1} aria-selected={view === "positions"} aria-controls="bo-position-panel" className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Position <span className="bo-paper-label">Paper</span></button>
           </div>
         </div>
@@ -384,6 +389,10 @@ export default function BankOptions() {
             </table>
           </div>
           <p className="bo-footnote">BANKEX ATM follows the nearest 500-point strike. BANKNIFTY strike = BANKNIFTY spot + (BANKEX strike − BANKEX spot), rounded to 100. Earlier expiry sold at Bid, later expiry bought at Ask. Paper P&amp;L uses each leg’s quantity.</p>
+        </div>
+      ) : view === "history" ? (
+        <div id="bo-history-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-history-tab">
+          <BankOptionsHistory />
         </div>
       ) : (
         <div id="bo-position-panel" className="bo-panel" role="tabpanel" aria-labelledby="bo-position-tab">

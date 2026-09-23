@@ -18,10 +18,16 @@ const cls = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 const PAGE = 25;
 const KEY = "arbi_civ_bt_params";
 const DEFAULTS = {
-  start: "", end: "", entry_diff: 5, exit_diff: 3, direction: "both", sides: "both", otm_min: 0, otm_max: 0,
+  start: "", end: "", entry_diff: 5, exit_diff: 3, direction: "both", sides: "both", strike_step: 500, otm_min: 0, otm_max: 0,
   exit_days: 5, stop_loss: 0, price_rule: "mid", lot_size: 100, max_positions: 0, exclude_wide: true,
 };
-const NG = { entry_diff: 5, exit_diff: 3, lot_size: 1250 };
+const NG = { entry_diff: 5, exit_diff: 3, lot_size: 1250, strike_step: 0 };
+// Which MCX strikes may open a trade (client, 23-Sep): the liquid crude strikes are the
+// 500-multiples (7500, 8000, 8500); the stored crude ladder is 100 points, natural gas 5.
+const STEP_CHOICES = {
+  crude: [[500, "Liquid: 500 multiples (7500, 8000, 8500…)"], [1000, "1000 multiples (8000, 9000…)"], [0, "All strikes (100-point ladder)"]],
+  natgas: [[0, "All strikes (5-point ladder)"], [10, "10 multiples (250, 260, 270…)"], [20, "20 multiples (260, 280, 300…)"], [50, "50 multiples (250, 300, 350…)"]],
+};
 const EXIT_LABEL = { "gap closed": "IV gap closed", "square off": "squared off before expiry", "stop loss": "stop loss", "data end": "still open, at latest board", "contract rolled": "contract rolled, last mark" };
 const keyFor = (product) => `${KEY}_${product}`;
 function loadParams(product) {
@@ -143,6 +149,8 @@ export default function CrudeIvBacktest({ product, month }) {
             <select className="oh-weeks" value={p.price_rule} onChange={set("price_rule")}><option value="mid">Mid price (fair)</option><option value="client">Buy at Bid, sell at Ask (favourable)</option><option value="market">Buy at Ask, sell at Bid (market)</option></select></Field>
         </div>
         <div className="bt-row">
+          <Field label="MCX strikes" hint="Only these MCX strikes can open a trade; the NYMEX strike is always the matching one (MCX strike ÷ USD/INR)">
+            <select className="oh-weeks" value={String(p.strike_step ?? 0)} onChange={set("strike_step")}>{(STEP_CHOICES[product] || STEP_CHOICES.crude).map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</select></Field>
           <Field label="Strike from ATM (min pts)" hint="0 = no limit"><input type="number" step="any" min="0" className="oh-weeks bt-num" value={p.otm_min} onChange={set("otm_min")} /></Field>
           <Field label="Strike from ATM (max pts)" hint="0 = any strike"><input type="number" step="any" min="0" className="oh-weeks bt-num" value={p.otm_max} onChange={set("otm_max")} /></Field>
           <Field label="Square off (days before expiry)"><input type="number" min="0" className="oh-weeks bt-num" value={p.exit_days} onChange={set("exit_days")} /></Field>
@@ -160,8 +168,8 @@ export default function CrudeIvBacktest({ product, month }) {
       </div>
 
       {(err || invalid) && <div className="settings-banner danger">⚠ {err || invalid}</div>}
-      {!res && !busy && <div className="oh-note">Set the rules and press <b>Run backtest</b>. It replays every stored half-hourly board (since 19 Aug 2026, growing daily): on each MCX strike of the 100-point ladder, when the MCX and NYMEX implied volatilities differ by the entry gap, the higher-IV option is sold and the other bought at the matching strike; USD/INR and both strikes stay fixed until the gap closes, the square-off day, or the stop.</div>}
-      {res && s.trades === 0 && <div className="oh-note"><b>No trade fired.</b> {cov.boards} boards from {dmyt(cov.first)} to {dmyt(cov.last)} never showed an IV gap of {p.entry_diff} points on a dealable strike. Lower the entry gap or allow wide quotes.</div>}
+      {!res && !busy && <div className="oh-note">Set the rules and press <b>Run backtest</b>. It replays every stored half-hourly board (since 19 Aug 2026, growing daily): on each chosen MCX strike (liquid 500-multiples by default), when the MCX and NYMEX implied volatilities differ by the entry gap, the higher-IV option is sold and the other bought at the matching strike; USD/INR and both strikes stay fixed until the gap closes, the square-off day, or the stop.</div>}
+      {res && s.trades === 0 && <div className="oh-note"><b>No trade fired.</b> {cov.boards} boards from {dmyt(cov.first)} to {dmyt(cov.last)} never showed an IV gap of {p.entry_diff} points on a dealable strike of the chosen ladder. Lower the entry gap, allow all strikes, or allow wide quotes.</div>}
       {detail && <TradePath t={detail} lot={lot} onClose={() => setDetail(null)} />}
       {res && (
         <>

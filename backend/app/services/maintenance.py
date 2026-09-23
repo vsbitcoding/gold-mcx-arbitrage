@@ -16,7 +16,8 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import SessionLocal, engine
 from app.models import ActivityLog, TradeHistory
-from app.services import (activity, elec_service, market_calendar, crude_iv_history, live_feed, extra_instruments,
+from app.services import (activity, bank_daily_history, bank_options_history, elec_service, market_calendar,
+                          crude_iv_history, live_feed, extra_instruments,
                           mcxccl_service, nse_mcx_history, options_history_service,
                           span_service)
 
@@ -134,6 +135,7 @@ def _loop() -> None:
     last_optsnap: dict[str, str | None] = {s: None for s in options_history_service._SLOTS}
     last_nmsnap: dict[str, str | None] = {s: None for s in nse_mcx_history.SLOTS}
     last_civsnap: dict[str, str | None] = {s: None for s in crude_iv_history.SLOTS}
+    last_banksnap: dict[str, str | None] = {s: None for s in bank_options_history.SLOTS}
     rollover_logged: dict[str, bool] = {}
     # Initial SPAN refresh on startup so first ticks use live values (if feed configured)
     try:
@@ -155,10 +157,11 @@ def _loop() -> None:
                 snap_pruned = options_history_service.prune()
                 nm_pruned = nse_mcx_history.prune()
                 civ_pruned = crude_iv_history.prune()
+                bank_pruned = bank_options_history.prune()
                 log.info(
                     "Nightly prune: %d history rows, %d activity rows, %d option snapshots, "
-                    "%d NSE/MCX snapshots, %d crude IV snapshots.",
-                    pruned, act_pruned, snap_pruned, nm_pruned, civ_pruned,
+                    "%d NSE/MCX snapshots, %d crude IV snapshots, %d bank option snapshots.",
+                    pruned, act_pruned, snap_pruned, nm_pruned, civ_pruned, bank_pruned,
                 )
                 if pruned > 0:
                     _vacuum()
@@ -182,6 +185,22 @@ def _loop() -> None:
                     except Exception as e:
                         log.warning("Options snapshot %s raised: %s", _slot, e)
                     last_optsnap[_slot] = today_str
+
+            # BANKEX / BANKNIFTY board, 10:00 and 15:30 IST (client, 23-Sep-2026).
+            # In-memory read + one small INSERT; the service refuses a holiday
+            # (exchange calendar), a cold feed and a late run. A transient
+            # "no live" answer inside the window is retried next minute.
+            for _slot in bank_options_history.SLOTS:
+                _h, _m = bank_options_history.SLOTS[_slot]
+                if last_banksnap[_slot] != today_str and (now.hour, now.minute) >= (_h, _m):
+                    try:
+                        msg = bank_options_history.snapshot(_slot)
+                        log.info("Bank options snapshot %s: %s", _slot, msg)
+                        if not (msg.startswith("no live") or msg == "busy"):
+                            last_banksnap[_slot] = today_str
+                    except Exception as e:                    # noqa: BLE001
+                        log.warning("Bank options snapshot %s raised: %s", _slot, e)
+                        last_banksnap[_slot] = today_str
 
             # NSE-vs-MCX board snapshot, nine slots 10:00-23:15 IST — the client
             # wants the whole table stored so the drift between the two
@@ -251,6 +270,8 @@ def _loop() -> None:
                     threading.Thread(target=bhav_history.refresh_recent, daemon=True).start()
                     # NSE's side of the daily option comparison, same morning
                     threading.Thread(target=nse_opt_history.refresh_nse_recent, daemon=True).start()
+                    # BANKEX / BANKNIFTY closes from yesterday's BSE and NSE bhavcopy
+                    threading.Thread(target=bank_daily_history.refresh_recent, daemon=True, name="bank-daily-recent").start()
                     threading.Thread(target=market_calendar.ensure_loaded, daemon=True, name="market-calendar").start()
                 except Exception as e:  # noqa: BLE001
                     log.warning("maintenance: bhav refresh failed: %s", e)

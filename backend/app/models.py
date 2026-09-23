@@ -624,3 +624,59 @@ class BankOptionPosition(Base):
     __table_args__ = (
         UniqueConstraint("username", "request_id", name="uq_bank_position_request"),
     )
+
+
+class BankOptionsSnapshot(Base):
+    """Twice-daily (10:00 and 15:30 IST) snapshot of the BANKEX / BANKNIFTY
+    comparison board (client, 23-Sep-2026: "Data Morning 10:00 AM, Afternoon
+    15:30 PM"). One row per (snap_date, slot); payload_json holds the compact
+    board - both index cards and the fifteen matched strikes with each leg's
+    bid/ask/LTP/OI/volume and the sell-bid-minus-buy-ask difference - exactly
+    what the Live view showed at that minute. ~12 KB a row, two rows a trading
+    day, pruned after ~370 days.
+    """
+    __tablename__ = "bank_options_snapshot"
+
+    id = Column(Integer, primary_key=True)
+    snap_date = Column(String(10), nullable=False, index=True)   # 'YYYY-MM-DD' IST
+    slot = Column(String(5), nullable=False, index=True)         # '10:00' | '15:30'
+    weekday = Column(Integer, nullable=False, index=True)        # 0=Mon .. 6=Sun (IST, set at write)
+    bankex_spot = Column(Float, nullable=True)
+    banknifty_spot = Column(Float, nullable=True)
+    bankex_atm = Column(Float, nullable=True)
+    banknifty_atm = Column(Float, nullable=True)
+    bankex_expiry = Column(String(10), nullable=True)
+    banknifty_expiry = Column(String(10), nullable=True)
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class BankOptDaily(Base):
+    """One BANKEX (BSE) or BANKNIFTY (NSE) index-option contract's day, from the
+    exchange's daily bhavcopy - the only past data either exchange publishes,
+    so the History view's "Daily close" boards are built from these closes
+    (client, 23-Sep-2026: "more history data for testing"). Strikes within
+    6,000 points of the day's underlying are kept, every listed expiry.
+    """
+    __tablename__ = "bank_opt_daily"
+
+    id = Column(Integer, primary_key=True)
+    index_name = Column(String(10), nullable=False)       # BANKEX | BANKNIFTY
+    trade_date = Column(String(10), nullable=False)       # YYYY-MM-DD
+    expiry = Column(String(10), nullable=False)           # YYYY-MM-DD
+    strike = Column(Float, nullable=False)
+    side = Column(String(2), nullable=False)              # CE | PE
+    close = Column(Float, nullable=True)
+    settle = Column(Float, nullable=True)
+    last = Column(Float, nullable=True)
+    prev_close = Column(Float, nullable=True)
+    volume = Column(Float, nullable=True)                 # contracts traded
+    oi = Column(Float, nullable=True)
+    underlying = Column(Float, nullable=True)             # index close the exchange printed on the row
+    lot_size = Column(Integer, nullable=True)
+
+
+Index("ix_banksnap_date_slot", BankOptionsSnapshot.snap_date, BankOptionsSnapshot.slot, unique=True)
+Index("ix_bankopt_key", BankOptDaily.index_name, BankOptDaily.trade_date, BankOptDaily.expiry,
+      BankOptDaily.strike, BankOptDaily.side, unique=True)
+Index("ix_bankopt_date", BankOptDaily.index_name, BankOptDaily.trade_date)

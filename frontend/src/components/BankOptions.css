@@ -254,3 +254,31 @@ body.density-compact .bo-comparison-table .bo-entry-cell { padding: 2px 5px; }
 .bo-pos-first td { border-top: 2px solid var(--border); }
 .bo-pos-last td { border-bottom: 1px solid var(--border-light); }
 .bo-pos-span { vertical-align: middle; }
+
+/* History view: stored 10:00 / 15:30 boards and daily-close boards, stacked newest first */
+.boh-wrap { display: flex; flex-direction: column; gap: 8px; }
+.boh-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.boh-controls .oh-chip[disabled] { opacity: .5; cursor: default; }
+.boh-note { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 0 2px; }
+.boh-board { margin: 4px 0 14px; }
+.boh-board + .boh-board { padding-top: 14px; border-top: 2px solid var(--border); }
+.boh-head { display: flex; align-items: center; gap: 10px; margin: 0 2px 6px; font-size: 13px; }
+.boh-date { font-weight: 700; letter-spacing: .02em; }
+.boh-slot { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--accent-bg); color: var(--accent-ink); white-space: nowrap; }
+.boh-slot[data-slot="15:30"] { background: var(--cg-status-tint); color: var(--series-2); }
+.boh-slot[data-slot="close"] { background: var(--bg-surface-alt); color: var(--text-secondary); border: 1px solid var(--border-light); }
+.boh-captured { margin-left: auto; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.boh-cards { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.boh-card { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 7px 12px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; }
+.boh-card h4 { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; letter-spacing: .3px; }
+.boh-card .boh-spot { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.4px; white-space: nowrap; }
+.boh-card .boh-expiry { font-size: 15px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+.boh-card dl { display: flex; gap: 12px; margin-left: auto; }
+.boh-card dt { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; white-space: nowrap; }
+.boh-card dd { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.boh-table { min-width: 880px; }
+.boh-mark { display: inline-block; margin-left: 4px; font-size: 10px; font-weight: 700; color: var(--text-muted); vertical-align: super; line-height: 1; }
+@media (max-width: 720px) {
+  .boh-cards { grid-template-columns: 1fr; }
+  .boh-card dl { margin-left: 0; width: 100%; }
+}

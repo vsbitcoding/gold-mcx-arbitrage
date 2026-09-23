@@ -193,6 +193,18 @@ export const api = {
   bankOptionsClose: (id) => request(`/api/bank-options/positions/${encodeURIComponent(id)}/close`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
   }),
+  // Stored BANKEX / BANKNIFTY boards: the 10:00 / 15:30 IST captures or the daily bhavcopy closes - on demand, no polling
+  bankOptionsHistory: (params = {}, signal) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") q.set(key, value);
+    });
+    return request(`/api/bank-options/history?${q.toString()}`, { signal, timeoutMs: 60000 });
+  },
+  bankOptionsHistoryStatus: () => request("/api/bank-options/history/status"),
+  bankOptionsHistoryBackfill: () => request("/api/bank-options/history/backfill", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  }),
   // Stored 10:00/15:00 IST board snapshots (weekday compare) — fetched on demand, no polling
   optionsHistory: (p = {}) => {
     const q = new URLSearchParams();

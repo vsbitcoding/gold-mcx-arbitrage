@@ -81,6 +81,32 @@ The app uses its existing shared NSE/BSE equity holiday calendar.
 
 Public contract source: [Angel instrument master](https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json).
 
+## History
+
+The page's third tab (client, 23-Sep-2026) shows stored boards, newest first,
+each in the Live view's shape (index cards + the fifteen matched strikes):
+
+- **10:00 / 3:30 boards**: `bank_options_history.snapshot()` is called from the
+  maintenance loop at 10:00 and 15:30 IST (`SLOTS`). It reads the in-memory
+  quote store through `get_live(metric="points")`, refuses a holiday (the NSE
+  calendar), a cold feed and a late run (45 min window at 10:00, 8 min at
+  15:30 so nothing is filed after the 15:40 close), and stores one compact row
+  per (date, slot) in `bank_options_snapshot`. A history row is priced from each
+  leg's LAST two-way quote when it is under fifteen minutes old and carries a
+  `stale` flag when a leg was older than the Live page's 60-second "fresh" bar.
+- **Daily close**: `bank_daily_history` pulls the BSE and NSE UDiFF bhavcopy
+  (`BhavCopy_<EXCH>_FO_0_0_0_YYYYMMDD_F_0000`) for every weekday since January
+  2024 into `bank_opt_daily` (every option row within 6,000 points of the
+  underlying, every expiry; the files only list contracts that saw activity).
+  A board is built per date with the Live rules at that day's close: current
+  contract per index = the nearest expiry still ahead of the day (the monthly
+  since 2025, when only monthlies are listed; the front weekly in 2024), BANKEX
+  ATM on 500s, BANKNIFTY strike the same points from its spot, earlier expiry
+  sold. A leg is priced at its close when it traded and at the settlement price
+  when it did not (`settled` flag). The store is refreshed at 07:15 IST with the
+  last seven days; `POST /history/backfill` (admin) fetches everything missing
+  in the background.
+
 ## API and verification
 
 All endpoints require dashboard authentication and page access:
@@ -89,6 +115,9 @@ All endpoints require dashboard authentication and page access:
 - `GET /api/bank-options/positions`
 - `POST /api/bank-options/positions`
 - `POST /api/bank-options/positions/{id}/close`
+- `GET /api/bank-options/history?source=snapshot|daily&slot=both|10:00|15:30&weekday=mon..fri&days=7&date=YYYY-MM-DD`
+- `GET /api/bank-options/history/status`
+- `POST /api/bank-options/history/backfill` (admin)
 
 The create endpoint accepts the two contract IDs, side, lots and request ID;
 entry prices always come from the server's quote store. There is no public
