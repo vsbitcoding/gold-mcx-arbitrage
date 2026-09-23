@@ -18,8 +18,11 @@
           rate. A leg with no two-way quote later on (deep in or out of the
           money after a big move - crude ran 8,150 to 10,000 in Sep-2026 and
           the 8100 call never quoted again) is marked at the one side quoted,
-          else at its INTRINSIC value off the board's future, and the trade is
-          flagged "approx". Freezing it at an old mark hid a 1,900-point move.
+          else at a Black-76 MODEL value off the board's own future with the
+          other exchange's IV at the matched strike (the leg's last own IV if
+          that is missing too), else at intrinsic value; the trade is flagged
+          "approx". Freezing it at an old mark hid a 1,900-point move, and
+          plain intrinsic value threw away the time value near the money.
   p&l     rupees per barrel (points) x `lot_size` barrels.
 
 Everything is a parameter; the client tests scenarios himself. The boards
@@ -37,6 +40,7 @@ from datetime import datetime, timedelta
 
 from app.database import SessionLocal
 from app.models import CrudeIvSnapshot
+from app.services import iv_calc
 
 log = logging.getLogger("crude_iv_backtest")
 
@@ -88,7 +92,9 @@ class Trade:
     pnl_points: float | None = None
     mark: float | None = None
     last_mark_ts: str | None = None     # the last board that priced both legs off quotes
-    approx: bool = False                # the exit (or latest mark) used a one-sided quote or intrinsic value
+    approx: bool = False                # the exit (or latest mark) used a one-sided quote, a model or intrinsic value
+    mcx_iv_last: float | None = None    # the legs' own latest implied vols, for the model fallback
+    us_iv_last: float | None = None
 
 
 _cache: dict = {}
@@ -228,17 +234,35 @@ def _legs(board: dict, t: Trade):
     return m, u
 
 
-def _leg_value(leg, action: str, rule: str, future, strike: float, side: str):
+def _model_px(future, strike: float, side: str, iv_pct, expiry: str | None, ts: str) -> float | None:
+    """Black-76 value of the option off the board's own future, IV in percent."""
+    if not future or future <= 0 or not iv_pct or iv_pct <= 0 or not expiry:
+        return None
+    try:
+        now = datetime.strptime(ts, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None
+    T = iv_calc.years_to(expiry, now=now)
+    if not T:
+        return None
+    return iv_calc.price(float(future), float(strike), T, float(iv_pct) / 100.0, side == "CE")
+
+
+def _leg_value(leg, action: str, rule: str, future, strike: float, side: str,
+               iv_pct=None, expiry: str | None = None, ts: str = ""):
     """(price as quoted, how) for closing one leg: the rule's side of a two-way
-    quote ("quote"), else the one side that exists ("one-sided"), else the
-    option's intrinsic value off the board's future ("intrinsic"). None when
-    there is nothing to price it with."""
+    quote ("quote"), else the one side that exists ("one-sided"), else a
+    Black-76 value off the board's future at `iv_pct` ("model"), else the
+    option's intrinsic value ("intrinsic"). None when nothing can price it."""
     if leg and _priced(leg):
         return _px(leg, action, rule), "quote"
     if leg and (leg[0] or leg[1]):
         v = leg[0] if leg[0] and leg[0] > 0 else leg[1]
         if v and v > 0:
             return float(v), "one-sided"
+    model = _model_px(future, strike, side, iv_pct, expiry, ts)
+    if model is not None:
+        return model, "model"
     if future and future > 0:
         return max((future - strike) if side == "CE" else (strike - future), 0.0), "intrinsic"
     return None
@@ -250,9 +274,19 @@ def _mark(board: dict, t: Trade, p: dict):
     quotes, else the weaker of the two ways ("one-sided" / "intrinsic")."""
     m, u = _legs(board, t)
     rule = p["price_rule"]
-    # closing: the sold leg is bought back, the bought leg is sold
-    mv = _leg_value(m, "buy" if t.sell_exch == "MCX" else "sell", rule, board.get("mcx_future"), t.mcx_strike, t.side)
-    uv = _leg_value(u, "buy" if t.sell_exch == "NYMEX" else "sell", rule, board.get("us_future"), t.us_strike, t.side)
+    m_iv = m[2] if m and m[2] else None
+    u_iv = u[2] if u and u[2] else None
+    if m_iv:
+        t.mcx_iv_last = m_iv
+    if u_iv:
+        t.us_iv_last = u_iv
+    # closing: the sold leg is bought back, the bought leg is sold. A leg with
+    # no quote is modelled at the OTHER exchange's IV for the same strike (the
+    # liquid one), else at its own last IV.
+    mv = _leg_value(m, "buy" if t.sell_exch == "MCX" else "sell", rule, board.get("mcx_future"), t.mcx_strike, t.side,
+                    iv_pct=u_iv or t.mcx_iv_last, expiry=board.get("mcx_expiry"), ts=board["ts"])
+    uv = _leg_value(u, "buy" if t.sell_exch == "NYMEX" else "sell", rule, board.get("us_future"), t.us_strike, t.side,
+                    iv_pct=m_iv or t.us_iv_last, expiry=board.get("us_expiry"), ts=board["ts"])
     if mv is None or uv is None:
         return None
     m_px, m_how = mv
@@ -260,9 +294,9 @@ def _mark(board: dict, t: Trade, p: dict):
     u_px *= t.usdinr
     sell_exit, buy_exit = (m_px, u_px) if t.sell_exch == "MCX" else (u_px, m_px)
     pnl = (t.sell_px - sell_exit) + (buy_exit - t.buy_px)
-    rank = {"quote": 0, "one-sided": 1, "intrinsic": 2}
+    rank = {"quote": 0, "one-sided": 1, "model": 2, "intrinsic": 3}
     how = max((m_how, u_how), key=lambda h: rank[h])
-    return round(pnl, 2), round(sell_exit, 2), round(buy_exit, 2), (m[2] if m else None), (u[2] if u else None), how
+    return round(pnl, 2), round(sell_exit, 2), round(buy_exit, 2), m_iv, u_iv, how
 
 
 def _close(t: Trade, board: dict, p: dict, reason: str) -> bool:
@@ -392,7 +426,8 @@ def run(params: dict | None) -> dict:
                           sell_exch=sell_exch, buy_exch=buy_exch, sell_px=round(sell_px, 2), buy_px=round(buy_px, 2),
                           sell_px_native=round(sell_native, 2), buy_px_native=round(buy_native, 2),
                           mcx_iv=m[2], us_iv=u[2], diff=gap, atm_offset=k - b["atm"],
-                          mcx_expiry=b["mcx_expiry"], us_expiry=b["us_expiry"], mark=0.0, last_mark_ts=b["ts"])
+                          mcx_expiry=b["mcx_expiry"], us_expiry=b["us_expiry"], mark=0.0, last_mark_ts=b["ts"],
+                          mcx_iv_last=m[2], us_iv_last=u[2])
                 t.path.append({"ts": b["ts"], "mcx_iv": m[2], "us_iv": u[2], "diff": gap, "pnl": 0.0, "note": "entry"})
                 open_t.append(t)
     for t in open_t:                                    # still open at the end of the data
@@ -435,7 +470,7 @@ def run(params: dict | None) -> dict:
             "max_drawdown_points": round(dd, 2), "max_drawdown_rs": round(dd * p["lot_size"], 0),
             "avg_hours": round(sum(t["hours"] or 0 for t in trades) / len(trades), 1) if trades else None,
             "exits": dict(reasons),
-            "unpriced_exits": unpriced,          # marked off a one-sided quote or intrinsic value at some point (no two-way quote)
+            "unpriced_exits": unpriced,          # exit marked off a one-sided quote, a model or intrinsic value (no two-way quote)
             "still_open": still_open,
         },
         "trades": trades, "equity": curve,

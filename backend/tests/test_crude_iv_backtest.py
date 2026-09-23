@@ -19,6 +19,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.models import CrudeIvSnapshot  # noqa: E402
 from app.services import crude_iv_backtest as bt  # noqa: E402
+from app.services import iv_calc  # noqa: E402
 
 COLS_MCX = ["strike", "atm", "ce_bid", "ce_ask", "ce_iv", "ce_delta", "ce_wide", "ce_oi",
             "pe_bid", "pe_ask", "pe_iv", "pe_delta", "pe_wide", "pe_oi"]
@@ -143,18 +144,22 @@ class CrudeIvBacktestTests(unittest.TestCase):
         self.assertEqual((t["sell_exch"], t["buy_exch"], t["us_strike"], t["diff"]), ("NYMEX", "MCX", 90.5, -6.0))
         self.assertEqual(t["sell_px"], 77.9)                       # NYMEX mid 0.82 x 95
         self.assertEqual(t["buy_px"], 61.0)
-        # no MCX quote after entry: the bought 8600 call is marked at its intrinsic value off the 8500 future = 0,
-        # the sold NYMEX leg at mid 0.82 x 95 = 77.9, so the trade shows the full loss of the premium paid and is
-        # flagged approx; it squares off on the first board on/after 10-Oct (12-Oct) instead of waiting
-        self.assertEqual((t["exit_ts"], t["exit_reason"], t["pnl_points"]), ("2026-10-12T09:00", "square off", -61.0))
-        self.assertEqual((t["sell_exit"], t["buy_exit"], t["approx"]), (77.9, 0.0, True))
+        # no MCX quote after entry: the bought 8600 call is valued by Black-76 off the 8500 future at the NYMEX
+        # 90.5 call's IV (46%) for the time left to 15-Oct; the sold NYMEX leg at mid 0.82 x 95 = 77.9. It squares
+        # off on the first board on/after 10-Oct (12-Oct) and is flagged approx.
+        model = iv_calc.price(8500.0, 8600.0, iv_calc.years_to("2026-10-15", now=datetime(2026, 10, 12, 9, 0)), 0.46, True)
+        self.assertEqual((t["exit_ts"], t["exit_reason"]), ("2026-10-12T09:00", "square off"))
+        self.assertEqual((t["sell_exit"], t["buy_exit"], t["approx"]), (77.9, round(model, 2), True))
+        self.assertEqual(t["pnl_points"], round((77.9 - 77.9) + (model - 61.0), 2))
         self.assertEqual(t["last_mark_ts"], "2026-09-02T09:00")
-        self.assertIn("intrinsic", t["path"][-1]["note"])
-        self.assertEqual(t["path"][1]["note"], "intrinsic value")
+        self.assertIn("model", t["path"][-1]["note"])
+        self.assertEqual(t["path"][1]["note"], "model value")
+        # 15-Oct board: the trade is already closed, nothing else opens
+        self.assertTrue(all(x["entry_ts"] < "2026-10-10" for x in r["trades"]))
         # the 8500 CE showed a 16-point gap on the square-off board: no entry on or after that day
         self.assertEqual(len(r["trades"]), 2)
         self.assertEqual(r["summary"]["unpriced_exits"], 1)
-        self.assertEqual(r["summary"]["pnl_points"], -41.5)      # 19.5 - 61
+        self.assertEqual(r["summary"]["pnl_points"], round(19.5 + t["pnl_points"], 2))
 
     def test_direction_filter_sides_and_band(self):
         us_high = self.run_bt(direction="us_high")["trades"]
