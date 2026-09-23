@@ -85,11 +85,14 @@ class CrudeIvBacktestTests(unittest.TestCase):
                    base_us({90.5: ((0.80, 0.84, 46), (0.5, 0.52, 45))}))
         # board 4: the 8600 CE has no MCX quote any more -> no mark
         b4 = board(base_mcx({8600: (None, (50, 52, 45))}), base_us({90.5: ((0.80, 0.84, 46), (0.5, 0.52, 45))}))
-        # board 5 (10-Oct = expiry minus 5 days): still no quote -> squared off at the last mark; no new entries
+        # board 5 (12-Oct, on/after the square-off day 10-Oct): still no quote -> the trade waits; no new entries
         b5 = board(base_mcx({8600: (None, (50, 52, 45)), 8500: ((100, 102, 60), (50, 52, 45))}),
                    base_us({90.5: ((0.80, 0.84, 46), (0.5, 0.52, 45)), 89.5: ((1.00, 1.04, 44), (0.5, 0.52, 44))}))
+        # board 6 (15-Oct, the expiry): still no quote -> ended at the last mark
+        b6 = board(base_mcx({8600: (None, (50, 52, 45))}), base_us({90.5: ((0.80, 0.84, 46), (0.5, 0.52, 45))}))
         rows = [("2026-09-01", "09:00", b1), ("2026-09-01", "12:00", b2), ("2026-09-01", "12:30", b2b),
-                ("2026-09-02", "09:00", b3), ("2026-09-03", "09:00", b4), ("2026-10-10", "09:00", b5)]
+                ("2026-09-02", "09:00", b3), ("2026-09-03", "09:00", b4), ("2026-10-12", "09:00", b5),
+                ("2026-10-15", "09:00", b6)]
         with self.Session() as db:
             for i, (d, slot, payload) in enumerate(rows, 1):
                 db.add(CrudeIvSnapshot(id=i, snap_date=d, slot=slot, commodity="crude", month=0, weekday=1,
@@ -104,7 +107,7 @@ class CrudeIvBacktestTests(unittest.TestCase):
 
     def test_boards_drop_the_month_mismatch(self):
         r = self.run_bt()
-        self.assertEqual(r["coverage"]["boards"], 5)
+        self.assertEqual(r["coverage"]["boards"], 6)
         self.assertEqual(r["coverage"]["first"], "2026-09-01T09:00")
 
     def test_entry_and_gap_close_at_mid(self):
@@ -140,15 +143,18 @@ class CrudeIvBacktestTests(unittest.TestCase):
         self.assertEqual((t["sell_exch"], t["buy_exch"], t["us_strike"], t["diff"]), ("NYMEX", "MCX", 90.5, -6.0))
         self.assertEqual(t["sell_px"], 77.9)                       # NYMEX mid 0.82 x 95
         self.assertEqual(t["buy_px"], 61.0)
-        # no MCX quote after entry: squared off five days before the 15-Oct expiry at the entry mark
-        self.assertEqual((t["exit_ts"], t["exit_reason"], t["pnl_points"]), ("2026-10-10T09:00", "square off", 0.0))
+        # no MCX quote after entry: the bought 8600 call is marked at its intrinsic value off the 8500 future = 0,
+        # the sold NYMEX leg at mid 0.82 x 95 = 77.9, so the trade shows the full loss of the premium paid and is
+        # flagged approx; it squares off on the first board on/after 10-Oct (12-Oct) instead of waiting
+        self.assertEqual((t["exit_ts"], t["exit_reason"], t["pnl_points"]), ("2026-10-12T09:00", "square off", -61.0))
+        self.assertEqual((t["sell_exit"], t["buy_exit"], t["approx"]), (77.9, 0.0, True))
         self.assertEqual(t["last_mark_ts"], "2026-09-02T09:00")
-        self.assertIsNone(t["sell_exit"])
-        self.assertIn("last mark (2026-09-02T09:00)", t["path"][-1]["note"])
+        self.assertIn("intrinsic", t["path"][-1]["note"])
+        self.assertEqual(t["path"][1]["note"], "intrinsic value")
         # the 8500 CE showed a 16-point gap on the square-off board: no entry on or after that day
         self.assertEqual(len(r["trades"]), 2)
         self.assertEqual(r["summary"]["unpriced_exits"], 1)
-        self.assertEqual(r["summary"]["pnl_points"], 19.5)
+        self.assertEqual(r["summary"]["pnl_points"], -41.5)      # 19.5 - 61
 
     def test_direction_filter_sides_and_band(self):
         us_high = self.run_bt(direction="us_high")["trades"]

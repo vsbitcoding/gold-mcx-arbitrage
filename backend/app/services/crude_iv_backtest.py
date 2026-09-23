@@ -12,10 +12,14 @@
           narrowed to `exit_diff` points or less; else `exit_days` calendar
           days before the first of the two option expiries; else the end of
           the data (marked at the last board). An optional stop in points.
-  prices  per the client's rule a bought leg trades at its bid and a sold leg
-          at its ask ("client"); "mid" and "market" (buy at ask, sell at bid)
-          are there for a fair and a conservative reading. The NYMEX leg is
-          dollars per barrel, restated in rupees at the trade's fixed rate.
+  prices  "mid" (fair, the default), "client" (a bought leg at its bid, a
+          sold leg at its ask) or "market" (buy at ask, sell at bid). The NYMEX
+          leg is dollars per barrel, restated in rupees at the trade's fixed
+          rate. A leg with no two-way quote later on (deep in or out of the
+          money after a big move - crude ran 8,150 to 10,000 in Sep-2026 and
+          the 8100 call never quoted again) is marked at the one side quoted,
+          else at its INTRINSIC value off the board's future, and the trade is
+          flagged "approx". Freezing it at an old mark hid a 1,900-point move.
   p&l     rupees per barrel (points) x `lot_size` barrels.
 
 Everything is a parameter; the client tests scenarios himself. The boards
@@ -83,7 +87,8 @@ class Trade:
     exit_diff: float | None = None
     pnl_points: float | None = None
     mark: float | None = None
-    last_mark_ts: str | None = None     # the last board that priced both legs
+    last_mark_ts: str | None = None     # the last board that priced both legs off quotes
+    approx: bool = False                # the exit (or latest mark) used a one-sided quote or intrinsic value
 
 
 _cache: dict = {}
@@ -156,6 +161,11 @@ def _boards(commodity: str, month: int) -> list[dict]:
         # dropped rather than read as a roll or a signal.
         if m_exp and u_exp and m_exp[:7] != u_exp[:7]:
             continue
+        # A board captured while MCX was shut (14-Sep-2026, Ganesh Chaturthi
+        # morning) carries the previous session's prices as if they were live;
+        # the exchange calendar decides, not the presence of numbers.
+        if not _mcx_open(snap_date, slot):
+            continue
         boards.append({
             "ts": f"{snap_date}T{slot}", "date": snap_date, "slot": slot, "usdinr": float(rate),
             "mcx_expiry": m_exp,
@@ -167,6 +177,16 @@ def _boards(commodity: str, month: int) -> list[dict]:
     with _cache_lock:
         _cache[key] = {"newest": newest, "at": time.time(), "boards": boards}
     return boards
+
+
+def _mcx_open(snap_date: str, slot: str) -> bool:
+    try:
+        from app.services import market_calendar
+        hh, mm = slot.split(":")
+        at = datetime(int(snap_date[:4]), int(snap_date[5:7]), int(snap_date[8:10]), int(hh), int(mm), tzinfo=market_calendar.IST)
+        return market_calendar.is_open("MCX", at)
+    except Exception:  # noqa: BLE001 - no calendar (tests, first run): keep the board
+        return True
 
 
 def _match_us_strike(mcx_strike: float, usdinr: float, us_chain: dict) -> float | None:
@@ -208,29 +228,53 @@ def _legs(board: dict, t: Trade):
     return m, u
 
 
-def _mark(board: dict, t: Trade, p: dict, exit_rule: bool = False):
-    """(pnl_points, sell_exit_rupees, buy_exit_rupees, mcx_iv, us_iv) at this board, or None."""
+def _leg_value(leg, action: str, rule: str, future, strike: float, side: str):
+    """(price as quoted, how) for closing one leg: the rule's side of a two-way
+    quote ("quote"), else the one side that exists ("one-sided"), else the
+    option's intrinsic value off the board's future ("intrinsic"). None when
+    there is nothing to price it with."""
+    if leg and _priced(leg):
+        return _px(leg, action, rule), "quote"
+    if leg and (leg[0] or leg[1]):
+        v = leg[0] if leg[0] and leg[0] > 0 else leg[1]
+        if v and v > 0:
+            return float(v), "one-sided"
+    if future and future > 0:
+        return max((future - strike) if side == "CE" else (strike - future), 0.0), "intrinsic"
+    return None
+
+
+def _mark(board: dict, t: Trade, p: dict):
+    """(pnl_points, sell_exit_rupees, buy_exit_rupees, mcx_iv, us_iv, how) at
+    this board, or None. `how` is "quote" when both legs came off two-way
+    quotes, else the weaker of the two ways ("one-sided" / "intrinsic")."""
     m, u = _legs(board, t)
-    if not m or not u or not _priced(m) or not _priced(u):
-        return None
     rule = p["price_rule"]
     # closing: the sold leg is bought back, the bought leg is sold
-    sell_leg, buy_leg = (m, u) if t.sell_exch == "MCX" else (u, m)
-    sell_exit = _px(sell_leg, "buy", rule) * (1 if t.sell_exch == "MCX" else t.usdinr)
-    buy_exit = _px(buy_leg, "sell", rule) * (1 if t.buy_exch == "MCX" else t.usdinr)
+    mv = _leg_value(m, "buy" if t.sell_exch == "MCX" else "sell", rule, board.get("mcx_future"), t.mcx_strike, t.side)
+    uv = _leg_value(u, "buy" if t.sell_exch == "NYMEX" else "sell", rule, board.get("us_future"), t.us_strike, t.side)
+    if mv is None or uv is None:
+        return None
+    m_px, m_how = mv
+    u_px, u_how = uv
+    u_px *= t.usdinr
+    sell_exit, buy_exit = (m_px, u_px) if t.sell_exch == "MCX" else (u_px, m_px)
     pnl = (t.sell_px - sell_exit) + (buy_exit - t.buy_px)
-    return round(pnl, 2), round(sell_exit, 2), round(buy_exit, 2), m[2], u[2]
+    rank = {"quote": 0, "one-sided": 1, "intrinsic": 2}
+    how = max((m_how, u_how), key=lambda h: rank[h])
+    return round(pnl, 2), round(sell_exit, 2), round(buy_exit, 2), (m[2] if m else None), (u[2] if u else None), how
 
 
 def _close(t: Trade, board: dict, p: dict, reason: str) -> bool:
     mk = _mark(board, t, p)
     if mk is None:
         return False
-    pnl, sell_exit, buy_exit, m_iv, u_iv = mk
+    pnl, sell_exit, buy_exit, m_iv, u_iv, how = mk
     t.exit_ts, t.exit_reason, t.sell_exit, t.buy_exit = board["ts"], reason, sell_exit, buy_exit
     t.exit_diff = round(m_iv - u_iv, 2) if (m_iv and u_iv) else None
-    t.pnl_points, t.mark = pnl, pnl
-    t.path.append({"ts": board["ts"], "mcx_iv": m_iv, "us_iv": u_iv, "diff": t.exit_diff, "pnl": pnl, "note": reason})
+    t.pnl_points, t.mark, t.approx = pnl, pnl, how != "quote"
+    t.path.append({"ts": board["ts"], "mcx_iv": m_iv, "us_iv": u_iv, "diff": t.exit_diff, "pnl": pnl,
+                   "note": reason + ("" if how == "quote" else f" ({how} value, no two-way quote)")})
     return True
 
 
@@ -284,16 +328,20 @@ def run(params: dict | None) -> dict:
                 continue
             mk = _mark(b, t, p)
             if mk is None:
-                # no two-way price on a leg this board; the square-off day still ends the trade at its last mark
-                if sq_date and b["date"] >= sq_date:
-                    t.exit_ts, t.exit_reason, t.pnl_points = b["ts"], "square off", t.mark
-                    t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": f"square off at the last mark ({t.last_mark_ts}), no quote on this board"})
+                # nothing to price a leg with (no quote, no future): on the
+                # expiry itself the trade ends at the last mark it had
+                if first_exp and b["date"] >= first_exp:
+                    t.exit_ts, t.exit_reason, t.pnl_points, t.approx = b["ts"], "square off", t.mark, True
+                    t.path.append({"ts": b["ts"], "mcx_iv": None, "us_iv": None, "diff": None, "pnl": t.mark, "note": f"expiry reached with nothing to price it, at the last mark ({t.last_mark_ts})"})
                     open_t.remove(t); closed.append(t)
                 continue
-            pnl, _se, _be, m_iv, u_iv = mk
+            pnl, _se, _be, m_iv, u_iv, how = mk
             gap = round(m_iv - u_iv, 2) if (m_iv and u_iv) else None
-            t.mark, t.last_mark_ts = pnl, b["ts"]
-            t.path.append({"ts": b["ts"], "mcx_iv": m_iv, "us_iv": u_iv, "diff": gap, "pnl": pnl, "note": None})
+            t.mark, t.approx = pnl, how != "quote"
+            if how == "quote":
+                t.last_mark_ts = b["ts"]
+            t.path.append({"ts": b["ts"], "mcx_iv": m_iv, "us_iv": u_iv, "diff": gap, "pnl": pnl,
+                           "note": None if how == "quote" else f"{how} value"})
             reason = None
             if gap is not None and abs(gap) <= p["exit_diff"]:
                 reason = "gap closed"
@@ -370,7 +418,7 @@ def run(params: dict | None) -> dict:
         curve.append({"date": t["exit_ts"], "cum_points": round(cum, 2), "cum_rs": round(cum * p["lot_size"], 0)})
     from collections import Counter
     reasons = Counter(t["exit_reason"] for t in trades)
-    unpriced = sum(1 for t in trades if t["sell_exit"] is None and t["exit_reason"] not in ("data end",))
+    unpriced = sum(1 for t in trades if t["approx"])
     still_open = sum(1 for t in trades if t["exit_reason"] == "data end")
     return {
         "params": p,
@@ -387,7 +435,7 @@ def run(params: dict | None) -> dict:
             "max_drawdown_points": round(dd, 2), "max_drawdown_rs": round(dd * p["lot_size"], 0),
             "avg_hours": round(sum(t["hours"] or 0 for t in trades) / len(trades), 1) if trades else None,
             "exits": dict(reasons),
-            "unpriced_exits": unpriced,          # closed at an older board's mark: the strike had left the stored window
+            "unpriced_exits": unpriced,          # marked off a one-sided quote or intrinsic value at some point (no two-way quote)
             "still_open": still_open,
         },
         "trades": trades, "equity": curve,
