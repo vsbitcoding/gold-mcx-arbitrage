@@ -1,9 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark.jsx";
 
 const NAV_ITEMS = [
-  // Names and order are the client's (his two notes, 03-Sep-2026). Whatever
-  // does not fit the bar folds into "More" in this same order.
+  // Names and order are the client's (his two notes, 03-Sep-2026). Every page
+  // is on the bar; the strip wraps onto more rows when the window is narrow
+  // (client, 23-Sep-2026: no "More" menu).
   { key: "cross", label: "Cross Pair" },
   { key: "calendar", label: "Calendar Spread" },
   { key: "metals", label: "Metal Spread" },
@@ -69,89 +70,7 @@ export default function Header({
     : NAV_ITEMS.filter((i) => pages.includes(i.key));
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const userMenuRef = useRef(null);
-  const tabsRef = useRef(null);
-  const moreRef = useRef(null);
-  const widthsRef = useRef(null);      // { key: px } measured once per font load
-  const availRef = useRef(0);          // px the tab strip may use, from the last measure
-  const [visibleCount, setVisibleCount] = useState(NAV_ITEMS.length);
-
-  // Fourteen tabs do not fit on one row even at 1920px. Rather than scrolling
-  // (which clipped labels mid-word) or wrapping (which made the header two rows
-  // tall), measure what actually fits and put the rest behind "More".
-  useLayoutEffect(() => {
-    const nav = tabsRef.current;
-    if (!nav) return;
-
-    function measure() {
-      if (!widthsRef.current) {
-        const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
-        if (btns.length !== NAV.length) return;      // still hidden, retry next resize
-        widthsRef.current = Object.fromEntries(btns.map((b) => [b.dataset.key, b.getBoundingClientRect().width]));
-      }
-      const widths = NAV.map((it) => widthsRef.current[it.key] || 90);
-      const gap = parseFloat(getComputedStyle(nav).columnGap || "4") || 4;
-      // Measure the ROW's free space rather than the nav box: the strip hugs its
-      // tabs now (so More sits right beside them instead of drifting to the far
-      // right), which means the nav's own width is content, not budget.
-      const row = nav.parentElement;
-      const rowGap = parseFloat(getComputedStyle(row).columnGap || "0") || 0;
-      const kids = [...row.children];
-      let taken = rowGap * Math.max(0, kids.length - 1);
-      for (const k of kids) {
-        if (k !== nav) taken += k.getBoundingClientRect().width;
-      }
-      // reserve room for More whenever it is not already in the row
-      const hasMore = kids.some((k) => k.classList.contains("nav-more"));
-      const avail = row.clientWidth - taken - (hasMore ? 0 : 86) - 2;
-      availRef.current = avail;
-
-      let used = 0, n = 0;
-      for (let i = 0; i < widths.length; i++) {
-        const next = used + widths[i] + (i ? gap : 0);
-        if (next > avail) break;
-        used = next; n++;
-      }
-      setVisibleCount(Math.max(1, n));
-    }
-
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(nav);
-    if (nav.parentElement) ro.observe(nav.parentElement);
-    window.addEventListener("resize", measure);
-    // Web fonts land after first paint and change every label's width.
-    document.fonts?.ready?.then(() => { widthsRef.current = null; measure(); });
-    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
-  }, []);
-
-  // Counts (61, 38, ...) arrive after the first paint and widen the tabs, so
-  // the widths measured before them are short and the last tab paints half
-  // under More. After every render: refresh the measured widths from the DOM
-  // and, if the strip actually overflows its box, move one more tab to More.
-  useLayoutEffect(() => {
-    const nav = tabsRef.current;
-    if (!nav) return;
-    const btns = [...nav.querySelectorAll(".nav-tab[data-key]")];
-    if (btns.length) {
-      widthsRef.current = { ...(widthsRef.current || {}) };
-      btns.forEach((b) => { widthsRef.current[b.dataset.key] = b.getBoundingClientRect().width; });
-    }
-    if (nav.scrollWidth > nav.clientWidth + 1 && visibleCount > 1) {
-      setVisibleCount((v) => Math.max(1, v - 1));
-    }
-  });
-
-  // Close the overflow menu on outside-click / Escape.
-  useEffect(() => {
-    if (!moreOpen) return;
-    function onDoc(e) { if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false); }
-    function onKey(e) { if (e.key === "Escape") setMoreOpen(false); }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [moreOpen]);
 
   // Close drawer on Escape; lock page scroll while open.
   useEffect(() => {
@@ -222,35 +141,6 @@ export default function Header({
 
   const go = (key) => { onNavigate(key); setMenuOpen(false); };
 
-  // Whatever fits stays on the bar; the rest goes behind More. The current page
-  // is always pulled onto the bar so you can see where you are.
-  let shownItems = NAV.slice(0, visibleCount);
-  let overflowItems = NAV.slice(visibleCount);
-  if (overflowItems.length && !shownItems.some((i) => i.key === page)) {
-    const cur = overflowItems.find((i) => i.key === page);
-    if (cur && shownItems.length) {
-      const dropped = shownItems[shownItems.length - 1];
-      shownItems = [...shownItems.slice(0, -1), cur];
-      overflowItems = [dropped, ...overflowItems.filter((i) => i.key !== cur.key)];
-    }
-  }
-  // The swapped-in tab may be wider than the one it replaced ("Bullion Stock"
-  // for "Premium") and then painted half under More. Trim from the end until
-  // the strip fits the measured room again; the current page always stays.
-  if (widthsRef.current && availRef.current > 0 && overflowItems.length) {
-    const w = (it) => (widthsRef.current[it.key] || 90) + 4;
-    let total = shownItems.reduce((s, it) => s + w(it), 0) + 6;
-    while (total > availRef.current && shownItems.length > 1) {
-      const idx = [...shownItems].reverse().findIndex((it) => it.key !== page);
-      if (idx < 0) break;
-      const at = shownItems.length - 1 - idx;
-      const [gone] = shownItems.splice(at, 1);
-      shownItems = [...shownItems];
-      overflowItems = [gone, ...overflowItems];
-      total -= w(gone);
-    }
-  }
-
   return (
     <div className="header">
       <div className="header-left">
@@ -260,8 +150,8 @@ export default function Header({
           <span className="brand-name">Gurukrupa</span>
           <span className="brand-sub">Bullion</span>
         </div>
-        <nav className="nav-tabs" ref={tabsRef}>
-          {shownItems.map((it) => (
+        <nav className="nav-tabs">
+          {NAV.map((it) => (
             <button
               key={it.key}
               data-key={it.key}
@@ -273,29 +163,6 @@ export default function Header({
             </button>
           ))}
         </nav>
-        {overflowItems.length > 0 && (
-          <div className="nav-more" ref={moreRef}>
-            <button type="button"
-              className={`nav-tab nav-more-btn ${overflowItems.some((i) => i.key === page) ? "active" : ""}`}
-              onClick={() => setMoreOpen((v) => !v)}
-              aria-haspopup="menu" aria-expanded={moreOpen}>
-              More <span className="nav-more-n">{overflowItems.length}</span>
-              <span className="nav-more-caret">▾</span>
-            </button>
-            {moreOpen && (
-              <div className="nav-more-menu" role="menu">
-                {overflowItems.map((it) => (
-                  <button key={it.key} type="button" role="menuitem"
-                    className={`nav-more-item ${page === it.key ? "active" : ""}`}
-                    onClick={() => { onNavigate(it.key); setMoreOpen(false); }}>
-                    <span>{it.label}</span>
-                    {counts[it.key] != null && <span className="nav-more-count">{counts[it.key]}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
       <div className="header-right">
         <span className={`health-pill ${cls}`} title={tooltip}>
