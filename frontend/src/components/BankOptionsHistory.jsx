@@ -33,6 +33,11 @@ function slotLabel(slot) {
 function tone(value) {
   return numeric(value) && Number(value) !== 0 ? (Number(value) > 0 ? "bo-positive" : "bo-negative") : "";
 }
+function fromSpot(strike, spot) {
+  if (!numeric(strike) || !numeric(spot)) return null;
+  const d = Math.round(Number(strike) - Number(spot));
+  return `${d > 0 ? "+" : d < 0 ? "−" : ""}${number(Math.abs(d), 0)}`;
+}
 function stored(key, allowed, fallback) {
   try { const v = localStorage.getItem(key); return allowed.includes(v) ? v : fallback; } catch { return fallback; }
 }
@@ -103,16 +108,16 @@ function Board({ board, source }) {
             </tr>
             <tr className="bo-column-heading">
               <th scope="col">Buy {priceWord || "Ask"}<span className="bo-th-sub">{board.buy_index || "—"}</span></th><th scope="col">Sell {priceWord || "Bid"}<span className="bo-th-sub">{board.sell_index || "—"}</span></th><th scope="col">Difference (pts)</th>
-              <th scope="col" className="bo-strike-column bo-group-start">BANKEX</th><th scope="col" className="bo-strike-column">ATM distance</th><th scope="col" className="bo-strike-column">BANKNIFTY</th>
+              <th scope="col" className="bo-strike-column bo-group-start">BANKEX<span className="bo-th-sub">strike · pts from spot</span></th><th scope="col" className="bo-strike-column">ATM distance</th><th scope="col" className="bo-strike-column">BANKNIFTY<span className="bo-th-sub">strike · pts from spot</span></th>
               <th scope="col" className="bo-group-start">Buy {priceWord || "Ask"}<span className="bo-th-sub">{board.buy_index || "—"}</span></th><th scope="col">Sell {priceWord || "Bid"}<span className="bo-th-sub">{board.sell_index || "—"}</span></th><th scope="col">Difference (pts)</th>
             </tr>
           </thead>
           <tbody>{grouped.map((group) => (
             <tr key={group.offset} className={group.offset === 0 ? "bo-atm-row" : ""}>
               <Cells row={group.CE} source={source} buyIndex={board.buy_index} sellIndex={board.sell_index} />
-              <td className="bo-strike-column bo-group-start"><strong>{number(group.bankex, 0)}</strong></td>
+              <td className="bo-strike-column bo-group-start"><strong>{number(group.bankex, 0)}</strong><span className="bo-from-spot" title="Points from the BANKEX index level">{fromSpot(group.bankex, board.indices?.BANKEX?.spot)}</span></td>
               <td className="bo-strike-column bo-distance-cell"><strong className={group.offset === 0 ? "bo-atm-badge" : ""}>{group.offset === 0 ? "ATM" : `${group.offset > 0 ? "+" : "−"}${number(Math.abs(group.offset), 0)}`}</strong></td>
-              <td className="bo-strike-column"><strong>{number(group.banknifty, 0)}</strong></td>
+              <td className="bo-strike-column"><strong>{number(group.banknifty, 0)}</strong><span className="bo-from-spot" title="Points from the BANKNIFTY index level">{fromSpot(group.banknifty, board.indices?.BANKNIFTY?.spot)}</span></td>
               <Cells row={group.PE} source={source} buyIndex={board.buy_index} sellIndex={board.sell_index} />
             </tr>
           ))}</tbody>

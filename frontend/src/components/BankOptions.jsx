@@ -43,6 +43,13 @@ function age(seconds) {
 function tone(value) {
   return numeric(value) && Number(value) !== 0 ? (Number(value) > 0 ? "bo-positive" : "bo-negative") : "";
 }
+// Points from the index level to the strike (client's note, 23-Sep-2026: BANKEX
+// 63,910 -> 64,000 is "+90", BANKNIFTY 56,490 -> 56,600 is "+110"), whole points.
+function fromSpot(strike, spot) {
+  if (!numeric(strike) || !numeric(spot)) return null;
+  const d = Math.round(Number(strike) - Number(spot));
+  return `${d > 0 ? "+" : d < 0 ? "−" : ""}${number(Math.abs(d), 0)}`;
+}
 function makeRequestId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   const bytes = new Uint8Array(16);
@@ -373,16 +380,16 @@ export default function BankOptions() {
                 </tr>
                 <tr className="bo-column-heading">
                   {showCalls && <><th scope="col">Buy Ask<span className="bo-th-sub">{board?.buy_index || "—"}</span></th><th scope="col">Sell Bid<span className="bo-th-sub">{board?.sell_index || "—"}</span></th><th scope="col">{valueLabel}</th><th scope="col">Paper position</th></>}
-                  <th scope="col" className="bo-strike-column bo-group-start">BANKEX</th><th scope="col" className="bo-strike-column">ATM distance</th><th scope="col" className="bo-strike-column">BANKNIFTY</th>
+                  <th scope="col" className="bo-strike-column bo-group-start">BANKEX<span className="bo-th-sub">strike · pts from spot</span></th><th scope="col" className="bo-strike-column">ATM distance</th><th scope="col" className="bo-strike-column">BANKNIFTY<span className="bo-th-sub">strike · pts from spot</span></th>
                   {showPuts && <><th scope="col" className="bo-group-start">Buy Ask<span className="bo-th-sub">{board?.buy_index || "—"}</span></th><th scope="col">Sell Bid<span className="bo-th-sub">{board?.sell_index || "—"}</span></th><th scope="col">{valueLabel}</th><th scope="col">Paper position</th></>}
                 </tr>
               </thead>
               <tbody>{groupedRows.map((group) => (
                 <tr key={group.offset} data-offset={group.offset} className={group.offset === 0 ? "bo-atm-row" : ""}>
                   {showCalls && <QuoteCells row={group.CE} side="CE" strikePair={group} metric={settings.metric} canAdd={canAdd} pending={pending} onAdd={addPosition} onDetails={setQuoteDetails} />}
-                  <td className="bo-strike-column bo-group-start"><strong>{number(group.bankex, 0)}</strong></td>
+                  <td className="bo-strike-column bo-group-start"><strong>{number(group.bankex, 0)}</strong><span className="bo-from-spot" title="Points from the BANKEX index level">{fromSpot(group.bankex, board?.indices?.BANKEX?.spot)}</span></td>
                   <td className="bo-strike-column bo-distance-cell" title={group.offset === 0 ? "At the money" : group.offset < 0 ? "Below ATM" : "Above ATM"}><strong className={group.offset === 0 ? "bo-atm-badge" : ""}>{group.offset === 0 ? "ATM" : `${group.offset > 0 ? "+" : "−"}${number(Math.abs(group.offset), 0)}`}</strong></td>
-                  <td className="bo-strike-column"><strong>{number(group.banknifty, 0)}</strong></td>
+                  <td className="bo-strike-column"><strong>{number(group.banknifty, 0)}</strong><span className="bo-from-spot" title="Points from the BANKNIFTY index level">{fromSpot(group.banknifty, board?.indices?.BANKNIFTY?.spot)}</span></td>
                   {showPuts && <QuoteCells row={group.PE} side="PE" strikePair={group} metric={settings.metric} canAdd={canAdd} pending={pending} onAdd={addPosition} onDetails={setQuoteDetails} />}
                 </tr>
               ))}</tbody>

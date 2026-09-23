@@ -96,6 +96,8 @@
 .bo-comparison-table .bo-value-col { min-width: 140px; background: transparent; }
 .bo-comparison-table tbody tr:hover td { background: var(--bg-hover); }
 .bo-raw-points { margin-left: 6px; font-size: 10px; color: var(--text-muted); font-weight: 400; }
+.bo-from-spot { margin-left: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bo-from-spot:empty { display: none; }
 .bo-freshness-dot { display: inline-block; vertical-align: middle; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: var(--yellow-ink); }
 .bo-freshness-dot.is-fresh { background: var(--green); }
 .bo-quality-key { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border: 1px solid currentColor; border-radius: 50%; color: var(--text-muted); font-size: 9px; font-weight: 600; line-height: 1; margin: 0 3px 0 8px; }
