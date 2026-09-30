@@ -39,10 +39,14 @@ function refLabel(slot) {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${ap}`;
 }
 
-function refDate(iso) {
+// `base` is the day the board belongs to: today on the live screen, the
+// capture date on a stored History board, so an old board reads exactly as
+// the live one did that day ("yesterday", or the date after a weekend).
+function refDate(iso, base) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
-  const days = Math.round((new Date().setHours(0, 0, 0, 0) - d.getTime()) / 86400000);
+  const from = base ? new Date(base + "T00:00:00").getTime() : new Date().setHours(0, 0, 0, 0);
+  const days = Math.round((from - d.getTime()) / 86400000);
   if (days === 1) return "yesterday";
   return d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short" });
 }
@@ -150,7 +154,7 @@ export default function OptionsBoard({ data, side, live = false }) {
           >
             <span className="opt-spot-label">
               {dot(rd.divergence)}SINCE {refLabel(rd.ref_slot)}
-              <em className="opt-ref-when">{refDate(rd.ref_date)}</em>
+              <em className="opt-ref-when">{refDate(rd.ref_date, live ? null : data?.snap_date)}</em>
             </span>
             <div className="opt-day-flex">
               <div className="opt-day-seg">

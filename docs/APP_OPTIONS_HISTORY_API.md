@@ -51,6 +51,14 @@ GET /api/v1/options-history?weekday=mon&slot=10:00&side=below&weeks=7
       "india_vix": 11.4,
       "nifty_atm": 24800,
       "sensex_atm": 81300,
+      "nifty_day_change": 38.4, "sensex_day_change": 250.0,   // vs previous close (null before 13-Jul-2026)
+      "day_divergence": 127.3,                               // Sensex change - Nifty change x 3.2
+      "ref_divergence": {      // same sum since the previous day's 15:16 reading, as the live board showed it
+        "ref_date": "2026-07-10", "ref_slot": "15:16",       // null for boards captured before 18-Aug-2026
+        "nifty_ref": 24790.1, "sensex_ref": 81210.4,
+        "nifty_change": 22.4, "sensex_change": 129.8,
+        "sensex_expected_change": 71.7, "divergence": 58.1
+      },
       "side": "below",
       "weeks": [               // SAME shape as /api/v1/options-spread → reuse the same renderer
         {

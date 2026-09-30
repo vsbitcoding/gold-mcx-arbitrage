@@ -217,6 +217,11 @@ def get_history(weekday=None, slot: str = "both", side: str = "below",
             "nifty_day_change": board.get("nifty_day_change"),
             "sensex_day_change": board.get("sensex_day_change"),
             "day_divergence": board.get("day_divergence"),
+            # The same sum measured from the previous day's 15:16 reading, as
+            # the live board showed it at capture time (stored since
+            # 18-Aug-2026; None for older boards). The client reads both cards
+            # in History exactly as on the live screen (30-Sep-2026).
+            "ref_divergence": board.get("ref_divergence"),
             "side": side,
             "weeks": board.get("weeks", []),
         })
