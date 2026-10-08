@@ -18,8 +18,12 @@ def live(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
 # --------------------------------------------------------------------------- #
 @router.get("/bhav/options")
 def bhav_options(user: str = Depends(get_current_user)):
+    return bhav_options_payload()
+
+
+def bhav_options_payload() -> dict:
     """What the dialog can offer: symbols with their stored expiries, the cross
-    templates, and how far the data reaches."""
+    templates, and how far the data reaches. Shared with /api/v1/spread-history."""
     from app.services import bhav_history as bh
     from app.services.pair_generator import CROSS_TEMPLATES
     return {
@@ -42,6 +46,12 @@ def bhav_series(
     start: str = Query("2021-01-01"), end: str | None = Query(None),
     user: str = Depends(get_current_user),
 ):
+    return bhav_series_payload(kind, big, small, big_exp, small_exp, mode, rank, start, end)
+
+
+def bhav_series_payload(kind: str, big: str, small: str | None, big_exp: str | None,
+                        small_exp: str | None, mode: str, rank: int, start: str,
+                        end: str | None) -> dict:
     """One close-based value per day.
 
     calendar: big = symbol; month mode needs big_exp (near) + small_exp (far);

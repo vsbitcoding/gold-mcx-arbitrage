@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import Base, engine, run_simple_migrations
-from app.routes import auth, users as users_route, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, paper as paper_route, premium as premium_route, price as price_route, public_v1, signals as signals_route, ws as ws_route
+from app.routes import auth, users as users_route, bullion as bullion_route, crude_iv as crude_iv_route, iv_calculator as iv_calc_route, nse_mcx as nse_mcx_route, international as international_route, calculator, feed, gold_options as gold_options_route, metals as metals_route, options as options_route, othercomm as othercomm_route, pairs, paper as paper_route, premium as premium_route, price as price_route, public_v1, public_v1_more, signals as signals_route, ws as ws_route
 from app.services.broadcaster import broadcaster
 from app.services.live_feed import start_feed_in_background
 from app.services.ladder_migration import migrate_once as migrate_ladders
@@ -55,6 +55,7 @@ app.include_router(premium_route.router)
 app.include_router(signals_route.router)
 app.include_router(ws_route.router)
 app.include_router(public_v1.router)
+app.include_router(public_v1_more.router)
 app.include_router(bullion_route.router)
 app.include_router(gold_options_route.router)
 app.include_router(international_route.router)

@@ -771,7 +771,7 @@ def public_crude_iv(
 
 @router.get("/nse-mcx")
 def public_nse_mcx(
-    commodity: str = Query("crude", pattern="^(crude|natgas)$", description="crude | natgas"),
+    commodity: str = Query("crude", pattern="^(crude|natgas|electricity)$", description="crude | natgas | electricity"),
     month: int = Query(0, ge=0, le=1, description="0 = near month, 1 = the one after"),
     window: int = Query(10, ge=1, le=25, description="strikes each side of ATM (default 10 => 21 rows)"),
     _key: str = Depends(require_api_key),
@@ -785,8 +785,13 @@ def public_nse_mcx(
     20-Aug), so both dates are returned and part of any premium gap is time
     value. `traded` is false where a leg has no bid and no ask - ignore its LTP,
     dead contracts still print stale prices.
+
+    `commodity=electricity` returns the electricity futures board (NSE vs MCX,
+    no options) exactly as the dashboard shows it.
     """
-    from app.routes.nse_mcx import payload
+    from app.routes.nse_mcx import _elec_payload, payload
+    if commodity == "electricity":
+        return _elec_payload(month)
     return payload(commodity, window, month)
 
 

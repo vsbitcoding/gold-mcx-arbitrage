@@ -7,7 +7,7 @@ import time
 
 import bcrypt
 import jwt
-from fastapi import Depends, Header, HTTPException, Query, Request
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.config import settings

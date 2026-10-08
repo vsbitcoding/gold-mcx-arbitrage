@@ -285,6 +285,24 @@ def build_board(day: str, rows: list) -> dict:
             "indices": indices, "buy_index": buy, "sell_index": sell, "rows": out_rows}
 
 
+_ROW_COLS = (BankOptDaily.index_name, BankOptDaily.trade_date, BankOptDaily.expiry, BankOptDaily.strike,
+             BankOptDaily.side, BankOptDaily.close, BankOptDaily.settle, BankOptDaily.volume,
+             BankOptDaily.oi, BankOptDaily.underlying, BankOptDaily.lot_size)
+_DATES_TTL = 600.0
+
+
+def _stored_dates(db) -> list[str]:
+    """Every stored trade date, newest first. The list only grows once a day,
+    so it is kept for ten minutes (store() clears it with the rest of _cache)."""
+    hit = _cache.get("__dates__")
+    if hit and time.time() - hit[0] < _DATES_TTL:
+        return hit[1]
+    dates = sorted((d for (d,) in db.query(BankOptDaily.trade_date)
+                    .filter(BankOptDaily.index_name == "BANKEX").distinct()), reverse=True)
+    _cache["__dates__"] = (time.time(), dates)
+    return dates
+
+
 def get_history(weekday: int | None = None, days: int = 7, date_: str | None = None) -> dict:
     try:
         days = max(1, min(int(days), 120))
@@ -300,12 +318,15 @@ def get_history(weekday: int | None = None, days: int = 7, date_: str | None = N
         if date_:
             dates = [date_]
         else:
-            q = db.query(BankOptDaily.trade_date).filter(BankOptDaily.index_name == "BANKEX").distinct()
-            all_dates = sorted((d for (d,) in q), reverse=True)
+            all_dates = _stored_dates(db)
             if weekday is not None:
                 all_dates = [d for d in all_dates if datetime.strptime(d, "%Y-%m-%d").weekday() == weekday]
             dates = all_dates[:days]
-        rows = db.query(BankOptDaily).filter(BankOptDaily.trade_date.in_(dates)).all() if dates else []
+        # index_name first so SQLite walks ix_bankopt_date instead of scanning
+        # 680k rows, and plain column rows instead of ORM objects (8 Oct 2026:
+        # 1.8 s -> well under half a second for a week).
+        rows = (db.query(*_ROW_COLS).filter(BankOptDaily.index_name.in_(INDICES),
+                                            BankOptDaily.trade_date.in_(dates)).all() if dates else [])
     finally:
         db.close()
     by_date: dict[str, list] = {}
@@ -317,6 +338,9 @@ def get_history(weekday: int | None = None, days: int = 7, date_: str | None = N
             "note": "daily close from the BSE and NSE bhavcopy since January 2024; the nearest expiry after the "
                     "day is the current contract; a leg that did not trade is priced at the exchange's settlement price"}
     if len(_cache) > 32:
+        dates_hit = _cache.get("__dates__")
         _cache.clear()
+        if dates_hit:
+            _cache["__dates__"] = dates_hit
     _cache[key] = (now, data)
     return data
