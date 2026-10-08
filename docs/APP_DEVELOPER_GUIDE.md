@@ -235,7 +235,9 @@ only **Live | 1 Hr History**.
 `{nse, mcx, nse_traded_days, gap_days}`; show only expiries with `nse_traded_days > 0` (NSE options
 that never traded have nothing to compare). `/nse-mcx/daily?expiry=<nse>` returns `futures`,
 `strikes[]` and `rows[]` (one per strike per day). Optional filters: `type=CE|PE`, `strike=`,
-`start=`, `end=` (`YYYY-MM-DD`).
+`start=`, `end=` (`YYYY-MM-DD`). A whole expiry can be about 1.5 MB (4,000+ rows), so on the phone
+let the user pick CE or PE and a strike first (`strikes[]` gives the list), then request with those
+filters.
 
 **Backtest.** Body = any of the rules below; send only what the user changed (missing rules take
 the defaults, which come back in `params`). Show a "Running..." state; on `429` retry after 3 s.
