@@ -24,23 +24,94 @@ log = logging.getLogger("public_v1")
 router = APIRouter(prefix="/api/v1", tags=["public-v1"])
 
 
-def _spread_dict(s: dict) -> dict:
-    """Lean shape — only what a spread-monitoring app actually needs."""
+# The dashboard's card order (client's sequence), so the app lists the groups
+# exactly as the website does instead of alphabetically (client, 09-Oct-2026:
+# "app ma aa sequence nathi").
+CROSS_ORDER = [
+    "PETAL / GUINEA", "PETAL / TEN", "PETAL / MINI",
+    "GUINEA / TEN", "GUINEA / MINI", "TEN / MINI", "MINI / GOLD",
+    "SILVER 100 / SILVER MIC", "SILVER 100 / SILVER MINI",
+    "SILVER MIC / SILVER MINI", "SILVER MINI / SILVER",
+]
+CAL_ORDER = ["PETAL", "GUINEA", "TEN", "MINI", "GOLD", "SILVER 100", "SILVER MIC", "SILVER MINI", "SILVER"]
+# The Signals tab's order (client's signal-study sequence).
+SIGNAL_ORDER = [
+    "GUINEA / TEN", "GUINEA / MINI", "PETAL / GUINEA", "PETAL / TEN", "PETAL / MINI",
+    "SILVER MIC / SILVER MINI", "MINI / GOLD", "SILVER MINI / SILVER", "TEN / MINI",
+    "SILVER 100 / SILVER MIC", "SILVER 100 / SILVER MINI",
+]
+# Calendar cards also show the plain difference (spread / multiplier) in
+# brackets for these three, as on the dashboard.
+_RAW_MULT = {"petal": 10.0, "guinea": 1.25, "silver100": 100.0}
+
+
+def _rank(label: str, order: list[str]) -> int:
+    try:
+        return order.index(str(label or "").upper().strip())
+    except ValueError:
+        return 999
+
+
+def _cal_display(label: str | None) -> str:
+    """'Far 5 Feb 2027 − Near 4 Dec 2026' -> '4 Dec 2026 − 5 Feb 2027' (near − far),
+    the dashboard's calendar expiry text."""
+    import re
+    clean = re.sub(r"\b(Far|Near)\s+", "", str(label or ""))
+    parts = re.split(r"\s[−–-]\s", clean)
+    if len(parts) == 2:
+        return f"{parts[1].strip()} − {parts[0].strip()}"
+    return clean or "—"
+
+
+def _name_dates(name: str) -> list[str]:
+    """ISO dates carried in a pair name: cross 'Petal-Guinea@2026-09-30',
+    calendar 'Petal@2026-09-30/2026-10-30' (near / far)."""
+    tag = str(name or "").split("@", 1)[1] if "@" in str(name or "") else ""
+    return [x[:10] for x in tag.split("/") if x]
+
+
+def _spread_dict(s: dict, sig: dict | None = None) -> dict:
+    """Lean shape — only what a spread-monitoring app actually needs. The fields
+    after `increase_pct` were added 09-Oct-2026 so the app can draw the cards
+    exactly like the dashboard (signal flash, Hist button, plain difference)."""
+    cal = s["type"] == "calendar"
+    dates = _name_dates(s["name"])
+    mult = _RAW_MULT.get(s.get("small")) if cal else None
+    dec, inc = s["decrease_spread"], s["increase_spread"]
     return {
         "id": s["name"],
         "pair": s["label"],                                  # "PETAL / GUINEA" or "PETAL 30JUN26-29MAY26"
         "group": s.get("group_label") or s["label"],         # for grouping rows in UI
         "type": s["type"],                                   # "cross" | "calendar"
         "expiry": s.get("expiry_label", ""),                 # "29 May 2026" / "Far ... − Near ..."
-        "decrease": s["decrease_spread"],                    # null if no live quote
-        "increase": s["increase_spread"],                    # null if no live quote
+        "decrease": dec,                                     # null if no live quote
+        "increase": inc,                                     # null if no live quote
         "decrease_pct": s.get("decrease_pct"),               # decrease ÷ near price × 100 (shown on Calendar)
         "increase_pct": s.get("increase_pct"),
+        # what the dashboard prints as the expiry: calendar near − far, cross as is
+        "expiry_display": _cal_display(s.get("expiry_label")) if cal else (s.get("expiry_label") or "—"),
+        "big": s.get("big"),                                 # instrument keys, e.g. "petal" / "guinea"
+        "small": s.get("small"),
+        "expiry_date": dates[0] if (dates and not cal) else None,       # cross: the contract month
+        "near_expiry": dates[0] if (cal and dates) else None,           # calendar: near / far months
+        "far_expiry": dates[1] if (cal and len(dates) > 1) else None,
+        "decrease_raw": round(dec / mult, 2) if (mult and dec is not None) else None,
+        "increase_raw": round(inc / mult, 2) if (mult and inc is not None) else None,
+        "signal": sig,                                       # cross only: the open signal on this row, else null
     }
 
 
-def _grouped(snaps: list[dict]) -> list[dict]:
-    """Group by `group` and sort each group front-month first."""
+def _signals_for(snaps: list[dict]) -> dict:
+    """name -> open signal, read-only (the same objects /signals returns)."""
+    try:
+        return signal_service.evaluate_all(snaps)
+    except Exception:  # noqa: BLE001 - a signal problem must never break the board
+        return {}
+
+
+def _grouped(snaps: list[dict], sigs: dict | None = None) -> list[dict]:
+    """Group by `group`, cards in the dashboard's order, each group front-month first."""
+    sigs = sigs or {}
     groups: dict[str, list[dict]] = {}
     for s in snaps:
         gl = s.get("group_label") or s["label"]
@@ -49,15 +120,17 @@ def _grouped(snaps: list[dict]) -> list[dict]:
     out = []
     for label, rows in groups.items():
         rows_sorted = sorted(rows, key=lambda r: r.get("big_expiry") or "")
-        items = [_spread_dict(r) for r in rows_sorted]
+        items = [_spread_dict(r, sigs.get(r["name"])) for r in rows_sorted]
         out.append({
             "group": label,
             "type": rows[0]["type"],
             "count": len(items),
+            "silver": "SILVER" in label.upper(),     # silver cards wear the silver colour
+            "has_signal": any(i["signal"] for i in items),
             "front": items[0] if items else None,    # collapsed-default row
             "expiries": items,                        # full list (front is items[0])
         })
-    out.sort(key=lambda g: g["group"])
+    out.sort(key=lambda g: (_rank(g["group"], CAL_ORDER if g["type"] == "calendar" else CROSS_ORDER), g["group"]))
     return out
 
 
@@ -88,7 +161,8 @@ def list_spreads(
 ):
     """Flat list of all pairs with current decrease & increase spread values."""
     snaps = _filter(compute_all(), type)
-    items = [_spread_dict(s) for s in snaps]
+    sigs = _signals_for(snaps)
+    items = [_spread_dict(s, sigs.get(s["name"])) for s in snaps]
     return {
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
@@ -118,7 +192,7 @@ def list_spread_groups(
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
         "tabs": {"cross": cross_count, "calendar": calendar_count},
-        "groups": _grouped(snaps),
+        "groups": _grouped(snaps, _signals_for(snaps)),
     }
 
 
@@ -132,11 +206,13 @@ def _build_groups_payload(type_: str | None) -> tuple[dict, str]:
     cross_count = sum(1 for s in all_snaps if s["type"] == "cross")
     calendar_count = sum(1 for s in all_snaps if s["type"] == "calendar")
     snaps = _filter(all_snaps, type_)
-    groups = _grouped(snaps)
+    groups = _grouped(snaps, _signals_for(snaps))
 
     digest_input = json.dumps(
         [
-            (g["group"], [(p["id"], p["decrease"], p["increase"]) for p in g["expiries"]])
+            (g["group"], [(p["id"], p["decrease"], p["increase"],
+                           (p["signal"] or {}).get("direction"), (p["signal"] or {}).get("current"))
+                          for p in g["expiries"]])
             for g in groups
         ],
         separators=(",", ":"),
@@ -363,7 +439,9 @@ def public_signals(_key: str = Depends(require_api_key)):
         "server_time": datetime.now(timezone.utc).isoformat(),
         "market_open": is_market_open(),
         "status": signal_service.status(),
-        "signals": signal_service.get_active_signals(),
+        # the Signals tab's order (client's sequence), then the stronger signal first
+        "signals": sorted(signal_service.get_active_signals(),
+                          key=lambda x: (_rank(x.get("label"), SIGNAL_ORDER), -(x.get("probability") or 0))),
     }
 
 
@@ -586,6 +664,9 @@ def _international_payload() -> tuple[dict, str]:
         "server_time": datetime.now(timezone.utc).isoformat(),
         "source": "Interactive Brokers (COMEX + NYMEX)",
         "connected": d.get("connected", False),
+        # IBKR serves data to one session at a time: true while someone is logged
+        # in to the IBKR website / app, and every price stays blank until they log out
+        "competing_session": bool(d.get("competing_session", False)),
         "delayed": d.get("delayed", False),
         "items": items,
         "crude_options": {
