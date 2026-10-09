@@ -29,6 +29,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import struct
 import threading
 import time
@@ -106,7 +107,8 @@ def _blank() -> dict:
 
 _state: dict = {
     "c": {skey(c, m): _blank() for c, m in CHAINS},
-    "usdinr": None,          # {symbol, expiry, bid, ask, ltp, volume, oi}
+    "usdinr": None,          # front MONTHLY future: {symbol, expiry, bid, ask, mid, ltp, volume, oi, feed_ts}
+    "usdinr_spot": None,     # NSE CDS underlying (spot): {symbol, bid, ask, mid, ltp, feed_ts}
     "ts": 0.0,
     "ok": False,
     "error": None,
@@ -279,15 +281,55 @@ def _resolve() -> dict:
         for m, res in enumerate(_resolve_commodity(data, cfg["name"], today)):
             out["c"][skey(c, m)] = {**res, "commodity": c}
 
-    cds = sorted([x for x in data if x.get("exch_seg") == "CDS" and x.get("name") == "USDINR"
-                  and x.get("instrumenttype", "").startswith("FUT")
-                  and _expiry_date(x.get("expiry")) >= today],
-                 key=lambda x: _expiry_date(x.get("expiry")))
-    # skip the weekly stubs - the monthly is where the volume is
-    out["usdinr"] = next((x for x in cds if "FUT" in x.get("symbol", "") and
-                          not x.get("symbol", "").replace("USDINR", "")[:5].isdigit()),
-                         cds[0] if cds else None)
+    # The front MONTHLY future (USDINR26OCTFUT). NSE also lists weekly futures
+    # (USDINR26O09FUT: a month letter and a day), which trade nothing - on
+    # 09-Oct-2026 the weekly in use had no bid, no ask, no volume and a stale
+    # 97.145 against a 96.72 spot, and the old "first five characters are
+    # digits" test let it through because the month is a letter. A monthly is
+    # taken only after its expiry day, when it has stopped trading at 12:30.
+    futs = sorted([x for x in data if x.get("exch_seg") == "CDS" and x.get("name") == "USDINR"
+                   and x.get("instrumenttype", "").startswith("FUT")
+                   and _MONTHLY_USDINR.match(x.get("symbol", ""))
+                   and _expiry_date(x.get("expiry")) > today],
+                  key=lambda x: _expiry_date(x.get("expiry")))
+    out["usdinr"] = futs[0] if futs else None
+    # The spot rate: NSE's currency segment carries the USD/INR underlying as an
+    # instrument of its own (UNDCUR, token 1), quoted live through the session.
+    # The Premium calculation uses spot (client, 08-Oct-2026: "use the spot
+    # currency"); the MCX vs NYMEX screen keeps the future it was specified with.
+    out["usdinr_spot"] = next((x for x in data if x.get("exch_seg") == "CDS"
+                               and x.get("instrumenttype") == "UNDCUR"
+                               and x.get("symbol") == "USDINR"), None)
     return out
+
+
+_MONTHLY_USDINR = re.compile(r"^USDINR\d{2}[A-Z]{3}FUT$")
+
+
+def _feed_epoch(s: str | None) -> float | None:
+    """Angel's exchFeedTime ('09-Oct-2026 09:17:47', IST) as epoch seconds."""
+    try:
+        from datetime import timedelta, timezone
+        dt = datetime.strptime(s, "%d-%b-%Y %H:%M:%S").replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
+        return dt.timestamp() if dt.year > 2000 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fx_leg(row: dict | None) -> dict | None:
+    """A USD/INR quote kept to five decimals, as Angel sends the spot (0.01 on
+    the rate is about 13 rupees per 10 gm of gold in the premium), with
+    the exchange's own timestamp so a stopped rate shows its true age."""
+    if not row:
+        return None
+    dep = row.get("depth") or {}
+    bid = (dep.get("buy") or [{}])[0].get("price") or None
+    ask = (dep.get("sell") or [{}])[0].get("price") or None
+    ltp = row.get("ltp") or None
+    return {"bid": bid, "ask": ask,
+            "mid": round((bid + ask) / 2, 5) if (bid and ask) else None,
+            "ltp": ltp, "volume": row.get("tradeVolume"), "oi": row.get("opnInterest"),
+            "feed_ts": _feed_epoch(row.get("exchFeedTime"))}
 
 
 # ── polling ──────────────────────────────────────────────────────────────
@@ -387,9 +429,10 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
         nco += [x["token"] for legs in by.values() for x in legs.values()]
 
     tokens = {"NCO": nco[:_MAX_TOKENS]}
-    usd = inst.get("usdinr")
-    if usd:
-        tokens["CDS"] = [usd["token"]]
+    usd, spot = inst.get("usdinr"), inst.get("usdinr_spot")
+    cds_tokens = [x["token"] for x in (usd, spot) if x]
+    if cds_tokens:
+        tokens["CDS"] = cds_tokens            # both ride the same request, no extra call
     fetched = _quote(sess, c, jwt, tokens)
 
     for key in inst["c"]:
@@ -403,9 +446,11 @@ def _poll(sess: requests.Session, c: dict, jwt: str, inst: dict, turn: str) -> N
         _state["c"][key]["future"] = {**(frow or {}), "symbol": fut["symbol"],
                                       "expiry": _expiry_date(fut.get("expiry")).isoformat()}
     if usd and usd["token"] in fetched:
-        u = _leg(fetched[usd["token"]])
+        u = _fx_leg(fetched[usd["token"]])
         _state["usdinr"] = {**u, "symbol": usd["symbol"],
                             "expiry": _expiry_date(usd.get("expiry")).isoformat()}
+    if spot and spot["token"] in fetched:
+        _state["usdinr_spot"] = {**_fx_leg(fetched[spot["token"]]), "symbol": "USDINR spot"}
 
     # the chain legs came back in the same response as the futures
     if by:
@@ -459,8 +504,9 @@ def _loop() -> None:
                              k, f and f.get("symbol"),
                              f and _expiry_date(f.get("expiry")), r["opt_expiry"],
                              len({x.get("strike") for x in r["chain"]}))
-                log.info("Angel: USD/INR %s",
-                         inst["usdinr"] and inst["usdinr"].get("symbol"))
+                log.info("Angel: USD/INR future %s, spot %s",
+                         inst["usdinr"] and inst["usdinr"].get("symbol"),
+                         inst.get("usdinr_spot") and inst["usdinr_spot"].get("token"))
             if jwt is None:
                 jwt = _session_token(sess, c, force=force_login)
                 force_login, login_fails = False, 0
@@ -515,6 +561,7 @@ def get_data(commodity: str = "crude", month: int = 0) -> dict:
         "atm": st["atm"],
         "opt_expiry": st["opt_expiry"],
         "usdinr": _state["usdinr"],
+        "usdinr_spot": _state["usdinr_spot"],
         # `age` is the futures clock (every 3 s); the chain takes turns, so it
         # gets its own - a screen that showed one number for both would call a
         # stale chain fresh.

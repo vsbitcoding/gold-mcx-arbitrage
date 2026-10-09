@@ -133,8 +133,13 @@ def _payload(window: int | None, commodity: str = "crude", currency: str = "usd"
     # The FUTURE rate, which is what the client specified and what premium_feed
     # already serves - a spot two minutes old was replaced on 14-Aug for exactly
     # this reason.
+    # The Premium tab moved to SPOT on 08-Oct-2026; this screen keeps the monthly
+    # future (`usdinr_future`), falling back to the premium rate if it is missing.
+    fx = pf.get("usdinr_future") or pf.get("usdinr")
+    fx_age = pf.get("usdinr_future_age") if pf.get("usdinr_future") else pf.get("usdinr_age")
+    fx_src = pf.get("usdinr_future_source") if pf.get("usdinr_future") else pf.get("usdinr_source")
     if currency == "inr":
-        us = _to_inr(us, pf.get("usdinr"))
+        us = _to_inr(us, fx)
     return {
         "commodity": commodity,
         "month": month,
@@ -143,8 +148,7 @@ def _payload(window: int | None, commodity: str = "crude", currency: str = "usd"
         "us": us,
         # client wants the rate on this screen too - MCX quotes in rupees and
         # the US chain in dollars, so it is the number he converts with
-        "usdinr": {"price": pf.get("usdinr"), "age": pf.get("usdinr_age"),
-                   "source": pf.get("usdinr_source")},
+        "usdinr": {"price": fx, "age": fx_age, "source": fx_src},
         "server_time": ib.get("server_time"),
     }
 

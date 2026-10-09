@@ -247,22 +247,52 @@ def _usdinr_thread() -> None:
 _FX_FRESH = 90
 
 
+def _angel_fx(key: str) -> tuple[float | None, float | None]:
+    """(rate, age seconds) of angel_feed's `usdinr_spot` or `usdinr` quote. The
+    age is the exchange's own timestamp when Angel sends one, so a rate that
+    stopped at the 17:00 close reads as old instead of passing for live."""
+    from app.services import angel_feed
+    d = angel_feed.get_data()
+    q = d.get(key) or {}
+    rate = q.get("mid") or q.get("ltp")
+    if not rate or rate <= 0:
+        return None, None
+    feed_ts = q.get("feed_ts")
+    age = round(max(0.0, time.time() - feed_ts), 1) if feed_ts else d.get("age")
+    return round(float(rate), 5), age
+
+
 def _usdinr() -> tuple[float | None, float | None, str]:
-    """Rate, age in seconds, and where it came from."""
+    """The rate the PREMIUM uses: SPOT (client, 08-Oct-2026). Rate, age in
+    seconds, and where it came from. After the 17:00 close the last spot is
+    still the best number for the evening MCX session, so it is kept (with its
+    true age) rather than dropped."""
     try:
-        from app.services import angel_feed
-        d = angel_feed.get_data()
-        u = d.get("usdinr") or {}
-        age = d.get("age")
-        rate = u.get("mid") or u.get("ltp")
-        if rate and age is not None and age <= _FX_FRESH:
-            return round(float(rate), 4), age, "NSE USD/INR future (Angel, live)"
+        rate, age = _angel_fx("usdinr_spot")
+        if rate:
+            return rate, age, "USD/INR spot (NSE, Angel, live)"
+        rate, age = _angel_fx("usdinr")
+        if rate:
+            return rate, age, "NSE USD/INR monthly future (spot unavailable)"
     except Exception as e:  # noqa: BLE001 - the fallback below must always work
         log.debug("Premium: Angel USD/INR unavailable (%s)", e)
     ts = _state["usdinr_ts"]
     return (_state["usdinr"],
             round(time.time() - ts, 1) if ts else None,
             "TwelveData spot (~2 min)")
+
+
+def _usdinr_future() -> tuple[float | None, float | None, str]:
+    """The rate the MCX vs NYMEX screen converts with: the front MONTHLY NSE
+    future, as that screen was specified (14-Aug-2026). Falls back to spot."""
+    try:
+        rate, age = _angel_fx("usdinr")
+        if rate:
+            return rate, age, "NSE USD/INR monthly future (Angel, live)"
+    except Exception as e:  # noqa: BLE001
+        log.debug("Premium: Angel USD/INR future unavailable (%s)", e)
+    rate, age, src = _usdinr()
+    return rate, age, f"{src} (future unavailable)"
 
 
 # ── MCX metal from the existing quote_store (no new subscription) ────────
@@ -317,6 +347,8 @@ def _ibkr_spots() -> dict:
 def get_inputs() -> dict:
     now = time.time()
     fx, fx_age, fx_source = _usdinr()
+    fut, fut_age, fut_source = _usdinr_future()
+    fx_future = {"usdinr_future": fut, "usdinr_future_age": fut_age, "usdinr_future_source": fut_source}
     ib = _ibkr_spots() if settings.IBKR_SPOTS_ENABLED else {}
     if ib.get("xau"):
         return {
@@ -324,7 +356,7 @@ def get_inputs() -> dict:
             "xagusd": ib["xag"], "xagusd_age": ib["xag_age"], "xagusd_source": "IBKR spot (live)",
             "deriv_connected": bool(ib.get("connected")),
             "ibkr_connected": bool(ib.get("connected")),
-            "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source,
+            "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source, **fx_future,
             "wti": ib["wti"], "wti_age": ib["wti_age"],
             "brent": ib["brent"], "brent_age": ib["brent_age"],
             "finnhub_connected": bool(ib.get("connected")),
@@ -341,7 +373,7 @@ def get_inputs() -> dict:
         "xagusd_source": "Finnhub spot (live)",
         "deriv_connected": _state["finnhub_connected"],  # legacy key: UI 'spot feed connected' flag
         "ibkr_connected": _state["ibkr_connected"],
-        "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source,
+        "usdinr": fx, "usdinr_age": fx_age, "usdinr_source": fx_source, **fx_future,
         "wti": _state["wti"],
         "wti_age": round(now - _state["wti_ts"], 1) if _state["wti_ts"] else None,
         "brent": _state["brent"],
