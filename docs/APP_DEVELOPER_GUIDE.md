@@ -632,6 +632,17 @@ Screenshots: `17a_signals_*`, `17b_signals_history_*`.
 **HOLIDAY** with `reason`. Use `nse` on Nifty / Sensex and BANKEX / BANKNIFTY, `mcx` elsewhere. An MCX
 holiday can close only the morning or the evening session. `upcoming_holidays` lists the next 90 days.
 
+### 4.20 Menu (navigation)
+
+The website's menu, in this order and with these names: **Cross Pair, Calendar Spread, Metal Spread,
+Other Commodity Spread, Metal Price, ETF vs MCX, Premium, Commodity Option, NSE vs MCX, MCX vs NYMEX,
+Making Price, Bullion Stock, COMEX + NYMEX, IV Calculator, Nifty / Sensex, BANKEX / BANKNIFTY,
+⚡ Signals, Auto Trades** (Auto Trades not in the app). Keep the same order and names in the app's
+menu. The website shows a small count after six of them: Cross Pair (number of cross rows), Calendar
+Spread (calendar rows), Metal Spread (`count` of `/metals-spread`), Other Commodity Spread (`count`
+of `/othercomm-spread`), Metal Price (`count` of `/price-table`) and Signals (open signals, in an
+amber badge).
+
 ---
 
 ## Part 5. Not in the app (by design)
@@ -665,4 +676,5 @@ holiday can close only the morning or the evening session. `upcoming_holidays` l
 - [ ] BANKEX / BANKNIFTY: Live and History.
 - [ ] Signals: order, gauge, history, popup.
 - [ ] Market badge from `/market-status`.
+- [ ] Menu: same order and names, counts on the six pages, amber Signals badge.
 - [ ] Every null shows a dash; polling stops when hidden; static data fetched on user action; `429` retried.
